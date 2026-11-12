@@ -1,0 +1,70 @@
+:root {
+  --bg-0: #131315;
+  --bg-1: #1a1a1d;
+  --bg-2: #212125;
+  --bg-3: #29292e;
+  --bg-4: #323238;
+  --bg-5: #3c3c43;
+  --line-1: #2b2b31;
+  --line-2: #393941;
+  --line-3: #4a4a53;
+
+  --tx-1: #e2e2e7;
+  --tx-2: #a2a2ac;
+  --tx-3: #6c6c76;
+  --tx-inv: #ffffff;
+
+  --acc: #e8833a;
+  --acc-hi: #f29a55;
+  --acc-lo: #e8833a26;
+  --acc-ring: #e8833a66;
+
+  --ok: #4fb57a;
+  --warn: #d6a23a;
+  --err: #e05a55;
+  --info: #5b8def;
+
+  --c-compute: #5b8def;
+  --c-data: #4fb57a;
+  --c-cache: #e05a55;
+  --c-messaging: #d6a23a;
+  --c-network: #a374db;
+  --c-client: #3fb3c4;
+  --c-external: #8a8a94;
+  --c-ai: #e06aa8;
+  --c-observability: #d98b4e;
+  --c-security: #c4c46a;
+  --c-storage: #45a39a;
+
+  --font-ui: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'SF Mono', Consolas, monospace;
+  --fs-10: 10px;
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+
+  --r-1: 3px;
+  --r-2: 4px;
+  --r-3: 6px;
+  --h-xs: 20px;
+  --h-sm: 24px;
+  --h-md: 28px;
+  --h-lg: 32px;
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+  --sp-7: 24px;
+
+  --shadow-pop: 0 10px 30px #000a, 0 0 0 1px var(--line-2);
+  --shadow-node: 0 2px 10px #0007;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --z-modal: 200;
+  --z-pop: 250;
+  --z-toast: 300;
+}

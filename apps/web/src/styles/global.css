@@ -1,0 +1,31 @@
+@import './tokens.css';
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
+body {
+  background: var(--bg-0);
+  color: var(--tx-1);
+  font: var(--fs-12)/1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+input, textarea { font: inherit; color: inherit; }
+code, kbd, pre { font-family: var(--font-mono); }
+a { color: var(--acc); text-decoration: none; }
+:focus-visible { outline: 2px solid var(--acc-ring); outline-offset: 1px; }
+::selection { background: var(--acc-lo); }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--bg-5); background-clip: padding-box; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+
+.mono { font-family: var(--font-mono); }
+.muted { color: var(--tx-3); }
+.selectable { user-select: text; }
+
+:root { --anim-fade: tessery-fade-in; --anim-pulse: tessery-pulse; --anim-dash: tessery-dash; }
+@keyframes tessery-fade-in { from { opacity: 0; transform: translateY(-2px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes tessery-pulse { 50% { opacity: .35; } }
+@keyframes tessery-dash { to { stroke-dashoffset: -12; } }
