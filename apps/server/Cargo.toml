@@ -1,0 +1,64 @@
+[workspace]
+resolver = "3"
+members = ["crates/tessery-core", "crates/tessery-db", "crates/tessery-mq", "crates/tessery-git", "crates/tessery-engine", "crates/tessery-api", "crates/tessery-worker"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+tessery-core = { path = "crates/tessery-core" }
+tessery-db = { path = "crates/tessery-db" }
+tessery-mq = { path = "crates/tessery-mq" }
+tessery-git = { path = "crates/tessery-git" }
+tessery-engine = { path = "crates/tessery-engine" }
+
+aes-gcm = "0.10"
+anyhow = "1.0.104"
+base64 = "0.22"
+dotenvy = "0.15.7"
+argon2 = "0.6"
+axum = { version = "0.8.9", features = ["macros"] }
+axum-extra = { version = "0.12", features = ["cookie"] }
+futures-util = "0.3.34"
+hex = "0.4.3"
+lapin = "4"
+rand = "0.10"
+tempfile = "3"
+redis = { version = "1.7", features = ["tokio-comp", "connection-manager"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "cookies", "rustls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+prost = "0.14"
+tar = "0.4"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "postgres", "macros", "migrate", "uuid", "time", "json"] }
+thiserror = "2.0.21"
+time = { version = "0.3.55", features = ["serde", "serde-well-known"] }
+tokio = { version = "1.54", features = ["macros", "rt-multi-thread", "signal", "net", "time"] }
+tower = "0.5.3"
+tower-http = { version = "0.7", features = ["trace", "fs", "request-id", "timeout", "limit", "set-header"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+utoipa = { version = "6", features = ["uuid", "time", "axum_extras"] }
+uuid = { version = "1.28", features = ["v4", "v7", "serde"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
