@@ -1,0 +1,60 @@
+.side { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.scroll { flex: 1; overflow: auto; padding: var(--sp-3) 0; }
+.db { padding: 0 var(--sp-3); }
+.dbHead { display: flex; align-items: center; gap: var(--sp-4); width: 100%; height: 28px; padding: 0 var(--sp-4); border-radius: var(--r-1); }
+.dbHead:hover, .dbHead.on { background: var(--bg-3); }
+.glyph { font: 600 9.5px var(--font-mono); color: var(--c-data); width: 34px; }
+.dbName { flex: 1; text-align: left; font-weight: 600; }
+.count { color: var(--tx-3); font: var(--fs-10) var(--font-mono); }
+.tables { padding: 2px 0 var(--sp-4) var(--sp-5); display: flex; flex-direction: column; }
+.tRow { display: flex; align-items: center; gap: var(--sp-4); height: 24px; padding: 0 var(--sp-4); border-radius: var(--r-1); color: var(--tx-2); }
+.tRow span:first-of-type { flex: 1; text-align: left; font: var(--fs-11) var(--font-mono); color: var(--tx-1); }
+.tRow:hover { background: var(--bg-3); }
+.tRow.on { background: var(--acc-lo); box-shadow: inset 2px 0 var(--acc); }
+
+.center { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.body { flex: 1; min-height: 0; position: relative; }
+.scrollFill { position: absolute; inset: 0; overflow: auto; }
+.erd { position: absolute; inset: 0; }
+.tnode { width: 240px; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: var(--r-3); box-shadow: var(--shadow-node); font-size: var(--fs-11); overflow: visible; }
+.tsel { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc), var(--shadow-node); }
+.thead { display: flex; justify-content: space-between; padding: 7px 10px; font: 600 var(--fs-12) var(--font-mono); border-bottom: 1px solid var(--line-1); background: color-mix(in srgb, var(--c-data) 14%, var(--bg-2)); border-radius: var(--r-3) var(--r-3) 0 0; }
+.thead span { color: var(--tx-3); font-weight: 400; font-size: var(--fs-10); }
+.tcol { position: relative; display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 10px; border-bottom: 1px solid var(--line-1); }
+.tcol:last-child { border-bottom: 0; }
+.ticon { width: 12px; color: var(--acc); display: inline-flex; }
+.tname { flex: 1; font-family: var(--font-mono); color: var(--tx-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk { color: var(--acc-hi); }
+.ttype { font: var(--fs-10) var(--font-mono); color: var(--c-compute); }
+.thandle { width: 6px !important; height: 6px !important; min-width: 0 !important; background: var(--line-3) !important; border: 0 !important; opacity: 0; }
+.tcol:hover .thandle { opacity: 1; }
+
+.data { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.dataBar { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-4) var(--sp-5); border-bottom: 1px solid var(--line-1); }
+.grid { flex: 1; min-height: 0; }
+.sql { position: absolute; inset: 0; display: grid; grid-template-rows: minmax(120px, 38%) 1fr; }
+.sqlEditor { display: flex; flex-direction: column; border-bottom: 1px solid var(--line-1); min-height: 0; }
+.sqlEditor textarea { flex: 1; resize: none; border: 0; outline: 0; padding: var(--sp-5) var(--sp-6); background: var(--bg-0); color: var(--tx-1); font: 13px/1.6 var(--font-mono); }
+.sqlBar { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--line-1); background: var(--bg-1); }
+.sqlResult { min-height: 0; display: flex; flex-direction: column; }
+.sqlMeta { padding: 4px var(--sp-5); color: var(--tx-3); font: var(--fs-11) var(--font-mono); border-bottom: 1px solid var(--line-1); }
+.sqlErr { padding: var(--sp-6); color: var(--err); font: var(--fs-12) var(--font-mono); }
+.sqlMsg { padding: var(--sp-6); color: var(--tx-2); }
+
+.cols { display: flex; flex-direction: column; border: 1px solid var(--line-1); border-radius: var(--r-2); overflow: hidden; }
+.colItem { border-bottom: 1px solid var(--line-1); }
+.colItem:last-child { border-bottom: 0; }
+.colRow { display: flex; align-items: center; gap: 6px; width: 100%; height: 26px; padding: 0 var(--sp-4); text-align: left; }
+.colRow:hover { background: var(--bg-3); }
+.colChev { color: var(--tx-3); transition: transform .12s; }
+.colOpen .colChev { transform: rotate(90deg); }
+.colOpen .colRow { background: var(--bg-3); }
+.colIcon { width: 12px; color: var(--acc); display: inline-flex; }
+.colName { flex: 1; font: var(--fs-11) var(--font-mono); }
+.colType { font: var(--fs-10) var(--font-mono); color: var(--c-compute); }
+.colEdit { padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); background: var(--bg-1); }
+.colTools { display: flex; gap: 4px; align-items: center; }
+.flags { display: flex; gap: var(--sp-5); align-items: center; flex-wrap: wrap; }
+.ix { border: 1px solid var(--line-1); border-radius: var(--r-2); padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }
+.ixHead { display: flex; align-items: center; justify-content: space-between; font-size: var(--fs-11); }
+.ixCols { display: flex; flex-wrap: wrap; gap: 2px var(--sp-5); }
