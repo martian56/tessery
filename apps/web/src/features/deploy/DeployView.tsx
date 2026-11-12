@@ -36,7 +36,7 @@ export function DeployView() {
   const urls = useMemo(() => (env && kind !== 'git' ? new Map(plan(doc, env).endpoints.map((e) => [e.name, e.url])) : new Map<string, string>()), [doc, env, kind])
   if (!env) return <Empty title="No environments" />
   const total = byProvider.reduce((a, [, v]) => a + v, 0)
-  const invalid = rows.filter((r) => !r.c.ok)
+  const invalid = (env.target?.kind ?? 'git') === 'git' ? rows.filter((r) => !r.c.ok) : []
 
   const rollBack = async (checkpointId: string, seq: number) => {
     const r = await release({ pid: doc.id, env: env.id, checkpointId, note: `roll back to checkpoint ${seq}` })
@@ -50,7 +50,7 @@ export function DeployView() {
         <b>{env.name}</b>
         <Badge>{env.strategy}</Badge>
         {env.approval && <Badge tone="warn">approval</Badge>}
-        <span className="muted" style={{ fontSize: 11 }}>{rows.length} nodes across {byProvider.length} provider{byProvider.length === 1 ? '' : 's'} · {fmtUsd(total)}/mo</span>
+        <span className="muted" style={{ fontSize: 11 }}>{(env.target?.kind ?? 'git') === 'git' ? `${rows.length} nodes across ${byProvider.length} provider${byProvider.length === 1 ? '' : 's'} · ${fmtUsd(total)}/mo` : `${rows.length} nodes`}</span>
         {invalid.length > 0 && <Badge tone="err">{invalid.length} invalid placement{invalid.length === 1 ? '' : 's'}</Badge>}
         <Spacer />
         <NewCheckpointButton />
