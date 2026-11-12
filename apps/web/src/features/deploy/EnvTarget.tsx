@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { KeyRound, Plus, Trash2 } from 'lucide-react'
 import type { DeployTarget, Environment, ProjectDoc } from '@tessery/core/domain/types'
-import { namespaceOf, secrets as requiredSecrets } from '@tessery/core/codegen/deploy'
-import { useDeleteSecretMutation, usePutSecretMutation, useSecretsQuery } from '@/api/endpoints/delivery'
+import { namespaceOf } from '@tessery/core/codegen/deploy'
+import { useDeleteSecretMutation, usePutSecretMutation } from '@/api/endpoints/delivery'
 import { errorMessage } from '@/api/types'
 import { usePermissions } from '@/app/usePermissions'
 import { useAppSelector, useEdit } from '@/store'
 import { Badge, Button, Dialog, Field, Input, NumberInput, Section, Segmented, Textarea, Tooltip, toast, useDialogs } from '@/ui'
+import { useEnvSecrets } from './useEnvSecrets'
 import s from './Deploy.module.css'
 
 type Kind = DeployTarget['kind']
@@ -59,32 +60,19 @@ const MULTILINE: Record<string, string> = {
   SSH_KNOWN_HOSTS: '203.0.113.7 ssh-ed25519 AAAA...',
 }
 
-interface Row { name: string; description: string; generate: boolean; required: boolean; stored?: { generated: boolean; updatedAt: string; updatedBy?: string | null } }
-
 export function SecretsSection({ doc, env }: { doc: ProjectDoc; env: Environment }) {
   const edit = useEdit()
   const dialogs = useDialogs()
   const org = useAppSelector((st) => st.project.orgId) ?? undefined
   const perms = usePermissions({ org, project: doc.id, env: env.id })
   const canWrite = perms.can('secret:write')
-  const { data: stored, error } = useSecretsQuery({ pid: doc.id, env: env.id })
+  const { rows, error } = useEnvSecrets(doc, env)
   const [put, { isLoading: saving }] = usePutSecretMutation()
   const [del] = useDeleteSecretMutation()
   const [editing, setEditing] = useState<string | null>(null)
   const [value, setValue] = useState('')
   const [adding, setAdding] = useState('')
 
-  const rows = useMemo<Row[]>(() => {
-    const req = requiredSecrets(doc, env).map((r) => ({ name: r.name, description: r.description, generate: r.generate, required: true }))
-    if (env.target?.kind === 'kubernetes') req.push({ name: 'KUBECONFIG', description: 'Kubeconfig for the cluster', generate: false, required: true })
-    if (env.target?.kind === 'docker' && env.target.host?.startsWith('ssh://')) {
-      req.push({ name: 'SSH_PRIVATE_KEY', description: `Private key for ${env.target.host.slice(6)}`, generate: false, required: true })
-      req.push({ name: 'SSH_KNOWN_HOSTS', description: 'Optional. Pins the host key (ssh-keyscan output)', generate: false, required: false })
-    }
-    const out: Row[] = req.map((r) => ({ ...r, stored: stored?.find((x) => x.name === r.name) }))
-    for (const x of stored ?? []) if (!out.some((r) => r.name === x.name)) out.push({ name: x.name, description: 'Not used by the design', generate: false, required: false, stored: x })
-    return out
-  }, [doc, env, stored])
 
   const save = async () => {
     if (!editing) return

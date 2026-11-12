@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowRight, Check, ChevronDown, CircleX, Clock, ExternalLink, GitCommitHorizontal, LoaderCircle, Plus, RotateCw, ScrollText, Square, X } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, CircleX, Clock, ExternalLink, GitCommitHorizontal, KeyRound, LoaderCircle, Plus, RotateCw, ScrollText, Square, X } from 'lucide-react'
 import clsx from 'clsx'
 import { useCheckpointsQuery, useCreateReleaseMutation, useDecideReleaseMutation, usePipelineQuery, useReleasesQuery, useStopEnvMutation } from '@/api/endpoints/delivery'
 import { useMeQuery } from '@/api/endpoints/identity'
@@ -10,6 +10,7 @@ import { ui } from '@/store/uiSlice'
 import { Badge, Button, DropdownMenu, Empty, Tooltip, toast, useDialogs } from '@/ui'
 import { bus } from '@/lib/bus'
 import { timeAgo } from '@/lib/format'
+import { useEnvSecrets } from '@/features/deploy/useEnvSecrets'
 import { DeployLog } from './DeployLog'
 import s from './Delivery.module.css'
 
@@ -61,6 +62,9 @@ function StageCard({ pid, stage, first, previous, checkpoints, latest, onLog }: 
   const [stopEnv, { isLoading: stopping }] = useStopEnvMutation()
   const canRun = perms.can('deployment:run')
   const canApprove = perms.can('deployment:approve')
+  const doc = useAppSelector((st) => st.project.doc!)
+  const { missing } = useEnvSecrets(doc, doc.environments.find((e) => e.id === stage.key))
+  const blocked = stage.target !== 'git' && missing.length > 0
 
   const send = async (cp: Checkpoint) => {
     let note = ''
@@ -157,18 +161,24 @@ function StageCard({ pid, stage, first, previous, checkpoints, latest, onLog }: 
         </div>
       )}
 
+      {blocked && !pending && !active && (stage.candidate || others.length > 0) && (
+        <div className={s.failed} onClick={(e) => e.stopPropagation()}>
+          <KeyRound size={12} /> Set {missing.join(', ')} before releasing
+          <Button size="xs" variant="ghost" onClick={() => dispatch(ui.setEnv(stage.key))}>Secrets</Button>
+        </div>
+      )}
       {!pending && !active && (stage.candidate || others.length > 0) && (
         <div className={s.actions} onClick={(e) => e.stopPropagation()}>
           {stage.candidate && (
-            <Tooltip content={canRun ? (first ? 'Release the latest checkpoint' : `Promote what ${previous?.name} runs`) : 'You are not allowed to release to this environment'}>
+            <Tooltip content={!canRun ? 'You are not allowed to release to this environment' : blocked ? `Set ${missing.join(', ')} for ${stage.name} first` : first ? 'Release the latest checkpoint' : `Promote what ${previous?.name} runs`}>
               <span>
-                <Button size="xs" variant="primary" disabled={!canRun || releasing} onClick={() => send(stage.candidate!)}>
+                <Button size="xs" variant="primary" disabled={!canRun || releasing || blocked} onClick={() => send(stage.candidate!)}>
                   {first ? 'Release' : 'Promote'} #{stage.candidate.seq}{stage.requiresApproval ? ' for approval' : ''}
                 </Button>
               </span>
             </Tooltip>
           )}
-          {others.length > 0 && canRun && (
+          {others.length > 0 && canRun && !blocked && (
             <DropdownMenu align="start" trigger={<Button size="xs" variant="ghost" icon={<ChevronDown />}>Other checkpoint</Button>}
               items={others.slice(0, 20).map((c) => ({ label: `#${c.seq} ${c.name}`, onSelect: () => send(c) }))} />
           )}
