@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT h.project_id, h.env_key, c.seq AS checkpoint_seq\n           FROM environment_heads h JOIN checkpoints c ON c.id = h.checkpoint_id JOIN projects p ON p.id = h.project_id\n           WHERE p.org_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "project_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "environment_heads",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "env_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "environment_heads",
+            "name": "env_key"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "checkpoint_seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "seq"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "769ee5f386de6d4df176b0a834c023d0a0870c824c1e228d3ba83a1639dbc0b4"
+}

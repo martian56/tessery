@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO spans (project_id, env_key, trace_id, span_id, parent_id, service, name, kind, start_at, duration_us, error, attributes)\n           SELECT $1, $2, * FROM UNNEST($3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::int2[], $9::timestamptz[], $10::int8[], $11::bool[], $12::jsonb[])\n           ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "Int2Array",
+        "TimestamptzArray",
+        "Int8Array",
+        "BoolArray",
+        "JsonbArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3258c158e29ae9bb467c9f65e9f65ce8293511aaa385b5563b79d80c2f012393"
+}

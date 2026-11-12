@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT h.env_key, c.commit_sha FROM environment_heads h JOIN checkpoints c ON c.id = h.checkpoint_id WHERE h.project_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "env_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "environment_heads",
+            "name": "env_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "commit_sha",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "commit_sha"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "fd982cfae4a986e1c02e758732502d0e1c01c1b8fd675744317779d5144c5d07"
+}

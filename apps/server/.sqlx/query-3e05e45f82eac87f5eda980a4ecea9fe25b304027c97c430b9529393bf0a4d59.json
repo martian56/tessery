@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM environment_heads WHERE project_id = $1 AND env_key = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3e05e45f82eac87f5eda980a4ecea9fe25b304027c97c430b9529393bf0a4d59"
+}

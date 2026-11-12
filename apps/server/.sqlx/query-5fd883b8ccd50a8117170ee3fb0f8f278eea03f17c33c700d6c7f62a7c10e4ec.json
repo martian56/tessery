@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT project_id, url, username, token_cipher, auto_push, last_push_at, last_push_ok, last_push_error, updated_at\n           FROM project_remotes WHERE project_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "project_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "url"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "username",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "username"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "token_cipher",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "token_cipher"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "auto_push",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "auto_push"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "last_push_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "last_push_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "last_push_ok",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "last_push_ok"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "last_push_error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "last_push_error"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "5fd883b8ccd50a8117170ee3fb0f8f278eea03f17c33c700d6c7f62a7c10e4ec"
+}

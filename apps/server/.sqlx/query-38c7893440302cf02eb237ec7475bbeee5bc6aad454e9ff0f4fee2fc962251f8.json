@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO checkpoints (project_id, seq, name, message, version, commit_sha, file_count, created_by)\n           VALUES ($1, (SELECT coalesce(max(seq), 0) + 1 FROM checkpoints WHERE project_id = $1), $2, $3, $4, $5, $6, $7)\n           RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Int4",
+        "Text",
+        "Int4",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "38c7893440302cf02eb237ec7475bbeee5bc6aad454e9ff0f4fee2fc962251f8"
+}

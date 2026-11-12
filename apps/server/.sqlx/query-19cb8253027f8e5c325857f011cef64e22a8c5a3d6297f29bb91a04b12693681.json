@@ -1,0 +1,49 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO releases (project_id, env_key, checkpoint_id, from_env, status, note, requested_by)\n           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text",
+        {
+          "Custom": {
+            "name": "release_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "queued",
+                "deploying",
+                "released",
+                "rejected",
+                "cancelled",
+                "failed"
+              ]
+            }
+          }
+        },
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "19cb8253027f8e5c325857f011cef64e22a8c5a3d6297f29bb91a04b12693681"
+}

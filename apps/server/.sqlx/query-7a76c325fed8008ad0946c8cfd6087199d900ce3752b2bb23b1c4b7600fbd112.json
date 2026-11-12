@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT seq, commit_sha FROM checkpoints WHERE project_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "seq"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "commit_sha",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "commit_sha"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "7a76c325fed8008ad0946c8cfd6087199d900ce3752b2bb23b1c4b7600fbd112"
+}

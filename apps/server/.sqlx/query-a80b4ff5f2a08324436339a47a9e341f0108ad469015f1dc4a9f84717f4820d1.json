@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT h.env_key, h.checkpoint_id, h.release_id, h.updated_at, r.endpoints\n           FROM environment_heads h JOIN releases r ON r.id = h.release_id WHERE h.project_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "env_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "environment_heads",
+            "name": "env_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "checkpoint_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "environment_heads",
+            "name": "checkpoint_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "release_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "environment_heads",
+            "name": "release_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "environment_heads",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "endpoints",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "endpoints"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a80b4ff5f2a08324436339a47a9e341f0108ad469015f1dc4a9f84717f4820d1"
+}

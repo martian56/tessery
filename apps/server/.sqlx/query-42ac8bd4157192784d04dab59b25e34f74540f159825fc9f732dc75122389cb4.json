@@ -1,0 +1,149 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.id, c.project_id, c.seq, c.name, c.message, c.version, c.commit_sha, c.file_count, c.created_by,\n                  u.name AS \"author_name?\", c.created_at\n           FROM checkpoints c LEFT JOIN users u ON u.id = c.created_by\n           WHERE c.project_id = $1 AND c.id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "project_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "seq"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "message",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "message"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "commit_sha",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "commit_sha"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "file_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "file_count"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "created_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "created_by"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "author_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "42ac8bd4157192784d04dab59b25e34f74540f159825fc9f732dc75122389cb4"
+}

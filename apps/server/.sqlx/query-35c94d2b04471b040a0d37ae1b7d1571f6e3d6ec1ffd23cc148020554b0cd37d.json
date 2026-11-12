@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO project_versions (project_id, version, doc, message, created_by) VALUES ($1, 1, $2, 'Created', $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "35c94d2b04471b040a0d37ae1b7d1571f6e3d6ec1ffd23cc148020554b0cd37d"
+}

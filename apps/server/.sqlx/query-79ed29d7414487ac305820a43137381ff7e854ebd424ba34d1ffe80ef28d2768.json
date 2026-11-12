@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT doc FROM project_versions WHERE project_id = $1 AND version = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "doc",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "project_versions",
+            "name": "doc"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "79ed29d7414487ac305820a43137381ff7e854ebd424ba34d1ffe80ef28d2768"
+}

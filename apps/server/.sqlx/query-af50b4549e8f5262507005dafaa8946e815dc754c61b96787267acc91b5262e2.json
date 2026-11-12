@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE releases SET status = 'failed', finished_at = now(), error = 'the worker stopped while this deploy was running'\n           WHERE status = 'deploying' RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "af50b4549e8f5262507005dafaa8946e815dc754c61b96787267acc91b5262e2"
+}

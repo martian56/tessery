@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO environment_secrets (project_id, env_key, name, cipher, generated, updated_by) VALUES ($1, $2, $3, $4, $5, $6)\n           ON CONFLICT (project_id, env_key, name) DO UPDATE SET cipher = $4, generated = $5, updated_by = $6, updated_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bool",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3b11f8074af077eb604da73a57e35e7848834d9f612f772c955c07cfb826d3c9"
+}

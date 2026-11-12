@@ -1,0 +1,283 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.id, r.project_id, r.env_key, r.checkpoint_id, c.seq AS checkpoint_seq, c.name AS checkpoint_name,\n                  c.commit_sha, r.from_env, r.status AS \"status: ReleaseStatus\", r.note, r.requested_by,\n                  rq.name AS \"requester_name?\", r.requested_at, r.decided_by, dc.name AS \"decider_name?\",\n                  r.decided_at, r.decision_note, r.error, r.started_at, r.finished_at, r.endpoints\n           FROM releases r JOIN checkpoints c ON c.id = r.checkpoint_id\n           LEFT JOIN users rq ON rq.id = r.requested_by LEFT JOIN users dc ON dc.id = r.decided_by\n           WHERE r.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "project_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "env_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "env_key"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "checkpoint_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "checkpoint_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "checkpoint_seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "seq"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "checkpoint_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "commit_sha",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "checkpoints",
+            "name": "commit_sha"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "from_env",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "from_env"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "status: ReleaseStatus",
+        "type_info": {
+          "Custom": {
+            "name": "release_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "queued",
+                "deploying",
+                "released",
+                "rejected",
+                "cancelled",
+                "failed"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "note"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "requested_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "requested_by"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "requester_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "requested_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "requested_at"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "decided_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "decided_by"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "decider_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "decided_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "decided_at"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "decision_note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "decision_note"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "error"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "started_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "started_at"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "finished_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "finished_at"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "endpoints",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "releases",
+            "name": "endpoints"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "0031a11e9cfdef32f1c95f3e83232208b8e74fa47e03f8e3cced498fdfd53b0f"
+}

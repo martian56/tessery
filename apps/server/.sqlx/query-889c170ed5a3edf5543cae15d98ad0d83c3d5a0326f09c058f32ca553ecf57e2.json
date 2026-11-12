@@ -1,0 +1,221 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT b.id, b.org_id, b.role_id, r.key AS role_key, r.name AS role_name, (r.org_id IS NULL) AS \"role_is_builtin!\",\n                  r.permissions AS role_permissions,\n                  b.subject_kind AS \"subject_kind: SubjectKind\", b.subject_id, NULL::text AS subject_name,\n                  b.scope_kind AS \"scope_kind: ScopeKind\", b.scope_id, b.env_key, b.expires_at, b.created_at, b.created_by\n           FROM role_bindings b JOIN roles r ON r.id = b.role_id\n           WHERE b.org_id = $1\n             AND ((b.subject_kind = 'user' AND b.subject_id = $2)\n               OR (b.subject_kind = 'team' AND b.subject_id IN (SELECT team_id FROM team_members WHERE org_id = $1 AND user_id = $2)))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "role_bindings",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "role_bindings",
+            "name": "org_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "role_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "role_bindings",
+            "name": "role_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "role_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "roles",
+            "name": "key"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "role_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "roles",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "role_is_builtin!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "role_permissions",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "roles",
+            "name": "permissions"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "subject_kind: SubjectKind",
+        "type_info": {
+          "Custom": {
+            "name": "subject_kind",
+            "kind": {
+              "Enum": [
+                "user",
+                "team"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "role_bindings",
+            "name": "subject_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "role_bindings",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "subject_name",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "scope_kind: ScopeKind",
+        "type_info": {
+          "Custom": {
+            "name": "scope_kind",
+            "kind": {
+              "Enum": [
+                "org",
+                "team",
+                "project",
+                "environment"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "role_bindings",
+            "name": "scope_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "scope_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "role_bindings",
+            "name": "scope_id"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "env_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "role_bindings",
+            "name": "env_key"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "role_bindings",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "role_bindings",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "created_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "role_bindings",
+            "name": "created_by"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      false,
+      null,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "889c170ed5a3edf5543cae15d98ad0d83c3d5a0326f09c058f32ca553ecf57e2"
+}

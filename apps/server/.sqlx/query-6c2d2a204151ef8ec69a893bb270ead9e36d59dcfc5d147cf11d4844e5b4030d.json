@@ -1,0 +1,138 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT trace_id, span_id, parent_id, service, name, kind, start_at, duration_us, error, attributes\n         FROM spans WHERE project_id = $1 AND env_key = $2 AND trace_id = $3 ORDER BY start_at LIMIT 2000",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "trace_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spans",
+            "name": "trace_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "span_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spans",
+            "name": "span_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "parent_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spans",
+            "name": "parent_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "service",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spans",
+            "name": "service"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spans",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "kind",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "spans",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "start_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "spans",
+            "name": "start_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "duration_us",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "spans",
+            "name": "duration_us"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "error",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "spans",
+            "name": "error"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "attributes",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "spans",
+            "name": "attributes"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "6c2d2a204151ef8ec69a893bb270ead9e36d59dcfc5d147cf11d4844e5b4030d"
+}

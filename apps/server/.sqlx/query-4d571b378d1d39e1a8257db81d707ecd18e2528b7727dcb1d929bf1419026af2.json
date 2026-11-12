@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"n!\" FROM role_bindings b JOIN roles r ON r.id = b.role_id\n           WHERE b.org_id = $1 AND r.key = 'owner' AND r.org_id IS NULL AND b.scope_kind = 'org'\n             AND b.subject_kind = 'user' AND (b.expires_at IS NULL OR b.expires_at > now())",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4d571b378d1d39e1a8257db81d707ecd18e2528b7727dcb1d929bf1419026af2"
+}

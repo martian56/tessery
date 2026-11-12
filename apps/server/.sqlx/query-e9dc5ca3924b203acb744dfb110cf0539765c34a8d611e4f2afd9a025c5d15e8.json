@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT setup_completed_at, allow_org_creation FROM instance_settings",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "setup_completed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "instance_settings",
+            "name": "setup_completed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "allow_org_creation",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "instance_settings",
+            "name": "allow_org_creation"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "e9dc5ca3924b203acb744dfb110cf0539765c34a8d611e4f2afd9a025c5d15e8"
+}

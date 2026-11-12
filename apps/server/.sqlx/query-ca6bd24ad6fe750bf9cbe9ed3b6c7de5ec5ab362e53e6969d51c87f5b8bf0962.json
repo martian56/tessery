@@ -1,0 +1,137 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, org_id, format, filters, status AS \"status: ExportStatus\", row_count, error, created_at, finished_at\n           FROM audit_exports WHERE org_id = $1 AND id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "audit_exports",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "audit_exports",
+            "name": "org_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "format",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_exports",
+            "name": "format"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "filters",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "audit_exports",
+            "name": "filters"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "status: ExportStatus",
+        "type_info": {
+          "Custom": {
+            "name": "export_status",
+            "kind": {
+              "Enum": [
+                "queued",
+                "running",
+                "done",
+                "failed"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "audit_exports",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "row_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "audit_exports",
+            "name": "row_count"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_exports",
+            "name": "error"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "audit_exports",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "finished_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "audit_exports",
+            "name": "finished_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "ca6bd24ad6fe750bf9cbe9ed3b6c7de5ec5ab362e53e6969d51c87f5b8bf0962"
+}

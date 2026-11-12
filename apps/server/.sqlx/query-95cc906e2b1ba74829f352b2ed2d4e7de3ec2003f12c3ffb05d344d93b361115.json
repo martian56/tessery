@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.name, s.cipher, s.generated, s.updated_at, u.name AS \"updated_by_name?\"\n           FROM environment_secrets s LEFT JOIN users u ON u.id = s.updated_by\n           WHERE s.project_id = $1 AND s.env_key = $2 ORDER BY s.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "environment_secrets",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "cipher",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "environment_secrets",
+            "name": "cipher"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "generated",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "environment_secrets",
+            "name": "generated"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "environment_secrets",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "updated_by_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "95cc906e2b1ba74829f352b2ed2d4e7de3ec2003f12c3ffb05d344d93b361115"
+}
