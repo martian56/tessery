@@ -1,0 +1,21 @@
+[package]
+name = "tessery-engine"
+description = "Client for the Tessery engine: the shared TypeScript design model and code generators, run in warm Node processes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["process", "io-util", "sync", "time"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process", "io-util", "sync", "time"] }
+
+[lints]
+workspace = true
