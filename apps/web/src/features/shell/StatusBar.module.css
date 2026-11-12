@@ -1,0 +1,10 @@
+.bar { display: flex; align-items: center; gap: var(--sp-6); padding: 0 var(--sp-5); background: var(--bg-1); border-top: 1px solid var(--line-1); color: var(--tx-3); font-size: var(--fs-11); white-space: nowrap; overflow: hidden; }
+.bar b { color: var(--tx-2); font-weight: 400; font-family: var(--font-mono); }
+.spacer { flex: 1; }
+.btn { color: inherit; font-size: inherit; }
+.btn:hover { color: var(--tx-1); }
+.live { display: flex; align-items: center; gap: 5px; }
+.live i { width: 7px; height: 7px; border-radius: 50%; background: var(--err); animation: var(--anim-pulse) 1s infinite; }
+.bad, .bar b.bad { color: var(--err); }
+.warn, .bar b.warn { color: var(--warn); }
+.ok { color: var(--ok); }

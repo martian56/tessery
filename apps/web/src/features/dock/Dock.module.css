@@ -1,0 +1,17 @@
+.dock { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.tabs { height: 28px; background: var(--bg-2); border-bottom: 1px solid var(--line-1); flex-shrink: 0; }
+.body { flex: 1; min-height: 0; overflow: auto; position: relative; }
+.code { min-width: 0; }
+.files { display: flex; align-items: center; gap: 2px; overflow-x: auto; min-width: 0; scrollbar-width: none; }
+.file { height: 20px; padding: 0 8px; border-radius: var(--r-1); font: var(--fs-11) var(--font-mono); color: var(--tx-2); white-space: nowrap; }
+.file:hover { color: var(--tx-1); }
+.file.on { background: var(--bg-4); color: var(--tx-1); }
+.problems { display: flex; flex-direction: column; }
+.problem { display: flex; align-items: center; gap: var(--sp-4); padding: 5px var(--sp-5); border-bottom: 1px solid var(--line-1); text-align: left; }
+.problem:hover { background: var(--bg-2); }
+.sev { width: 14px; font: 600 var(--fs-11) var(--font-mono); text-align: center; }
+.error { color: var(--err); }
+.warning { color: var(--warn); }
+.info { color: var(--info); }
+.msg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.area { color: var(--tx-3); font: var(--fs-10) var(--font-mono); }

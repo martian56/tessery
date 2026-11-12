@@ -1,0 +1,13 @@
+.overlay { position: fixed; inset: 0; background: #0008; z-index: var(--z-modal); }
+.box { position: fixed; top: 12vh; left: 50%; transform: translateX(-50%); width: 580px; max-width: calc(100vw - 32px); background: var(--bg-2); border-radius: var(--r-3); box-shadow: var(--shadow-pop); z-index: var(--z-modal); overflow: hidden; outline: 0; animation: var(--anim-fade) .12s var(--ease); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.search { display: flex; align-items: center; gap: var(--sp-4); padding: 0 var(--sp-6); height: 44px; border-bottom: 1px solid var(--line-1); color: var(--tx-3); }
+.search input { flex: 1; background: none; border: 0; outline: 0; font-size: var(--fs-13); color: var(--tx-1); }
+.search input::placeholder { color: var(--tx-3); }
+.list { max-height: 380px; overflow: auto; padding: var(--sp-2); }
+.item { display: flex; align-items: center; gap: var(--sp-4); height: 30px; padding: 0 var(--sp-5); border-radius: var(--r-1); cursor: default; }
+.item[data-active] { background: var(--acc); color: #fff; }
+.label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group { color: var(--tx-3); font-size: var(--fs-11); }
+.item[data-active] .group { color: #fff; }
+.none { padding: var(--sp-6); text-align: center; color: var(--tx-3); }

@@ -1,0 +1,11 @@
+.term { font: 12px/1.6 var(--font-mono); padding: var(--sp-4) var(--sp-5); min-height: 100%; user-select: text; cursor: text; }
+.term > div { white-space: pre-wrap; word-break: break-word; }
+.in::before { content: 'tessery › '; color: var(--acc); }
+.out { color: var(--tx-1); }
+.ok { color: var(--ok); }
+.err { color: var(--err); }
+.muted { color: var(--tx-3); }
+.prompt { display: flex; align-items: center; gap: var(--sp-4); }
+.prompt span { color: var(--acc); white-space: nowrap; }
+.prompt input { flex: 1; background: none; border: 0; outline: 0; font: inherit; color: var(--tx-1); }
+.prompt input::placeholder { color: var(--tx-3); }
