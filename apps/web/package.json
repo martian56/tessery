@@ -1,0 +1,37 @@
+{
+  "name": "@tessery/web",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "api:types": "openapi-typescript http://127.0.0.1:8080/api/openapi.json -o src/api/schema.d.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "private": "true",
+  "dependencies": {
+    "@reduxjs/toolkit": "^2.13.0",
+    "@xyflow/react": "^12.12.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.511.0",
+    "radix-ui": "^1.8.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-redux": "^9.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.5"
+  }
+}
