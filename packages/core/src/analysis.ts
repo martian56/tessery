@@ -17,7 +17,6 @@ export interface Problem {
 export function analyze(doc: ProjectDoc, env: Environment | undefined, sim: SimResult | null): Problem[] {
   const out: Problem[] = []
   const add = (p: Omit<Problem, 'id'>) => out.push({ ...p, id: `${p.area}:${p.nodeId ?? ''}:${out.length}` })
-  const ports = new Map<number, string>()
   for (const n of doc.nodes) {
     const t = TECH_BY_ID[n.techId]
     const pc = checkPlacement(n, env)
@@ -30,8 +29,6 @@ export function analyze(doc: ProjectDoc, env: Environment | undefined, sim: SimR
     if (t.category === 'client' && !outbound) add({ severity: 'warning', area: 'design', nodeId: n.id, message: `${n.name}: client doesn't call anything` })
     if ((t.id === 'worker' || t.id === 'cron') && !outbound) add({ severity: 'warning', area: 'design', nodeId: n.id, message: `${n.name}: processes work but writes nowhere` })
     if ((t.category === 'compute' || t.id === 'api-gateway' || t.id === 'load-balancer') && n.replicas < 2 && !['cron', 'batch', 'function', 'edge-function'].includes(t.id)) add({ severity: 'warning', area: 'deploy', nodeId: n.id, message: `${n.name}: single replica, no redundancy` })
-    const port = n.config.port
-    if (typeof port === 'number') { if (ports.has(port)) add({ severity: 'error', area: 'design', nodeId: n.id, message: `${n.name}: port ${port} collides with ${ports.get(port)}` }); else ports.set(port, n.name) }
     const spec = doc.apis[n.id]
     if (spec && spec.operations.length === 0) add({ severity: 'warning', area: 'api', nodeId: n.id, message: `${n.name}: API has no operations yet` })
     spec?.operations.forEach((o) => { if (!o.steps.length) add({ severity: 'info', area: 'api', nodeId: n.id, message: `${n.name}.${o.name}: empty handler`, target: { opId: o.id } }) })
