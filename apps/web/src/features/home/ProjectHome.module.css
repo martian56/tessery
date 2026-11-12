@@ -1,0 +1,23 @@
+.shell { height: 100%; display: flex; flex-direction: column; background: var(--bg-0); }
+.page { flex: 1; min-height: 0; overflow: auto; }
+.main { max-width: 1080px; margin: 0 auto; padding: var(--sp-7); display: flex; flex-direction: column; gap: 36px; }
+.h2 { font-size: var(--fs-11); text-transform: uppercase; letter-spacing: .8px; color: var(--tx-3); font-weight: 600; margin-bottom: var(--sp-5); }
+.templates { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--sp-5); }
+.tpl { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-3); padding: var(--sp-6); text-align: left; background: var(--bg-1); border: 1px solid var(--line-2); border-radius: var(--r-3); transition: border-color .12s, background .12s; min-height: 132px; }
+.tpl:hover { border-color: var(--acc); background: var(--bg-2); }
+.tpl b { font-size: var(--fs-13); }
+.tpl span:last-child { color: var(--tx-3); line-height: 1.5; }
+.tplIcon { width: 28px; height: 28px; border-radius: var(--r-2); display: grid; place-items: center; background: var(--acc-lo); color: var(--acc-hi); font-weight: 700; margin-bottom: var(--sp-2); }
+.tplIcon svg { width: 15px; height: 15px; }
+.listHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-5); }
+.listHead .h2 { margin: 0; }
+.list { border: 1px solid var(--line-2); border-radius: var(--r-3); overflow: hidden; }
+.row { display: grid; grid-template-columns: 32px minmax(0, 1fr) minmax(0, 220px) 110px 110px 90px 32px; align-items: center; gap: var(--sp-5); padding: var(--sp-5) var(--sp-6); background: var(--bg-1); border-bottom: 1px solid var(--line-1); cursor: pointer; }
+.row:last-child { border-bottom: 0; }
+.row:hover { background: var(--bg-2); }
+.rowIcon { font-size: 18px; color: var(--acc); text-align: center; }
+.rowMain { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rowMain b { font-size: var(--fs-13); }
+.rowMain span { color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rowMeta { color: var(--tx-3); font: var(--fs-11) var(--font-mono); }
+.running { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; min-width: 0; }
