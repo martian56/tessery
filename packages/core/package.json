@@ -1,0 +1,18 @@
+{
+  "name": "@tessery/core",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Design model, technology catalog, design operations and code generators shared by the Tessery web app and server.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build:engine": "esbuild src/engine/main.ts --bundle --platform=node --target=node22 --format=esm --legal-comments=none --loader:.txt=text --outfile=dist/tessery-engine.mjs",
+    "verify:codegen": "esbuild scripts/verify-codegen.ts --bundle --platform=node --loader:.txt=text --format=esm --outfile=dist/verify-codegen.mjs --log-level=warning && node dist/verify-codegen.mjs",
+    "test": "esbuild scripts/tests.ts --bundle --platform=node --format=esm --loader:.txt=text --outfile=dist/tests.mjs --log-level=warning && node --test dist/tests.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3"
+  }
+}
