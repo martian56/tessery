@@ -45,14 +45,6 @@ impl RunnerConfig {
 #[derive(Deserialize)]
 struct Plan {
     target: Value,
-    #[serde(default)]
-    secrets: Vec<SecretSpec>,
-}
-
-#[derive(Deserialize)]
-struct SecretSpec {
-    name: String,
-    generate: bool,
 }
 
 struct Log {
@@ -169,7 +161,8 @@ async fn run(ctx: &Ctx, r: &Release, log: &Log) -> Result<Vec<Value>> {
     let plan: Plan = serde_json::from_slice(&plan_raw).context("reading the deploy plan")?;
     let kind = plan.target.get("kind").and_then(Value::as_str).unwrap_or("git");
 
-    let mut values = resolve_secrets(ctx, r, &plan, kind).await?;
+    let required = tessery_core::runner::required_secrets(&serde_json::from_slice(&plan_raw).context("reading the deploy plan")?);
+    let mut values = resolve_secrets(ctx, r, &required).await?;
     let remote = plan.target.get("host").and_then(Value::as_str).filter(|h| kind == "docker" && h.starts_with("ssh://"));
     let base = if remote.is_some() { ctx.runner.public_url.as_deref() } else { ctx.runner.telemetry_url.as_deref() };
     match (base, remote) {
@@ -275,27 +268,21 @@ fn telemetry(ctx: &Ctx, base: Option<&str>, project: Uuid, env: &str) -> [(Strin
     [("TESSERY_OTLP_ENDPOINT".into(), endpoint), ("TESSERY_OTLP_HEADERS".into(), headers)]
 }
 
-async fn resolve_secrets(ctx: &Ctx, r: &Release, plan: &Plan, kind: &str) -> Result<Vec<(String, String)>> {
-    let mut needed: Vec<(String, bool)> = plan.secrets.iter().map(|s| (s.name.clone(), s.generate)).collect();
-    if kind == "kubernetes" {
-        needed.push(("KUBECONFIG".into(), false));
-    }
-    if kind == "docker" && plan.target["host"].as_str().is_some_and(|h| h.starts_with("ssh://")) {
-        needed.push(("SSH_PRIVATE_KEY".into(), false));
-    }
+async fn resolve_secrets(ctx: &Ctx, r: &Release, needed: &[tessery_core::runner::RequiredSecret]) -> Result<Vec<(String, String)>> {
     if needed.is_empty() {
         return Ok(Vec::new());
     }
     let key = ctx.secret_key.as_ref().ok_or_else(|| anyhow!("TESSERY_SECRET_KEY is not set on the worker, so environment secrets cannot be read"))?;
     let stored = db::secrets(&ctx.db, r.project_id, &r.env_key).await?;
-    for (name, generate) in &needed {
-        if *generate && !stored.iter().any(|s| &s.name == name) {
+    for secret in needed {
+        if secret.generate && !stored.iter().any(|s| s.name == secret.name) {
             let cipher = key.encrypt(password().as_bytes());
-            db::insert_generated_secret(&ctx.db, r.project_id, &r.env_key, name, &cipher).await?;
+            db::insert_generated_secret(&ctx.db, r.project_id, &r.env_key, &secret.name, &cipher).await?;
         }
     }
     let stored = db::secrets(&ctx.db, r.project_id, &r.env_key).await?;
-    let missing: Vec<&str> = needed.iter().filter(|(n, _)| !stored.iter().any(|s| &s.name == n)).map(|(n, _)| n.as_str()).collect();
+    let names: Vec<String> = stored.iter().map(|s| s.name.clone()).collect();
+    let missing = tessery_core::runner::missing_secrets(needed, &names);
     if !missing.is_empty() {
         bail!("set these secrets for {} first: {}", r.env_key, missing.join(", "));
     }

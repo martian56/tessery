@@ -3192,6 +3192,7 @@ dependencies = [
  "base64 0.22.1",
  "hex",
  "serde",
+ "serde_json",
  "sha2 0.11.1",
  "thiserror",
  "time",

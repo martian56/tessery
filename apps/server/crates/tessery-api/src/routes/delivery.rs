@@ -194,6 +194,15 @@ async fn after_change(state: &AppState, project: Uuid) {
     enqueue_push(state, project).await;
 }
 
+async fn missing_secrets(state: &AppState, project: Uuid, commit: &str, env: &str) -> ApiResult<Vec<String>> {
+    let Ok(repo) = state.repos.open(project).await else { return Ok(Vec::new()) };
+    let Ok(raw) = repo.read_file(commit, &format!("deploy/{env}/plan.json")).await else { return Ok(Vec::new()) };
+    let Ok(plan) = serde_json::from_slice::<Value>(&raw) else { return Ok(Vec::new()) };
+    let required = tessery_core::runner::required_secrets(&plan);
+    let stored: Vec<String> = db::secrets(&state.db, project, env).await?.into_iter().map(|s| s.name).collect();
+    Ok(tessery_core::runner::missing_secrets(&required, &stored).into_iter().map(str::to_owned).collect())
+}
+
 async fn needs_runner(state: &AppState, project: Uuid, commit: &str, env: &str) -> bool {
     let Ok(repo) = state.repos.open(project).await else { return false };
     let Ok(raw) = repo.read_file(commit, &format!("deploy/{env}/plan.json")).await else { return false };
@@ -509,6 +518,12 @@ pub async fn create_release(
     }
 
     let runner = needs_runner(&state, project, &checkpoint.commit_sha, &stage.key).await;
+    if runner {
+        let missing = missing_secrets(&state, project, &checkpoint.commit_sha, &stage.key).await?;
+        if !missing.is_empty() {
+            return Err(ApiError::Conflict(format!("set these secrets for {} first: {}", stage.name, missing.join(", "))));
+        }
+    }
     let status = match (stage.approval, runner) {
         (true, _) => ReleaseStatus::Pending,
         (false, true) => ReleaseStatus::Queued,
