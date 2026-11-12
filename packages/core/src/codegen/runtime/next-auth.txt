@@ -1,0 +1,21 @@
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import { verifySession, type Session } from './session'
+
+/** The signed-in user, verified with AUTH_SECRET, or null. */
+export async function getSession(): Promise<Session | null> {
+  return verifySession((await cookies()).get('session')?.value)
+}
+
+/** The raw session token, to call services on behalf of the signed-in user. */
+export async function sessionToken(): Promise<string | undefined> {
+  return (await cookies()).get('session')?.value
+}
+
+/** Sends visitors without a valid session to /login, and non-admins away from admin pages. */
+export async function requireSession(role?: 'admin'): Promise<Session> {
+  const session = await getSession()
+  if (!session) redirect('/login')
+  if (role === 'admin' && session.role !== 'admin') redirect('/')
+  return session
+}
