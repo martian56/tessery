@@ -112,9 +112,9 @@ const DATA: Record<string, DataSpec> = {
     url: (n) => `mqtt://${n.name}:1883`,
   },
   'object-storage': {
-    image: () => 'minio/minio:RELEASE.2025-04-22T22-12-26Z', port: 9000, ports: [9001], volume: '/data', password: true,
-    env: (p) => ({ MINIO_ROOT_USER: 'app-admin', MINIO_ROOT_PASSWORD: p }),
-    command: () => ['server', '/data', '--console-address', ':9001'],
+    image: () => 'chrislusf/seaweedfs:4.53', port: 9000, ports: [], volume: '/data', password: true,
+    env: (p) => ({ AWS_ACCESS_KEY_ID: 'app-admin', AWS_SECRET_ACCESS_KEY: p }),
+    command: () => ['server', '-dir=/data', '-s3', '-s3.port=9000'],
     url: (n) => `http://${n.name}:9000`,
     extra: (n, p) => ({ ACCESS_KEY: 'app-admin', SECRET_KEY: p, BUCKET: String(n.config.bucket ?? n.name) }),
   },
