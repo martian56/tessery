@@ -1,0 +1,8 @@
+.page { height: 100%; display: grid; place-items: center; padding: var(--sp-6); background: radial-gradient(ellipse at top, #1d1d21, var(--bg-0) 60%); overflow: auto; }
+.card { width: 380px; max-width: 100%; background: var(--bg-1); border: 1px solid var(--line-2); border-radius: var(--r-3); padding: 28px; display: flex; flex-direction: column; gap: var(--sp-5); box-shadow: 0 20px 60px #0008; }
+.brand { display: flex; align-items: center; gap: var(--sp-4); font-weight: 700; font-size: var(--fs-16); letter-spacing: .3px; }
+.title { font-size: var(--fs-20); font-weight: 600; letter-spacing: -.3px; margin-top: var(--sp-4); }
+.subtitle { color: var(--tx-2); line-height: 1.55; margin-top: calc(var(--sp-4) * -1); }
+.form { display: flex; flex-direction: column; gap: var(--sp-5); }
+.error { padding: var(--sp-4) var(--sp-5); border-radius: var(--r-2); background: color-mix(in srgb, var(--err) 14%, transparent); border: 1px solid color-mix(in srgb, var(--err) 40%, transparent); color: var(--tx-1); font-size: var(--fs-12); }
+.hint { color: var(--tx-3); font-size: var(--fs-11); line-height: 1.5; }

@@ -1,0 +1,10 @@
+.bar { display: flex; align-items: center; gap: var(--sp-4); height: 48px; padding: 0 var(--sp-6); border-bottom: 1px solid var(--line-1); background: var(--bg-1); flex-shrink: 0; }
+.logo { display: flex; align-items: center; gap: var(--sp-4); font-weight: 700; font-size: var(--fs-14); letter-spacing: .3px; padding-right: var(--sp-4); }
+.org { display: flex; align-items: center; gap: var(--sp-3); height: 28px; padding: 0 var(--sp-4); border: 1px solid var(--line-2); border-radius: var(--r-2); color: var(--tx-1); max-width: 260px; }
+.org span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.org:hover { border-color: var(--line-3); background: var(--bg-2); }
+.tabs { display: flex; gap: 2px; margin-left: var(--sp-5); }
+.tab { height: 28px; padding: 0 var(--sp-5); border-radius: var(--r-2); color: var(--tx-2); }
+.tab:hover { color: var(--tx-1); background: var(--bg-2); }
+.tab.on { color: var(--tx-1); background: var(--bg-3); }
+.right { margin-left: auto; display: flex; align-items: center; gap: var(--sp-3); }
