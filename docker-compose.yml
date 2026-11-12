@@ -1,0 +1,78 @@
+name: tessery
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: tessery
+      POSTGRES_PASSWORD: tessery
+      POSTGRES_DB: tessery
+    ports: ["15432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tessery -d tessery"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["16379:6379"]
+    volumes: ["redisdata:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: tessery
+      RABBITMQ_DEFAULT_PASS: tessery
+    ports: ["15671:5672", "15672:15672"]
+    volumes: ["mqdata:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  server:
+    profiles: ["app"]
+    build: { context: ., dockerfile: apps/server/Dockerfile, target: server }
+    environment: &appenv
+      TESSERY_DATABASE_URL: postgres://tessery:tessery@postgres:5432/tessery
+      TESSERY_REDIS_URL: redis://redis:6379
+      TESSERY_AMQP_URL: amqp://tessery:tessery@rabbitmq:5672/%2f
+      TESSERY_BIND: 0.0.0.0:8080
+      TESSERY_WEB_DIR: /srv/web
+      TESSERY_COOKIE_SECURE: "false"
+      TESSERY_DATA_DIR: /var/lib/tessery
+      TESSERY_SECRET_KEY: ${TESSERY_SECRET_KEY:-}
+      TESSERY_TELEMETRY_URL: ${TESSERY_TELEMETRY_URL:-http://host.docker.internal:8080}
+      RUST_LOG: info
+    volumes: &appvolumes
+      - tesserydata:/var/lib/tessery
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add: &dockergroup ["${DOCKER_GID:-0}"]
+    ports: ["8080:8080"]
+    depends_on: &deps
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  worker:
+    profiles: ["app"]
+    build: { context: ., dockerfile: apps/server/Dockerfile, target: worker }
+    environment: *appenv
+    volumes: *appvolumes
+    group_add: *dockergroup
+    depends_on: *deps
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+  mqdata: {}
+  tesserydata: {}
