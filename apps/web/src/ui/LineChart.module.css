@@ -1,0 +1,13 @@
+.wrap { position: relative; width: 100%; }
+.svg { width: 100%; display: block; overflow: visible; }
+.grid { stroke: var(--line-1); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.ylab { fill: var(--tx-3); font: 9px var(--font-mono); text-anchor: end; }
+.xlab { fill: var(--tx-3); font: 9px var(--font-mono); text-anchor: middle; }
+.threshold { stroke: var(--err); stroke-dasharray: 4 3; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.cursor { stroke: var(--tx-3); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.tip { position: absolute; top: 4px; transform: translateX(8px); background: var(--bg-4); border-radius: var(--r-2); padding: 6px 8px; box-shadow: var(--shadow-pop); pointer-events: none; font-size: var(--fs-11); z-index: 3; min-width: 150px; }
+.tipT { color: var(--tx-3); font: var(--fs-10) var(--font-mono); margin-bottom: 3px; }
+.tipRow { display: flex; align-items: center; gap: 6px; }
+.tipRow i { width: 8px; height: 2px; }
+.tipRow b { margin-left: auto; font: var(--fs-11) var(--font-mono); font-weight: 400; }
+.empty { display: grid; place-items: center; color: var(--tx-3); border: 1px dashed var(--line-2); border-radius: var(--r-2); }

@@ -1,0 +1,5 @@
+.stack { position: fixed; bottom: 36px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); z-index: var(--z-toast); pointer-events: none; }
+.toast { padding: 7px 14px; border-radius: var(--r-2); background: var(--bg-4); box-shadow: var(--shadow-pop); font-size: var(--fs-12); animation: var(--anim-fade) .15s var(--ease); border-left: 3px solid var(--info); }
+.ok { border-left-color: var(--ok); }
+.warn { border-left-color: var(--warn); }
+.err { border-left-color: var(--err); }

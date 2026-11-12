@@ -1,0 +1,15 @@
+.overlay { position: fixed; inset: 0; background: #0009; z-index: var(--z-modal); animation: var(--anim-fade) .12s; }
+.content {
+  position: fixed; top: 14vh; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); max-height: 76vh;
+  display: flex; flex-direction: column; background: var(--bg-2); border-radius: var(--r-3); box-shadow: var(--shadow-pop);
+  z-index: var(--z-modal); outline: 0;
+}
+.head { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-5) var(--sp-5) var(--sp-4) var(--sp-6); }
+.title { font-size: var(--fs-13); font-weight: 600; }
+.desc { padding: 0 var(--sp-6) var(--sp-4); color: var(--tx-2); line-height: 1.55; }
+.body { padding: 0 var(--sp-6) var(--sp-6); overflow: auto; display: flex; flex-direction: column; gap: var(--sp-5); }
+.body > * { flex-shrink: 0; }
+.foot { display: flex; justify-content: flex-end; gap: var(--sp-3); padding: var(--sp-5) var(--sp-6); border-top: 1px solid var(--line-1); }
+.text { color: var(--tx-2); line-height: 1.6; }
+.form { display: flex; flex-direction: column; gap: var(--sp-5); }
+.dangerBtn { background: var(--err); border-color: var(--err); color: #fff; }

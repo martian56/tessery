@@ -1,0 +1,9 @@
+.pre { font: 12px/1.6 var(--font-mono); padding: var(--sp-4) 0; user-select: text; white-space: pre; min-width: max-content; }
+.line { display: flex; }
+.line:hover { background: #ffffff05; }
+.ln { width: 46px; padding-right: var(--sp-5); text-align: right; color: var(--tx-3); user-select: none; flex-shrink: 0; }
+.kw { color: #c792ea; }
+.st { color: #a5d6a7; }
+.nu { color: #f9ae58; }
+.cm { color: #5c6370; font-style: italic; }
+.key { color: var(--acc); }
