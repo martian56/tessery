@@ -1,0 +1,21 @@
+[package]
+name = "tessery-db"
+description = "Postgres access for Tessery: pool, migrations and repositories."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+tessery-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+time.workspace = true
+utoipa.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true
