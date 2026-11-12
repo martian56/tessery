@@ -1,0 +1,33 @@
+[package]
+name = "tessery-worker"
+description = "Tessery background worker: consumes RabbitMQ jobs."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "tessery-worker"
+path = "src/main.rs"
+
+[dependencies]
+tessery-core.workspace = true
+tessery-db.workspace = true
+tessery-mq.workspace = true
+tessery-git.workspace = true
+anyhow.workspace = true
+dotenvy.workspace = true
+rand.workspace = true
+serde.workspace = true
+tar.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+time.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true
