@@ -1,0 +1,4 @@
+.flow { stroke-dasharray: 3 9; animation: var(--anim-dash) 1s steps(12) infinite; pointer-events: none; opacity: .95; }
+:global([data-dragging]) .flow { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .flow { animation: none; } }
+.label { position: absolute; pointer-events: none; font: 9.5px var(--font-mono); padding: 1px 5px; border-radius: 3px; background: var(--bg-0); border: 1px solid var(--line-1); white-space: nowrap; opacity: .9; }

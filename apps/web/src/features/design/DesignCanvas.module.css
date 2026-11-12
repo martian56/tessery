@@ -1,0 +1,18 @@
+.wrap { position: absolute; inset: 0; }
+.flow { position: absolute; inset: 0; }
+.hudTL, .hudTR { position: absolute; top: 10px; display: flex; gap: 4px; z-index: 5; align-items: center; }
+.hudTL { left: 10px; }
+.hudTR { right: 10px; }
+.empty { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.minimap { background: var(--bg-1) !important; border: 1px solid var(--line-2); border-radius: var(--r-2); }
+
+:global(.react-flow) { --xy-background-color: var(--bg-0); --xy-selection-background-color: var(--acc-lo); --xy-selection-border: 1px dashed var(--acc); }
+:global(.react-flow__node) { border-radius: var(--r-3); }
+:global(.react-flow__node.selectable:focus-visible) { outline: none; }
+:global(.react-flow__edge-path) { transition: stroke .2s; }
+:global(.react-flow__minimap-mask) { fill: #13131599; }
+:global(.react-flow__attribution) { background: transparent; opacity: .45; }
+:global(.react-flow__attribution a) { color: var(--tx-3); }
+:global(.react-flow__minimap) { bottom: 18px; }
+:global(.react-flow__nodesselection-rect) { border: 1px dashed var(--acc); background: var(--acc-lo); }
+:global(.react-flow__connectionline path) { stroke-dasharray: 5 4; }
