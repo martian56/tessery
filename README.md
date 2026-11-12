@@ -1,0 +1,94 @@
+# Tessery
+
+Tessery is a self-hosted platform for designing software systems and shipping them. You draw the
+system (services, databases, queues and web apps), design each service's API, each database's
+schema and each web app's pages. Tessery generates the code and the infrastructure, keeps both in
+a git repository your developers push to, and deploys them through development, staging and
+production.
+
+## Features
+
+- **Design.** A canvas of 69 technologies, an API designer (REST, GraphQL, gRPC, WebSocket), a
+  schema designer and a page builder, all editing one design document with undo and history.
+- **Generate.** Services in TypeScript, Go, Python, Rust, Java, Kotlin, Scala, C#, Ruby, PHP,
+  Elixir, Swift, C++ and Zig, a Next.js web app, Docker Compose files and Kubernetes manifests.
+  REST operations whose path names a table of a connected Postgres (`GET /orders`,
+  `PATCH /orders/{id}`) are implemented in SQL for TypeScript, Go and Python, so a designed CRUD
+  app works without writing code.
+- **Users and sign-in.** Add the built-in identity provider and Tessery generates sign-up, sign-in,
+  signed sessions, a login page, enforcement of operations marked for signed-in users or admins,
+  and per-user rows for tables with a `user_id` column.
+- **Git.** Every project has a repository at `/git/<project>.git`. Developers clone it with an API
+  token, run it locally with `docker compose up --build` and push to `main`. A checkpoint commits
+  what the design generates to `tessery/generated` and merges it into `main`, so design changes
+  and hand-written code live together.
+- **Deploy.** Environments form a pipeline: each one only accepts what the previous one runs, and
+  any of them can require approval. Targets are Docker on the Tessery host, Docker on any machine
+  over SSH, or Kubernetes. A throwaway runner container builds the images, starts everything and
+  checks health, streaming its log to the UI. Environments with auto-rollback on return to the
+  previous release when a deploy fails.
+- **Operate.** Live status, CPU and memory, logs, traces, table browsing and SQL for every
+  environment. Deployed services send OpenTelemetry traces to Tessery, which stores them and shows
+  each request as a waterfall.
+- **Agents.** An MCP server at `/api/mcp` lets Claude Code, Cursor or any MCP client design, build
+  and deploy with the permissions of the token it uses.
+- **Access control.** Organizations, teams, built-in and custom roles granted at organization,
+  team, project or environment level, time-limited grants, scoped API tokens, single sign-on with
+  any OpenID Connect provider and an audit log.
+
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| `apps/web` | Web app: React, Vite, Redux Toolkit, React Flow |
+| `apps/server` | Rust workspace: `tessery-api` (HTTP server), `tessery-worker` (jobs and deploys), `tessery-db` (Postgres), `tessery-git`, `tessery-engine`, `tessery-mq`, `tessery-core` |
+| `packages/core` | TypeScript design model, operations and code generators, used by the browser and by the server through a pool of Node processes |
+| `docker-compose.yml` | Postgres, Redis and RabbitMQ for development, and the whole platform with `--profile app` |
+
+## Development
+
+Requirements: Docker, Node 22 or newer, Rust 1.99.1 and git.
+
+```sh
+docker compose up -d
+cd packages/core && npm ci && npm run build:engine && cd ../..
+cd apps/server && cp .env.example .env
+cargo run --bin tessery-server
+cargo run --bin tessery-worker
+cd apps/web && npm ci && npm run dev
+```
+
+Set `TESSERY_SECRET_KEY` in `apps/server/.env` before starting the server (`openssl rand -hex 32`).
+Run the server and the worker in separate terminals. The API listens on `http://127.0.0.1:8080`
+and the web app on `http://localhost:5173`. The first visit asks you to create the instance
+administrator.
+
+Tests:
+
+```sh
+cd apps/server && cargo test --workspace
+cd packages/core && npm test
+cd apps/web && npx tsc --noEmit -p .
+```
+
+The Rust tests need the services from `docker compose up -d`.
+
+## Self-hosting
+
+```sh
+TESSERY_SECRET_KEY=$(openssl rand -hex 32) docker compose --profile app up -d --build
+```
+
+Tessery listens on port 8080. Keep `TESSERY_SECRET_KEY` safe and stable: it encrypts environment
+secrets and git credentials. Deployed services send traces to `TESSERY_TELEMETRY_URL`; services on
+Docker hosts reached over SSH use `TESSERY_PUBLIC_URL` instead, since they run on other machines.
+The server and the worker mount the Docker socket to run deploys and read environments. On Linux,
+set `DOCKER_GID=$(getent group docker | cut -d: -f3)`.
+
+## Connecting an agent
+
+Create a token under Account, API tokens, or from a project's Agent panel, then:
+
+```sh
+claude mcp add --transport http tessery http://localhost:8080/api/mcp --header "Authorization: Bearer tessery_..."
+```
