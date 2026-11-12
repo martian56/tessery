@@ -1,0 +1,35 @@
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-3);
+  border: 1px solid var(--line-2); border-radius: var(--r-1);
+  background: var(--bg-3); color: var(--tx-1);
+  white-space: nowrap; flex-shrink: 0;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.btn:hover:not(:disabled) { background: var(--bg-4); border-color: var(--line-3); }
+.btn:active:not(:disabled) { background: var(--bg-5); }
+.btn:disabled { opacity: .45; cursor: default; }
+.xs { height: var(--h-xs); padding: 0 var(--sp-3); font-size: var(--fs-11); }
+.sm { height: var(--h-sm); padding: 0 var(--sp-4); font-size: var(--fs-12); }
+.md { height: var(--h-md); padding: 0 var(--sp-5); font-size: var(--fs-12); }
+.iconOnly.xs { width: var(--h-xs); padding: 0; }
+.iconOnly.sm { width: var(--h-sm); padding: 0; }
+.iconOnly.md { width: var(--h-md); padding: 0; }
+.block { width: 100%; }
+.primary { background: var(--acc); border-color: var(--acc); color: var(--tx-inv); font-weight: 600; }
+.primary:hover:not(:disabled) { background: var(--acc-hi); border-color: var(--acc-hi); }
+.ghost { background: transparent; border-color: transparent; color: var(--tx-2); }
+.ghost:hover:not(:disabled) { background: var(--bg-3); border-color: transparent; color: var(--tx-1); }
+.subtle { background: var(--bg-2); border-color: var(--line-1); color: var(--tx-2); }
+.subtle:hover:not(:disabled) { color: var(--tx-1); }
+.danger:hover:not(:disabled) { background: var(--err); border-color: var(--err); color: var(--tx-inv); }
+.active, .active:hover:not(:disabled) { background: var(--acc); border-color: var(--acc); color: var(--tx-inv); }
+.ghost.active { background: var(--bg-4); color: var(--tx-1); border-color: transparent; }
+.icon { display: inline-flex; }
+.icon svg { width: 14px; height: 14px; }
+.xs .icon svg { width: 12px; height: 12px; }
+.label { overflow: hidden; text-overflow: ellipsis; }
+.kbd {
+  display: inline-flex; align-items: center; height: 16px; padding: 0 4px;
+  border: 1px solid var(--line-2); border-radius: var(--r-1);
+  font: var(--fs-10)/1 var(--font-mono); color: var(--tx-2); background: var(--bg-1);
+}

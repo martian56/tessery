@@ -1,0 +1,36 @@
+.panelHeader {
+  display: flex; align-items: center; gap: var(--sp-4); height: 28px; padding: 0 var(--sp-3) 0 var(--sp-5);
+  background: var(--bg-2); border-bottom: 1px solid var(--line-1); flex-shrink: 0; min-width: 0;
+}
+.panelTitle { font-size: var(--fs-11); font-weight: 600; color: var(--tx-2); text-transform: uppercase; letter-spacing: .6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panelMeta { color: var(--tx-3); font-size: var(--fs-11); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.panelActions { margin-left: auto; display: flex; gap: 2px; flex-shrink: 0; }
+
+.section { border-bottom: 1px solid var(--line-1); }
+.sectionHead { display: flex; align-items: center; padding-right: var(--sp-3); }
+.sectionToggle { flex: 1; display: flex; align-items: center; gap: var(--sp-3); height: 28px; padding: 0 var(--sp-5); font-size: var(--fs-11); font-weight: 600; color: var(--tx-2); text-align: left; }
+.sectionToggle:hover { color: var(--tx-1); }
+.chev { width: 12px; height: 12px; color: var(--tx-3); transition: transform .12s; }
+.closed .chev { transform: rotate(-90deg); }
+.sectionActions { display: flex; gap: 2px; }
+.sectionBody { padding: 0 var(--sp-5) var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.field { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: var(--sp-4); }
+.fieldWide { grid-template-columns: 1fr; gap: var(--sp-2); }
+.fieldLabel { color: var(--tx-2); font-size: var(--fs-11); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fieldWide .fieldLabel { text-align: left; }
+.fieldControl { min-width: 0; display: flex; align-items: center; gap: var(--sp-3); }
+.fieldHint { grid-column: 2; color: var(--tx-3); font-size: var(--fs-11); line-height: 1.4; }
+.fieldWide .fieldHint { grid-column: 1; }
+
+.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-7) var(--sp-6); text-align: center; color: var(--tx-3); }
+.emptyIcon { color: var(--tx-3); margin-bottom: var(--sp-2); }
+.emptyIcon svg { width: 28px; height: 28px; stroke-width: 1.4; }
+.emptyTitle { color: var(--tx-2); font-weight: 600; font-size: var(--fs-13); }
+.emptyText { line-height: 1.6; max-width: 360px; }
+.emptyAction { margin-top: var(--sp-4); display: flex; gap: var(--sp-3); }
+
+.toolbar { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-4); height: 36px; border-bottom: 1px solid var(--line-1); background: var(--bg-1); flex-shrink: 0; min-width: 0; overflow: hidden; }
+.toolbar > span, .toolbar > b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.vdiv { width: 1px; align-self: stretch; background: var(--line-1); margin: var(--sp-3) var(--sp-2); }
+.hdiv { height: 1px; background: var(--line-1); }
