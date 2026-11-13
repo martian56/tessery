@@ -11,7 +11,7 @@ import { plan, secrets, workloads } from '../src/codegen/deploy'
 import { manifests } from '../src/codegen/deploy/kubernetes'
 import { envCompose } from '../src/codegen/deploy/compose'
 import { yamlDoc } from '../src/codegen/deploy/yaml'
-import { generateAll } from '../src/codegen'
+import { generateAll, parseMigrationState, planMigrations } from '../src/codegen'
 
 function shop() {
   const doc = blankTemplate('shop', 'self', 'onprem')
@@ -164,4 +164,34 @@ test('the local stack publishes stable uncommon ports that local configs agree o
   const dbPort = Number(compose.match(/TASKS_DB_PORT:-(\d+)/)![1])
   const config = Object.entries(files).filter(([k]) => k.startsWith('services/tasks-api/')).map(([, v]) => v).join('\n')
   assert.match(config, new RegExp(`localhost:${dbPort}/`), 'the service falls back to the published database port')
+})
+
+test('design changes become numbered migrations that keep data', () => {
+  const { doc, db, table } = shop()
+  const first = planMigrations(doc)
+  assert.deepEqual(first.databases[db].migrations.map((m) => m.file), ['0001_init.sql'])
+  assert.equal(planMigrations(doc, first).databases[db].migrations.length, 1, 'no change, no new migration')
+
+  const total = doc.databases[db].tables[0].columns.find((c) => c.name === 'total')!
+  runOp(doc, 'updateColumn', { nodeId: db, tableId: table, columnId: total.id, patch: { name: 'amount' } })
+  runOp(doc, 'addColumn', { nodeId: db, tableId: table, column: { name: 'note', type: 'text', nullable: true } })
+  const second = planMigrations(doc, first)
+  const m2 = second.databases[db].migrations[1]
+  assert.equal(m2.file, '0002_rename_orders_total_to_amount.sql')
+  assert.match(m2.sql, /RENAME COLUMN "total" TO "amount"/)
+  assert.match(m2.sql, /ADD COLUMN "note" text/)
+  assert.doesNotMatch(m2.sql, /DROP COLUMN/, 'a rename never turns into drop and add')
+  assert.deepEqual(m2.destructive, [])
+
+  runOp(doc, 'removeColumn', { nodeId: db, tableId: table, columnId: total.id })
+  const third = planMigrations(doc, second)
+  const m3 = third.databases[db].migrations[2]
+  assert.match(m3.sql, /DROP COLUMN "amount"/)
+  assert.ok(m3.destructive.some((d) => d.includes('orders.amount')))
+  assert.match(m3.sql, /^-- destructive: /m)
+
+  const files = generateAll(doc, third)
+  assert.ok(files['db/orders-db/migrations/0003_drop_orders_amount.sql'])
+  assert.ok(generateAll(tasksTemplate())['services/tasks-api/migrations/tasks-db/0001_init.sql'], 'services ship their migrations')
+  assert.deepEqual(parseMigrationState(JSON.parse(files['db/migrations.json'])), third)
 })

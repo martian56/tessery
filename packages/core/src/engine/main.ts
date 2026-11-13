@@ -3,7 +3,7 @@ import { analyze } from '../analysis'
 import { LANGUAGES } from '../catalog/languages'
 import { PROVIDERS } from '../catalog/providers'
 import { TECHNOLOGIES } from '../catalog/technologies'
-import { generateAll } from '../codegen'
+import { generateAll, parseMigrationState } from '../codegen'
 import { OPS, runOp, type OpName } from '../domain/ops'
 import { normalizeDoc } from '../domain/normalize'
 import type { ProjectDoc } from '../domain/types'
@@ -64,7 +64,7 @@ function resolveNames(doc: ProjectDoc, args: unknown): unknown {
 const methods: Record<string, (p: Record<string, unknown>) => unknown> = {
   ping: () => ({ version: ENGINE_VERSION }),
 
-  generate: (p) => ({ files: generateAll(asDoc(p.doc)) }),
+  generate: (p) => ({ files: generateAll(asDoc(p.doc), parseMigrationState(p.migrations)) }),
 
   apply: (p) => {
     const doc = structuredClone(asDoc(p.doc))

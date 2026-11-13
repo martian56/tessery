@@ -28,7 +28,7 @@ fn tools() -> Value {
           "inputSchema": { "type": "object", "properties": { "project": project, "name": { "type": "string" }, "message": { "type": "string" } }, "required": ["project", "name"] } },
         { "name": "get_pipeline", "description": "Each environment in order: what it runs, what can be promoted into it, and pending or running deploys.", "inputSchema": { "type": "object", "properties": { "project": project }, "required": ["project"] } },
         { "name": "deploy", "description": "Release a checkpoint to an environment. Defaults to what the pipeline would promote: the latest checkpoint for the first environment, otherwise what the previous environment runs.",
-          "inputSchema": { "type": "object", "properties": { "project": project, "env": { "type": "string" }, "checkpoint": { "type": "integer", "description": "Checkpoint number" }, "note": { "type": "string" } }, "required": ["project", "env"] } },
+          "inputSchema": { "type": "object", "properties": { "project": project, "env": { "type": "string" }, "checkpoint": { "type": "integer", "description": "Checkpoint number" }, "note": { "type": "string" }, "confirmDestructive": { "type": "boolean", "description": "Set after showing the user the migrations a refused release would run" } }, "required": ["project", "env"] } },
         { "name": "deploy_status", "description": "Status, public URLs and the end of the log of a release.", "inputSchema": { "type": "object", "properties": { "release": { "type": "string" }, "lines": { "type": "integer", "default": 60 } }, "required": ["release"] } },
         { "name": "approve_release", "description": "Approve a release waiting for approval.", "inputSchema": { "type": "object", "properties": { "release": { "type": "string" }, "note": { "type": "string" } }, "required": ["release"] } },
         { "name": "set_secret", "description": "Set an environment secret, such as an API key a service needs. Values are encrypted and cannot be read back.",
@@ -123,7 +123,7 @@ async fn call(state: &AppState, p: &Principal, name: &str, args: &Value) -> Resu
                     stage.candidate.as_ref().map(|c| c.id).ok_or_else(|| ApiError::Conflict(format!("nothing new to release to {env}; it already runs what the pipeline offers")))?
                 }
             };
-            let req = delivery::CreateRelease { env, checkpoint_id, note: args.get("note").and_then(Value::as_str).unwrap_or("").to_owned(), redeploy: false };
+            let req = delivery::CreateRelease { env, checkpoint_id, note: args.get("note").and_then(Value::as_str).unwrap_or("").to_owned(), redeploy: false, confirm_destructive: args.get("confirmDestructive").and_then(Value::as_bool).unwrap_or(false) };
             Ok(to_json(delivery::create_release(st(), p.clone(), Path(project), Json(req)).await?.1.0))
         }
         "deploy_status" => {

@@ -785,6 +785,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project}/releases/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What releasing a checkpoint into an environment would change, such as the database migrations it runs. */
+        get: operations["release_preview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project}/remote": {
         parameters: {
             query?: never;
@@ -1083,6 +1100,8 @@ export interface components {
         CreateRelease: {
             /** Format: uuid */
             checkpointId: string;
+            /** @description Required when the release runs migrations that can drop or fail on existing data. */
+            confirmDestructive?: boolean;
             env: string;
             note?: string;
             /** @description Deploy the checkpoint the environment already runs again, e.g. after changing a secret. */
@@ -1225,6 +1244,13 @@ export interface components {
             /** Format: uuid */
             userId: string;
         };
+        MigrationDto: {
+            database: string;
+            /** @description What can drop data or fail on existing rows. Empty when the migration only adds or renames. */
+            destructive: string[];
+            file: string;
+            sql: string;
+        };
         MoveProject: {
             /** Format: uuid */
             teamId?: string | null;
@@ -1341,6 +1367,10 @@ export interface components {
         ReleaseLogDto: {
             lines: components["schemas"]["LogLineDto"][];
             release: components["schemas"]["ReleaseDto"];
+        };
+        ReleasePreviewDto: {
+            /** @description Database migrations this release runs that the environment has not run yet. */
+            migrations: components["schemas"]["MigrationDto"][];
         };
         /** @enum {string} */
         ReleaseStatus: "pending" | "queued" | "deploying" | "released" | "rejected" | "cancelled" | "failed";
@@ -3162,6 +3192,30 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    release_preview: {
+        parameters: {
+            query: {
+                env: string;
+                checkpointId: string;
+            };
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleasePreviewDto"];
+                };
             };
         };
     };

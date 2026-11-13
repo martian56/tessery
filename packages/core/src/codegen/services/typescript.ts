@@ -2,7 +2,6 @@ import DB_RUNTIME from '../runtime/ts-db.txt'
 import SESSION_RUNTIME from '../runtime/ts-session.txt'
 import AUTH_SERVICE from '../runtime/ts-auth-service.txt'
 import { builtInAuth } from '../deploy/runtime'
-import { migrationSql } from '../backend'
 import { type Files, type Route, type ServiceModel, camel, comment, envExample, readme, stepLines } from './model'
 import { type CrudRoute, type DataAccess, SQL_STORES, dataAccess, orderBy, primaryKey, writable } from './crud'
 
@@ -363,8 +362,8 @@ export function typescriptService(m: ServiceModel, contracts: { proto: string; p
   if (http && m.routes.some((r) => guarded(m, r))) f[`${src}/session.ts`] = SESSION_RUNTIME
   if (da) {
     deps.add('pg'); dev.add('@types/pg')
-    f[`${m.dir}/migrations/${da.file}`] = migrationSql(da.schema, da.node.techId)
-    f[`${src}/db.ts`] = DB_RUNTIME.replace('__DB_ENV__', da.dep.env).replace('__SCHEMA_FILE__', da.file)
+    for (const mg of da.migrations) f[`${m.dir}/migrations/${da.node.name}/${mg.file}`] = mg.sql
+    f[`${src}/db.ts`] = DB_RUNTIME.replace('__DB_ENV__', da.dep.env).replace('__MIGRATIONS_DIR__', da.node.name)
   }
 
   if (m.kind !== 'api') f[`${src}/main.ts`] = workerMain(m)

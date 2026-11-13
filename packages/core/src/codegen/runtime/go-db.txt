@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/url"
 	"regexp"
@@ -23,30 +24,30 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-//go:embed migrations/*.sql
+//go:embed migrations
 var migrations embed.FS
+
+const migrationsDir = "migrations/__MIGRATIONS_DIR__"
 
 var db *pgxpool.Pool
 
 const migrationLock = 727274
 
-// openDB connects and runs the schema script. The script only adds things, so it is safe on every
-// start and on every replica.
+// openDB connects and applies each migration that has not run yet, in order and in its own
+// transaction. Replicas wait on a lock.
 func openDB(ctx context.Context, dsn string) {
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		log.Fatalf("database address: %v", err)
 	}
 	db = pool
-	schema, err := migrations.ReadFile("migrations/__SCHEMA_FILE__")
-	if err != nil {
-		log.Fatalf("reading the schema: %v", err)
-	}
 	for attempt := 1; ; attempt++ {
-		if err = migrate(ctx, string(schema)); err == nil {
+		err = migrate(ctx)
+		if err == nil {
 			return
 		}
-		if attempt >= 30 {
+		var failed *migrationError
+		if attempt >= 30 || errors.As(err, &failed) {
 			log.Fatalf("migrating: %v", err)
 		}
 		log.Printf("database not ready (%v), retrying in 2s", err)
@@ -54,7 +55,18 @@ func openDB(ctx context.Context, dsn string) {
 	}
 }
 
-func migrate(ctx context.Context, schema string) error {
+type migrationError struct {
+	file string
+	err  error
+}
+
+func (e *migrationError) Error() string { return fmt.Sprintf("migration %s failed: %v", e.file, e.err) }
+
+func migrate(ctx context.Context) error {
+	entries, err := fs.ReadDir(migrations, migrationsDir)
+	if err != nil {
+		return &migrationError{file: migrationsDir, err: err}
+	}
 	conn, err := db.Acquire(ctx)
 	if err != nil {
 		return err
@@ -64,8 +76,46 @@ func migrate(ctx context.Context, schema string) error {
 		return err
 	}
 	defer conn.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", migrationLock)
-	_, err = conn.Conn().PgConn().Exec(ctx, schema).ReadAll()
-	return err
+	if _, err := conn.Exec(ctx, "CREATE TABLE IF NOT EXISTS _tessery_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"); err != nil {
+		return err
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".sql") {
+			continue
+		}
+		var done bool
+		if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM _tessery_migrations WHERE name = $1)", name).Scan(&done); err != nil {
+			return err
+		}
+		if done {
+			continue
+		}
+		sql, err := migrations.ReadFile(migrationsDir + "/" + name)
+		if err != nil {
+			return &migrationError{file: name, err: err}
+		}
+		if err := applyMigration(ctx, conn, name, string(sql)); err != nil {
+			return &migrationError{file: name, err: err}
+		}
+		log.Printf("applied migration %s", name)
+	}
+	return nil
+}
+
+func applyMigration(ctx context.Context, conn *pgxpool.Conn, name, sql string) error {
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.Background())
+	if _, err := tx.Conn().PgConn().Exec(ctx, sql).ReadAll(); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, "INSERT INTO _tessery_migrations (name) VALUES ($1)", name); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // Result is a status code and a JSON body ready to send.

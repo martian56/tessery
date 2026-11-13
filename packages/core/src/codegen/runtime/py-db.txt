@@ -18,18 +18,34 @@ pool = ConnectionPool(config.DEPENDENCIES["__DB_ENV__"], min_size=1, max_size=10
 LOCK = 727274
 
 
+MIGRATIONS = Path(__file__).resolve().parent.parent / "migrations" / "__MIGRATIONS_DIR__"
+
+
 def migrate() -> None:
-    """Runs the schema script. It only adds things, so it is safe on every start and replica."""
-    sql = (Path(__file__).resolve().parent.parent / "migrations" / "__SCHEMA_FILE__").read_text()
+    """Applies each migration that has not run yet, in order and in its own transaction."""
+    files = sorted(p for p in MIGRATIONS.glob("*.sql"))
     for attempt in range(1, 31):
         try:
             pool.open(wait=True, timeout=10)
             with pool.connection() as conn:
+                conn.autocommit = True
                 conn.execute("SELECT pg_advisory_lock(%s)", [LOCK])
                 try:
-                    conn.execute(sql.encode())
+                    conn.execute(
+                        "CREATE TABLE IF NOT EXISTS _tessery_migrations "
+                        "(name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
+                    )
+                    done = {r[0] for r in conn.execute("SELECT name FROM _tessery_migrations").fetchall()}
+                    for path in files:
+                        if path.name in done:
+                            continue
+                        with conn.transaction():
+                            conn.execute(path.read_bytes())
+                            conn.execute("INSERT INTO _tessery_migrations (name) VALUES (%s)", [path.name])
+                        print(f"applied migration {path.name}", flush=True)
                 finally:
                     conn.execute("SELECT pg_advisory_unlock(%s)", [LOCK])
+                    conn.autocommit = False
             return
         except (psycopg.OperationalError, TimeoutError) as e:
             if attempt == 30:

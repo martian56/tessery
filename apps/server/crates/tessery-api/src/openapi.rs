@@ -14,7 +14,7 @@ use utoipa::OpenApi;
         teams::list, teams::create, teams::get, teams::update, teams::delete, teams::add_member, teams::remove_member,
         projects::list, projects::create, projects::get, projects::save, projects::move_to_team, projects::delete, projects::versions, projects::version, projects::generated,
         delivery::list_checkpoints, delivery::create_checkpoint, delivery::checkpoint_doc, delivery::checkpoint_diff,
-        delivery::pipeline, delivery::list_releases, delivery::create_release, delivery::approve, delivery::reject, delivery::cancel,
+        delivery::pipeline, delivery::list_releases, delivery::create_release, delivery::release_preview, delivery::approve, delivery::reject, delivery::cancel,
         delivery::get_remote, delivery::put_remote, delivery::delete_remote, delivery::push_remote, delivery::bundle,
         tokens::list, tokens::create, tokens::revoke, sso::info,
         runtime::status, runtime::logs, runtime::tables, runtime::rows, runtime::sql, telemetry::traces, telemetry::trace,

@@ -1,5 +1,6 @@
 import type { SystemNode, Column, DbSchema, ProjectDoc, Table } from '../../domain/types'
 import { httpRoute, type Dependency, type Route, type ServiceModel } from './model'
+import { migrationsOf, type Migration } from '../migrations'
 
 export const SQL_STORES = new Set(['postgres', 'timescaledb', 'pgvector', 'cockroachdb', 'supabase'])
 
@@ -17,7 +18,7 @@ export interface DataAccess {
   dep: Dependency
   node: SystemNode
   schema: DbSchema
-  file: string
+  migrations: Migration[]
   routes: CrudRoute[]
 }
 
@@ -84,7 +85,7 @@ export function dataAccess(m: ServiceModel): DataAccess | undefined {
     const schema = node ? m.doc.databases[node.id] : undefined
     if (!node || !schema?.tables.length) continue
     const routes = m.routes.map((r) => crudRoute(r, schema)).filter((r): r is CrudRoute => !!r)
-    return { dep, node, schema, file: `${node.name}.sql`, routes }
+    return { dep, node, schema, migrations: migrationsOf(m.doc).databases[node.id]?.migrations ?? [], routes }
   }
   return undefined
 }

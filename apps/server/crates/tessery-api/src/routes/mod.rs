@@ -106,6 +106,7 @@ pub fn api() -> Router<AppState> {
             "/projects/{project}/releases",
             get(delivery::list_releases).post(delivery::create_release),
         )
+        .route("/projects/{project}/releases/preview", get(delivery::release_preview))
         .route("/releases/{release}/approve", post(delivery::approve))
         .route("/releases/{release}/reject", post(delivery::reject))
         .route("/releases/{release}/cancel", post(delivery::cancel))
