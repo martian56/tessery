@@ -90,6 +90,12 @@ opened; Postgres, Redis and RabbitMQ stay on the internal network. Back up `.env
 Set `TESSERY_IMAGE_TAG` in `.env` to pin a version. Every variable is described in
 [`deploy/.env.example`](deploy/.env.example).
 
+Back up an install with `sudo /opt/tessery/backup.sh`. It writes one archive with the database, the project
+repositories and `.env` to `/opt/tessery/backups`, and can also upload it to any S3-compatible bucket, such as
+Cloudflare R2, when `TESSERY_BACKUP_S3_BUCKET`, `TESSERY_BACKUP_S3_ENDPOINT`, `TESSERY_BACKUP_S3_ACCESS_KEY` and
+`TESSERY_BACKUP_S3_SECRET_KEY` are set. Restore with `sudo /opt/tessery/restore.sh <archive>` on the same or a new
+machine after running `install.sh`. Run `backup.sh` from cron for regular backups.
+
 The root `docker-compose.yml` is for development: it builds from source, uses fixed passwords and
 publishes the database ports.
 

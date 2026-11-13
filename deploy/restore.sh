@@ -15,6 +15,8 @@ cd "$DIR" || fail "no Tessery install in $DIR; run install.sh first or set TESSE
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 tar -C "$work" -xzf "$archive"
+chmod 755 "$work"
+chmod 644 "$work"/*
 for f in manifest env database.sql.gz data.tar.gz; do
   [ -f "$work/$f" ] || fail "$archive is not a Tessery backup ($f is missing)"
 done
@@ -40,7 +42,7 @@ say "Restoring the database"
 gunzip -c "$work/database.sql.gz" | docker compose exec -T postgres psql -q -v ON_ERROR_STOP=1 -U tessery -d tessery >/dev/null
 
 say "Restoring project repositories and data"
-docker compose run --rm --no-deps -T --entrypoint sh -v "$work:/restore:ro" server -c 'find /var/lib/tessery -mindepth 1 -delete && tar -C /var/lib/tessery -xzf /restore/data.tar.gz'
+docker compose run --rm --no-deps -T --entrypoint sh -v "$work:/restore:ro" server -c 'tar -tzf /restore/data.tar.gz >/dev/null && find /var/lib/tessery -mindepth 1 -delete && tar -C /var/lib/tessery -xzf /restore/data.tar.gz'
 
 say "Starting Tessery"
 docker compose up -d
