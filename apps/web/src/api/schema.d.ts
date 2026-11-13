@@ -4,6 +4,38 @@
  */
 
 export interface paths {
+    "/api/admin/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_settings"];
+        put: operations["put_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/email/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/orgs": {
         parameters: {
             query?: never;
@@ -127,6 +159,55 @@ export interface paths {
         put?: never;
         /** Changes the password and signs out every other session. */
         post: operations["change_password"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password/forgot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Emails a link to choose a new password. Answers the same whether or not the address has an account. */
+        post: operations["forgot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["token_info"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1176,7 +1257,7 @@ export interface components {
             email: string;
             /** @description Required when the email does not belong to an existing account. */
             name?: string | null;
-            /** @description Initial password for a new account. Required when the account does not exist yet. */
+            /** @description Initial password for a new account. Leave it out to email an invitation instead, when email is set up. */
             password?: string | null;
             /** @description Role granted at organization scope. Defaults to `viewer`. */
             role?: string | null;
@@ -1342,6 +1423,16 @@ export interface components {
             baseSeq?: number | null;
             files: components["schemas"]["FileChangeDto"][];
         };
+        EmailSettingsDto: {
+            configured: boolean;
+            hasPassword: boolean;
+            settings?: components["schemas"]["SmtpSettings"] | null;
+        };
+        EmailSettingsInput: {
+            /** @description Leave out to keep the stored password. */
+            password?: string | null;
+            settings?: components["schemas"]["SmtpSettings"] | null;
+        };
         EnvLogLineDto: {
             level: string;
             msg: string;
@@ -1406,6 +1497,9 @@ export interface components {
             path: string;
             /** Format: int32 */
             removed?: number | null;
+        };
+        ForgotInput: {
+            email: string;
         };
         GeneratedDto: {
             /** @description Generated file contents by relative path, for the saved design. */
@@ -1658,6 +1752,10 @@ export interface components {
             url: string;
             username: string;
         };
+        ResetInput: {
+            password: string;
+            token: string;
+        };
         RestoreInput: {
             /** @description The environment id, typed by the person restoring, as confirmation. */
             confirm: string;
@@ -1799,6 +1897,16 @@ export interface components {
             /** @description Regions that offer this size. */
             regions: string[];
         };
+        SmtpSettings: {
+            /** @description The sender, such as `Tessery <tessery@example.com>`. */
+            from: string;
+            host: string;
+            /** Format: int32 */
+            port: number;
+            /** @description `starttls` (port 587), `tls` (port 465) or `none` (only for a local relay). */
+            security: string;
+            username?: string;
+        };
         SpanDto: {
             attributes: Record<string, never>;
             /** Format: int64 */
@@ -1884,6 +1992,9 @@ export interface components {
             /** Format: uuid */
             userId: string;
         };
+        TestEmail: {
+            to: string;
+        };
         TokenDto: {
             /** Format: date-time */
             createdAt: string;
@@ -1900,6 +2011,11 @@ export interface components {
             prefix: string;
             /** Format: uuid */
             projectId?: string | null;
+        };
+        TokenInfo: {
+            email: string;
+            /** @description `reset` or `invite`. */
+            purpose: string;
         };
         TraceSummaryDto: {
             /** Format: int64 */
@@ -1959,6 +2075,71 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailSettingsDto"];
+                };
+            };
+        };
+    };
+    put_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailSettingsInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailSettingsDto"];
+                };
+            };
+        };
+    };
+    test: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestEmail"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+        };
+    };
     orgs: {
         parameters: {
             query?: never;
@@ -2188,6 +2369,79 @@ export interface operations {
                 };
             };
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    forgot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForgotInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+        };
+    };
+    reset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+        };
+    };
+    token_info: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenInfo"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

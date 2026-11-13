@@ -29,6 +29,7 @@ axum.workspace = true
 axum-extra.workspace = true
 rand.workspace = true
 ssh-key.workspace = true
+lettre.workspace = true
 redis.workspace = true
 serde.workspace = true
 serde_json.workspace = true

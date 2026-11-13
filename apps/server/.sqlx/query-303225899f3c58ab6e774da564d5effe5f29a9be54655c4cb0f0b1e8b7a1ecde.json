@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE instance_settings SET smtp = $1, smtp_password = CASE WHEN $3 THEN smtp_password ELSE $2 END",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Jsonb",
+        "Bytea",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "303225899f3c58ab6e774da564d5effe5f29a9be54655c4cb0f0b1e8b7a1ecde"
+}

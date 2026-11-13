@@ -2,6 +2,7 @@ pub mod audit;
 pub mod auth;
 pub mod config;
 pub mod error;
+pub mod mail;
 pub mod openapi;
 pub mod otlp;
 pub mod rbac;

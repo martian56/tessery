@@ -12,6 +12,7 @@ import { usePermissions } from './usePermissions'
 import { ProjectHome } from '@/features/home/ProjectHome'
 import { SetupPage } from '@/features/auth/SetupPage'
 import { LoginPage } from '@/features/auth/LoginPage'
+import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
 
 const Shell = lazy(() => import('@/features/shell/Shell').then((m) => ({ default: m.Shell })))
 const OrgSettings = lazy(() => import('@/features/settings/OrgSettings').then((m) => ({ default: m.OrgSettings })))
@@ -25,6 +26,7 @@ export function App() {
   if (setup.isLoading) return <Empty title="Loading…" />
   if (setup.error) return <Empty title="Cannot reach the Tessery server" action={<Button onClick={() => setup.refetch()}>Retry</Button>}>{errorMessage(setup.error)}</Empty>
   if (setup.data?.required) return <SetupPage />
+  if (window.location.pathname === '/reset-password') return <ResetPasswordPage />
   if (me.isLoading) return <Empty title="Loading…" />
   if (!me.data) return <LoginPage />
   return <ErrorBoundary label="Tessery" resetKey={JSON.stringify(route)}><Suspense fallback={<Empty title="Loading…" />}><Routes /></Suspense></ErrorBoundary>
