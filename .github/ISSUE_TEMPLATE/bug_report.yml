@@ -1,0 +1,45 @@
+name: Bug report
+description: Something in Tessery is broken or behaves wrong.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, including any error message or log line.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a project
+        2. Drag a Postgres node onto the canvas
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where
+      options:
+        - Web app
+        - API server
+        - Worker
+        - Code generation
+        - Deployment
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit or image tag
+      description: The commit SHA you ran, or the image tag if it was a deployed environment.
