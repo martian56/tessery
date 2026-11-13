@@ -34,6 +34,8 @@ export function dockerPublicHost(name: string, t: DockerTarget): string | undefi
   return `${name}.${t.domain}`
 }
 
+const publishedPorts = (first: number, replicas: number, port: number) => (replicas > 1 ? `${first}-${first + replicas - 1}:${port}` : `${first}:${port}`)
+
 const mem = (m: string) => m.replace(/i$/, '').replace(/Mi$/, 'M').replace(/Gi$/, 'G').toLowerCase()
 
 export function devCompose(doc: ProjectDoc): string {
@@ -73,7 +75,7 @@ export function envCompose(doc: ProjectDoc, env: Environment): string {
       command: w.command,
       environment: Object.keys(w.env).length ? w.env : undefined,
       extra_hosts: w.role === 'app' && !(env.target?.kind === 'docker' && env.target.host) ? ['host.docker.internal:host-gateway'] : undefined,
-      ports: !host && w.public && w.port && replicas === 1 ? [`${hostPort(doc, env.id, w.name)}:${w.port}`] : undefined,
+      ports: !host && w.public && w.port ? [publishedPorts(hostPort(doc, env.id, w.name), replicas, w.port)] : undefined,
       networks: host ? ['default', 'proxy'] : undefined,
       labels: host ? { caddy: host, 'caddy.reverse_proxy': `{{upstreams ${w.port}}}`, 'caddy.encode': 'zstd gzip' } : undefined,
       volumes: w.volume ? [`${w.name}-data:${w.volume}`] : undefined,
