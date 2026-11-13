@@ -1,4 +1,4 @@
-import { Building2, KeyRound, ScrollText, Server, ShieldCheck, Users, UsersRound } from 'lucide-react'
+import { Building2, Cloud, KeyRound, ScrollText, Server, ShieldCheck, Users, UsersRound } from 'lucide-react'
 import { useCurrentOrg } from '@/app/currentOrg'
 import { usePermissions } from '@/app/usePermissions'
 import { Empty } from '@/ui'
@@ -10,12 +10,14 @@ import { RolesSection } from './RolesSection'
 import { AccessSection } from './AccessSection'
 import { AuditSection } from './AuditSection'
 import { ServersSection } from './ServersSection'
+import { IntegrationsSection } from './IntegrationsSection'
 
 const SECTIONS: (NavItem & { perm: string })[] = [
   { id: 'general', label: 'General', icon: <Building2 />, perm: 'org:read' },
   { id: 'members', label: 'Members', icon: <Users />, perm: 'member:read' },
   { id: 'teams', label: 'Teams', icon: <UsersRound />, perm: 'team:read' },
   { id: 'servers', label: 'Servers', icon: <Server />, perm: 'server:read' },
+  { id: 'integrations', label: 'Integrations', icon: <Cloud />, perm: 'integration:read' },
   { id: 'roles', label: 'Roles', icon: <KeyRound />, perm: 'role:read' },
   { id: 'access', label: 'Access', icon: <ShieldCheck />, perm: 'role:read' },
   { id: 'audit', label: 'Audit log', icon: <ScrollText />, perm: 'audit:read' },
@@ -33,6 +35,7 @@ export function OrgSettings({ section }: { section: string }) {
   else if (!nav.some((n) => n.id === active)) body = <Empty title="You cannot view this organization's settings" />
   else if (active === 'members') body = <MembersSection org={org.id} perms={perms} />
   else if (active === 'teams') body = <TeamsSection org={org.id} perms={perms} />
+  else if (active === 'integrations') body = <IntegrationsSection org={org.id} perms={perms} />
   else if (active === 'servers') body = <ServersSection org={org.id} perms={perms} />
   else if (active === 'roles') body = <RolesSection org={org.id} perms={perms} />
   else if (active === 'access') body = <AccessSection org={org.id} perms={perms} />

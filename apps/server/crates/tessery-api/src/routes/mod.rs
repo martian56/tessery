@@ -5,6 +5,7 @@ pub mod auth;
 pub mod delivery;
 pub mod dto;
 pub mod git;
+pub mod integrations;
 pub mod mcp;
 pub mod orgs;
 pub mod projects;
@@ -49,6 +50,10 @@ pub fn api() -> Router<AppState> {
         .route("/orgs/{org}/members/{user}", delete(orgs::remove_member))
         .route("/orgs/{org}/teams", get(teams::list).post(teams::create))
         .route("/orgs/{org}/servers", get(servers::list).post(servers::create))
+        .route("/integrations/providers", get(integrations::providers))
+        .route("/orgs/{org}/integrations", get(integrations::list).post(integrations::create))
+        .route("/orgs/{org}/integrations/{integration}", axum::routing::patch(integrations::update).delete(integrations::delete))
+        .route("/orgs/{org}/integrations/{integration}/check", post(integrations::check))
         .route("/orgs/{org}/servers/{server}", axum::routing::patch(servers::update).delete(servers::delete))
         .route("/orgs/{org}/servers/{server}/check", post(servers::check))
         .route(

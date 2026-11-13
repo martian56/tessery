@@ -1,5 +1,6 @@
 pub mod audit;
 pub mod auth;
+pub mod cloud;
 pub mod config;
 pub mod error;
 pub mod openapi;

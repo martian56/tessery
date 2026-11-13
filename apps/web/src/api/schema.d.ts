@@ -198,6 +198,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/integrations/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cloud providers Tessery can connect to, with the fields each one needs. */
+        get: operations["providers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/permissions": {
         parameters: {
             query?: never;
@@ -340,6 +357,55 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["delete_binding"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orgs/{org}/integrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        /** Connects a cloud account. The credentials are checked with the provider first and refused if it rejects them. */
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orgs/{org}/integrations/{integration}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete"];
+        options?: never;
+        head?: never;
+        patch: operations["update"];
+        trace?: never;
+    };
+    "/api/orgs/{org}/integrations/{integration}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["check"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1233,6 +1299,14 @@ export interface components {
         };
         /** @enum {string} */
         ExportStatus: "queued" | "running" | "done" | "failed";
+        FieldSpec: {
+            key: string;
+            label: string;
+            multiline: boolean;
+            optional: boolean;
+            placeholder: string;
+            secret: boolean;
+        };
         FileChangeDto: {
             /** Format: int32 */
             added?: number | null;
@@ -1268,6 +1342,25 @@ export interface components {
             restarts?: number | null;
             /** @description running, exited, restarting, pending... */
             state: string;
+        };
+        IntegrationDto: {
+            /** Format: date-time */
+            checkedAt?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            id: string;
+            /** @description Result of the last check: `ok`, then `account` or `error`. */
+            lastCheck?: Record<string, never> | null;
+            name: string;
+            provider: string;
+            /** @description Non-secret details, such as a masked key ID, the region or the service account email. */
+            summary: Record<string, never>;
+        };
+        IntegrationPatch: {
+            /** @description Replace the credentials. They are checked with the provider first. */
+            fields?: Record<string, never> | null;
+            name?: string | null;
         };
         LogLineDto: {
             /** Format: date-time */
@@ -1307,6 +1400,12 @@ export interface components {
             /** @description True when the caller is an instance administrator and may act beyond `permissions`. */
             bypass: boolean;
             permissions: string[];
+        };
+        NewIntegrationInput: {
+            /** @description The provider's fields, as listed by `/api/integrations/providers`. */
+            fields: Record<string, never>;
+            name: string;
+            provider: string;
         };
         NewServerInput: {
             address: string;
@@ -1375,6 +1474,13 @@ export interface components {
             updatedAt: string;
             /** Format: int32 */
             version: number;
+        };
+        ProviderSpec: {
+            fields: components["schemas"]["FieldSpec"][];
+            /** @description Where to create the credential, shown next to the form. */
+            help: string;
+            id: string;
+            name: string;
         };
         PutRemote: {
             autoPush?: boolean;
@@ -2046,6 +2152,25 @@ export interface operations {
             };
         };
     };
+    providers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderSpec"][];
+                };
+            };
+        };
+    };
     my_permissions: {
         parameters: {
             query: {
@@ -2344,6 +2469,128 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Ok"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationDto"][];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewIntegrationInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationDto"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org: string;
+                integration: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+        };
+    };
+    update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org: string;
+                integration: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntegrationPatch"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationDto"];
+                };
+            };
+        };
+    };
+    check: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org: string;
+                integration: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationDto"];
                 };
             };
         };
