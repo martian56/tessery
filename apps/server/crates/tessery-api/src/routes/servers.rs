@@ -313,6 +313,10 @@ pub async fn provision(State(state): State<AppState>, p: Principal, Path(org): P
     check_input(Some(&req.name), None)?;
     let name = req.name.trim();
     let (provider, f) = crate::routes::integrations::fields(&state, org, req.integration_id).await?;
+    let account = tessery_db::integrations::get(&state.db, org, req.integration_id).await?;
+    if !tessery_cloud::allows(account.last_check.as_ref(), "servers") {
+        return Err(ApiError::invalid("integrationId", format!("{} can only read; connect it with a token that can create servers", account.name)));
+    }
     if !tessery_cloud::CAN_CREATE.contains(&provider.as_str()) {
         return Err(ApiError::invalid("integrationId", "Tessery can create servers on Hetzner and DigitalOcean"));
     }

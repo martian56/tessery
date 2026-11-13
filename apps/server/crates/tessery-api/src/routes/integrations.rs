@@ -88,7 +88,8 @@ pub async fn create(State(state): State<AppState>, p: Principal, Path(org): Path
     let account = cloud::verify(spec.id, &fields, &state.config.provider_apis).await.map_err(|e| ApiError::invalid("fields", e))?;
     let cipher = key(&state)?.encrypt(serde_json::to_vec(&fields).map_err(|e| ApiError::Internal(e.into()))?.as_slice());
     let summary = cloud::summary(spec.id, &fields);
-    let check = json!({ "ok": true, "account": account });
+    let capabilities = cloud::capabilities(spec.id, &fields, &state.config.provider_apis).await;
+    let check = json!({ "ok": true, "account": account, "capabilities": capabilities });
     let mut tx = state.db.begin().await.map_err(|e| ApiError::Internal(e.into()))?;
     let i = db::create(&mut *tx, NewIntegration { org_id: org, provider: spec.id, name, secret: &cipher, summary: &summary, check: &check, created_by: p.user.id }).await?;
     audit::record(&mut *tx, &p, Entry::new(Some(org), "integration.create", "integration", i.id).decision(d).details(json!({ "provider": spec.id, "name": name, "account": account }))).await?;
@@ -115,14 +116,15 @@ pub async fn update(State(state): State<AppState>, p: Principal, Path((org, id))
             let fields = cloud::clean(spec(&current.provider)?, input).map_err(|e| ApiError::invalid("fields", e))?;
             let account = cloud::verify(&current.provider, &fields, &state.config.provider_apis).await.map_err(|e| ApiError::invalid("fields", e))?;
             let cipher = key(&state)?.encrypt(serde_json::to_vec(&fields).map_err(|e| ApiError::Internal(e.into()))?.as_slice());
-            Some((cipher, cloud::summary(&current.provider, &fields), account))
+            let capabilities = cloud::capabilities(&current.provider, &fields, &state.config.provider_apis).await;
+            Some((cipher, cloud::summary(&current.provider, &fields), json!({ "ok": true, "account": account, "capabilities": capabilities })))
         }
         None => None,
     };
     let mut tx = state.db.begin().await.map_err(|e| ApiError::Internal(e.into()))?;
     let i = db::update(&mut *tx, org, id, name, replaced.as_ref().map(|(c, s, _)| (c.as_slice(), s))).await?;
-    if let Some((_, _, account)) = &replaced {
-        db::record_check(&mut *tx, id, &json!({ "ok": true, "account": account })).await?;
+    if let Some((_, _, check)) = &replaced {
+        db::record_check(&mut *tx, id, check).await?;
     }
     audit::record(&mut *tx, &p, Entry::new(Some(org), "integration.update", "integration", id).decision(d).details(json!({ "name": i.name, "newCredentials": replaced.is_some() }))).await?;
     tx.commit().await.map_err(|e| ApiError::Internal(e.into()))?;
@@ -135,7 +137,7 @@ pub async fn check(State(state): State<AppState>, p: Principal, Path((org, id)):
     let (provider, cipher) = db::secret(&state.db, org, id).await?;
     let fields: Map<String, Value> = serde_json::from_slice(&key(&state)?.decrypt(&cipher).map_err(|e| ApiError::Internal(e.into()))?).map_err(|e| ApiError::Internal(e.into()))?;
     let result = match cloud::verify(&provider, &fields, &state.config.provider_apis).await {
-        Result::Ok(account) => json!({ "ok": true, "account": account }),
+        Result::Ok(account) => json!({ "ok": true, "account": account, "capabilities": cloud::capabilities(&provider, &fields, &state.config.provider_apis).await }),
         Err(error) => json!({ "ok": false, "error": error }),
     };
     db::record_check(&state.db, id, &result).await?;

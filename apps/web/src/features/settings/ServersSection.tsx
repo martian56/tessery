@@ -182,7 +182,9 @@ function AddServerDialog({ org, onClose }: { org: string; onClose: () => void })
 
 function CreateServerDialog({ org, onClose }: { org: string; onClose: () => void }) {
   const { data: integrations } = useListIntegrationsQuery(org)
-  const accounts = (integrations ?? []).filter((i) => i.provider === 'hetzner' || i.provider === 'digitalocean')
+  const canCreate = (i: (typeof integrations & object)[number]) => !((i.lastCheck as { capabilities?: { key: string; allowed: boolean | null }[] } | null)?.capabilities ?? []).some((c) => c.key === 'servers' && c.allowed === false)
+  const accounts = (integrations ?? []).filter((i) => (i.provider === 'hetzner' || i.provider === 'digitalocean') && canCreate(i))
+  const readOnly = (integrations ?? []).filter((i) => (i.provider === 'hetzner' || i.provider === 'digitalocean') && !canCreate(i))
   const [account, setAccount] = useState('')
   const chosen = account || accounts[0]?.id || ''
   const { data: catalog, error, isFetching } = useCloudCatalogQuery({ org, integration: chosen }, { skip: !chosen })
@@ -208,7 +210,7 @@ function CreateServerDialog({ org, onClose }: { org: string; onClose: () => void
       description="Tessery creates an Ubuntu machine in your cloud account, installs Docker, adds a deploy user with its own key and opens only SSH, HTTP and HTTPS."
       footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!chosen || !region || !size || !name.trim() || isLoading} onClick={save}>{isLoading ? 'Creating…' : picked ? `Create for ${money(priced(picked).monthly)}/month` : 'Create'}</Button></>}>
       {!accounts.length
-        ? <div className={muted}>Connect a Hetzner or DigitalOcean account under Integrations first.</div>
+        ? <div className={muted}>{readOnly.length ? `${readOnly.map((i) => i.name).join(', ')} can only read. Replace the token with one that can create servers under Integrations.` : 'Connect a Hetzner or DigitalOcean account under Integrations first.'}</div>
         : <>
           <Field label="Cloud account">
             <Select value={chosen} onChange={(v) => { setAccount(v); setRegion(''); setSize('') }} options={accounts.map((a) => ({ value: a.id, label: `${a.name} (${a.provider})` }))} aria-label="Cloud account" />

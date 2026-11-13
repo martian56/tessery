@@ -11,7 +11,8 @@ import { timeAgo } from '@/lib/format'
 import type { Perms } from './OrgSettings'
 import s from './Settings.module.css'
 
-interface Check { ok: boolean; account?: string; error?: string }
+interface Capability { key: string; label: string; allowed: boolean | null; needs: string }
+interface Check { ok: boolean; account?: string; error?: string; capabilities?: Capability[] }
 
 export function IntegrationsSection({ org, perms }: { org: string; perms: Perms }) {
   const { data: providers } = useProvidersQuery()
@@ -80,6 +81,17 @@ function IntegrationCard({ org, integration, provider, canManage, onReplace }: {
         {integration.checkedAt && <span className={muted}>checked {timeAgo(new Date(integration.checkedAt).getTime())}</span>}
       </div>
       {last && !last.ok && <div className={s.serverError}>{last.error}</div>}
+      {last?.ok && last.capabilities && last.capabilities.length > 0 && (
+        <div className={s.capabilities}>
+          {last.capabilities.map((c) => (
+            <div key={c.key} className={s.capability}>
+              {c.allowed === true ? <Badge tone="ok">yes</Badge> : c.allowed === false ? <Badge tone="warn">no</Badge> : <Badge>unknown</Badge>}
+              <span>{c.label}</span>
+              {c.allowed === false && <span className={muted}>needs {c.needs}</span>}
+            </div>
+          ))}
+        </div>
+      )}
       {summary.length > 0 && <div className={s.serverFacts}>{summary.map(([k, v]) => <span key={k}>{k}: <span className={mono}>{String(v)}</span></span>)}</div>}
     </Card>
   )

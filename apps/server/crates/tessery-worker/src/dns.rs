@@ -10,6 +10,10 @@ async fn cloudflare_accounts(ctx: &Ctx, org: Uuid) -> Result<Vec<(Map<String, Va
     let apis = tessery_cloud::endpoints_from_env();
     let mut out = Vec::new();
     for i in tessery_db::integrations::list(&ctx.db, org).await?.into_iter().filter(|i| i.provider == "cloudflare") {
+        if !tessery_cloud::allows(i.last_check.as_ref(), "dns") {
+            tracing::info!(integration = %i.id, "skipping a Cloudflare account that may not manage DNS");
+            continue;
+        }
         let (_, cipher) = tessery_db::integrations::secret(&ctx.db, org, i.id).await?;
         let fields: Map<String, Value> = serde_json::from_slice(&key.decrypt(&cipher)?)?;
         match tessery_cloud::cloudflare_zones(&fields, &apis).await {
