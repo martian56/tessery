@@ -293,6 +293,74 @@ pub async fn r2_list_buckets(f: &Map<String, Value>, apis: &Endpoints) -> Result
     Ok(out)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DnsChange {
+    Created,
+    Updated,
+    Unchanged,
+    Taken { content: String },
+}
+
+fn token_of(f: &Map<String, Value>) -> String {
+    f.get("token").and_then(Value::as_str).unwrap_or_default().to_owned()
+}
+
+pub async fn ensure_a_record(f: &Map<String, Value>, apis: &Endpoints, zone: &str, name: &str, ip: &str, tag: &str) -> Result<DnsChange, String> {
+    let http = client();
+    let base = cloudflare_base(apis);
+    let token = token_of(f);
+    let found = send("Cloudflare", http.get(format!("{base}/zones/{zone}/dns_records?type=A&name={name}")).bearer_auth(&token)).await?;
+    let found: Value = serde_json::from_str(&found).unwrap_or_default();
+    let body = json!({ "type": "A", "name": name, "content": ip, "ttl": 120, "proxied": false, "comment": tag });
+    match found["result"].as_array().and_then(|r| r.first()) {
+        None => {
+            send("Cloudflare", http.post(format!("{base}/zones/{zone}/dns_records")).bearer_auth(&token).json(&body)).await?;
+            Ok(DnsChange::Created)
+        }
+        Some(r) if r["comment"].as_str() != Some(tag) => Ok(DnsChange::Taken { content: r["content"].as_str().unwrap_or_default().to_owned() }),
+        Some(r) if r["content"].as_str() == Some(ip) => Ok(DnsChange::Unchanged),
+        Some(r) => {
+            let id = r["id"].as_str().unwrap_or_default();
+            send("Cloudflare", http.patch(format!("{base}/zones/{zone}/dns_records/{id}")).bearer_auth(&token).json(&body)).await?;
+            Ok(DnsChange::Updated)
+        }
+    }
+}
+
+pub async fn delete_tagged_records(f: &Map<String, Value>, apis: &Endpoints, zone: &str, tag: &str) -> Result<Vec<String>, String> {
+    let http = client();
+    let base = cloudflare_base(apis);
+    let token = token_of(f);
+    let list = send("Cloudflare", http.get(format!("{base}/zones/{zone}/dns_records?per_page=100")).bearer_auth(&token)).await?;
+    let list: Value = serde_json::from_str(&list).unwrap_or_default();
+    let mut removed = Vec::new();
+    for r in list["result"].as_array().into_iter().flatten().filter(|r| r["comment"].as_str() == Some(tag)) {
+        let id = r["id"].as_str().unwrap_or_default();
+        send("Cloudflare", http.delete(format!("{base}/zones/{zone}/dns_records/{id}")).bearer_auth(&token)).await?;
+        removed.push(r["name"].as_str().unwrap_or_default().to_owned());
+    }
+    Ok(removed)
+}
+
+pub fn dns_tag(project: &str, env: &str) -> String {
+    format!("tessery:{project}:{env}")
+}
+
+pub fn dns_names(plan: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(domain) = plan.pointer("/target/domain").and_then(Value::as_str).filter(|d| !d.is_empty()) {
+        out.push(format!("*.{domain}"));
+        for e in plan["endpoints"].as_array().into_iter().flatten() {
+            let Some(host) = e["url"].as_str().and_then(|u| u.strip_prefix("https://")) else { continue };
+            let covered = host.strip_suffix(domain).is_some_and(|rest| rest.ends_with('.') && !rest[..rest.len() - 1].contains('.'));
+            if !covered {
+                out.push(host.to_owned());
+            }
+        }
+    }
+    out
+}
+
 pub struct SigV4<'a> {
     pub method: &'a str,
     pub path: &'a str,
@@ -627,6 +695,13 @@ mod tests {
         assert_eq!(h.sizes[0].regions, ["fsn1"]);
         assert_eq!(h.sizes[0].currency, "EUR");
         assert_eq!(h.sizes[0].region_prices[0].region, "fsn1");
+    }
+
+    #[test]
+    fn lists_the_dns_names_an_environment_needs() {
+        let plan = json!({ "target": { "kind": "docker", "domain": "lab.fermohost.dev" }, "endpoints": [{ "url": "https://web.lab.fermohost.dev" }, { "url": "https://shop.fermohost.dev" }, { "url": "https://a.b.lab.fermohost.dev" }] });
+        assert_eq!(dns_names(&plan), ["*.lab.fermohost.dev", "shop.fermohost.dev", "a.b.lab.fermohost.dev"]);
+        assert!(dns_names(&json!({ "target": { "kind": "docker" } })).is_empty());
     }
 
     #[test]

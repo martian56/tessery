@@ -87,7 +87,7 @@ impl Log {
         Self { tx, writer }
     }
 
-    fn line(&self, s: impl Into<String>) {
+    pub(crate) fn line(&self, s: impl Into<String>) {
         let mut s: String = s.into();
         if s.len() > MAX_LINE {
             let mut cut = MAX_LINE;
@@ -181,6 +181,12 @@ async fn run(ctx: &Ctx, r: &Release, log: &Log) -> Result<Vec<Value>> {
         _ => log.line("Traces are off: set TESSERY_TELEMETRY_URL and TESSERY_SECRET_KEY on the worker to collect them"),
     }
     values.extend(telemetry(ctx, base, r.project_id, &r.env_key));
+    if kind == "docker" {
+        let plan_value: Value = serde_json::from_slice(&plan_raw).unwrap_or_default();
+        if let Err(e) = crate::dns::publish(ctx, r.project_id, &r.env_key, &plan_value, remote, log).await {
+            log.line(format!("DNS: {e:#}"));
+        }
+    }
     ensure_runner_image(cfg, log).await?;
 
     let name = format!("tessery-deploy-{}", r.id);
@@ -235,13 +241,35 @@ async fn rollback(ctx: &Ctx, failed: &Release, log: &Log) -> Option<String> {
     })
 }
 
-pub async fn teardown(ctx: &Ctx, project: Uuid, env: &str, plan: &Value, connection: &[(String, Vec<u8>)], saved: Option<&tessery_mq::ServerConnection>, destroy: bool) -> Result<()> {
+pub struct TeardownRequest<'a> {
+    pub project: Uuid,
+    pub env: &'a str,
+    pub plan: &'a Value,
+    pub connection: &'a [(String, Vec<u8>)],
+    pub saved: Option<&'a tessery_mq::ServerConnection>,
+    pub org: Option<Uuid>,
+    pub destroy: bool,
+}
+
+pub async fn teardown(ctx: &Ctx, req: TeardownRequest<'_>) -> Result<()> {
+    let TeardownRequest { project, env, plan, connection, saved, org, destroy } = req;
     let kind = plan.pointer("/target/kind").and_then(Value::as_str).unwrap_or("git");
     if kind == "git" {
         return Ok(());
     }
     let cfg = &ctx.runner;
     let log = Log::start(ctx.db.clone(), None);
+    if destroy {
+        let org = match org {
+            Some(o) => Some(o),
+            None => tessery_db::servers::org_of_project(&ctx.db, project).await.ok(),
+        };
+        if let Some(org) = org
+            && let Err(e) = crate::dns::unpublish(ctx, org, project, env, &log).await
+        {
+            tracing::warn!(%project, env, error = %e, "removing DNS records failed");
+        }
+    }
     let mut values = Vec::new();
     for (name, cipher) in connection {
         let key = ctx.secret_key.as_ref().ok_or_else(|| anyhow!("TESSERY_SECRET_KEY is not set on the worker"))?;
