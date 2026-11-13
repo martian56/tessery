@@ -60,6 +60,56 @@ check_http() {
   docker network disconnect "$network" "$me" >/dev/null 2>&1 || true
 }
 
+routed() {
+  jq -e '[.endpoints[]? | select(.url | startswith("https://"))] | length > 0' "$plan" >/dev/null
+}
+
+ensure_proxy() {
+  routed || return 0
+  docker network inspect tessery-proxy >/dev/null 2>&1 || docker network create tessery-proxy >/dev/null
+  if [ -n "$(docker ps -q --filter label=tessery.proxy)" ]; then
+    return 0
+  fi
+  step "Starting the HTTPS proxy"
+  docker rm -f tessery-proxy >/dev/null 2>&1 || true
+  if ! docker run -d --name tessery-proxy --label tessery.proxy=true --restart unless-stopped \
+    --network tessery-proxy -p 80:80 -p 443:443 -p 443:443/udp \
+    -e CADDY_INGRESS_NETWORKS=tessery-proxy \
+    -v /var/run/docker.sock:/var/run/docker.sock:ro -v tessery-proxy-data:/data \
+    lucaslorentz/caddy-docker-proxy:2.13.1-alpine >/dev/null; then
+    echo "Could not start the proxy. Ports 80 and 443 on the host must be free, or used by a proxy labelled tessery.proxy=true."
+    exit 1
+  fi
+}
+
+check_https() {
+  routed || return 0
+  remote=$1
+  proxy=""
+  if [ -z "$remote" ]; then
+    me=$(hostname)
+    docker network connect tessery-proxy "$me" >/dev/null 2>&1 || true
+    proxy=$(docker inspect -f '{{(index .NetworkSettings.Networks "tessery-proxy").IPAddress}}' "$(docker ps -q --filter label=tessery.proxy | head -n1)")
+  fi
+  jq -r '.endpoints[]? | select(.url | startswith("https://")) | "\(.name) \(.url)"' "$plan" | while read -r name url; do
+    host=${url#https://}
+    step "Checking $url"
+    insecure=""
+    case "$host" in localhost | *.localhost) insecure=-k ;; esac
+    i=0
+    until curl -fsS -o /dev/null --max-time 5 $insecure ${proxy:+--resolve "$host:443:$proxy"} "$url"; do
+      i=$((i + 1))
+      if [ "$i" -ge 30 ]; then
+        echo "$url does not answer over HTTPS yet. $name is running; check that DNS for $host points at this server and that ports 80 and 443 are open."
+        break
+      fi
+      sleep 2
+    done
+    [ "$i" -ge 30 ] || echo "$url is live"
+  done
+  [ -n "$remote" ] || docker network disconnect tessery-proxy "$(hostname)" >/dev/null 2>&1 || true
+}
+
 use_docker_host() {
   host=$(jq -r '.target.host // empty' "$plan")
   [ -n "$host" ] || return 0
@@ -130,9 +180,11 @@ case "$kind" in
     use_docker_host
     export TESSERY_IMAGE_PREFIX="tessery/$project/" TESSERY_TAG
     build "$TESSERY_IMAGE_PREFIX"
+    ensure_proxy
     step "Starting $stack"
     docker compose -p "$stack" -f "deploy/$TESSERY_ENV/compose.yaml" --env-file "$compose_env" up -d --remove-orphans --wait --wait-timeout 300
     [ -n "$host" ] || check_http "${stack}_default"
+    check_https "$host"
     prune_images "$TESSERY_IMAGE_PREFIX"
     ;;
   kubernetes)

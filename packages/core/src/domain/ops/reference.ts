@@ -39,7 +39,7 @@ Web app pages (for web-app nodes)
 
 Environments
   updateEnv { envId, patch: { name?, approval?, scale?, strategy?, target? } }
-      target: { kind: "docker", host? } | { kind: "kubernetes", namespace?, registry?, domain?, ingressClass?, publicPort? } | { kind: "git" }
+      target: { kind: "docker", host?, domain?, hosts?: { [node]: hostname } } | { kind: "kubernetes", namespace?, registry?, domain?, ingressClass?, publicPort? } | { kind: "git" }
   addEnv { name, provider, region }
   removeEnv { envId }
 
