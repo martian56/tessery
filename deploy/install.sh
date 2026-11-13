@@ -18,9 +18,9 @@ fi
 docker compose version >/dev/null 2>&1 || fail "the Docker Compose plugin is missing"
 systemctl enable --now docker >/dev/null 2>&1 || true
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
 mkdir -p "$DIR"
 cd "$DIR"
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
 for f in compose.yml .env.example backup.sh restore.sh; do
   if [ -n "$HERE" ] && [ "$HERE" != "$DIR" ] && [ -f "$HERE/$f" ]; then
     cp "$HERE/$f" "$f"
