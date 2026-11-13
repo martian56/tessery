@@ -1,11 +1,11 @@
 import type { SystemNode, DeployTarget, Environment, ProjectDoc } from '../../domain/types'
 import { TECH_BY_ID } from '../../catalog/technologies'
-import { devCompose, envCompose, envExample, slug } from './compose'
+import { devCompose, dockerPublicHost, envCompose, envExample, isHostname, slug } from './compose'
 import { manifests, namespaceOf, publicHost } from './kubernetes'
 import { connection, hostPort, secrets, workloads, type SecretSpec } from './runtime'
 
 export * from './runtime'
-export { devCompose, envCompose, manifests, namespaceOf, slug }
+export { devCompose, dockerPublicHost, envCompose, isHostname, manifests, namespaceOf, slug }
 
 export interface DeployPlan {
   version: 1
@@ -32,7 +32,10 @@ export function plan(doc: ProjectDoc, env: Environment): DeployPlan {
   const target = targetOf(env)
   const all = workloads(doc, env)
   const endpoints = all.filter((w) => w.public && w.port).flatMap((w) => {
-    if (target.kind === 'docker') return [{ name: w.name, url: `http://${dockerHost(target)}:${hostPort(doc, env.id, w.name)}` }]
+    if (target.kind === 'docker') {
+      const host = dockerPublicHost(w.name, target)
+      return [{ name: w.name, url: host ? `https://${host}` : `http://${dockerHost(target)}:${hostPort(doc, env.id, w.name)}` }]
+    }
     if (target.kind === 'kubernetes') {
       const host = publicHost(doc, env, w.name, target)
       return host ? [{ name: w.name, url: `http://${host}${target.publicPort && target.publicPort !== 80 ? `:${target.publicPort}` : ''}` }] : []

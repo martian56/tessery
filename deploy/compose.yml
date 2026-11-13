@@ -27,25 +27,31 @@ services:
   server:
     <<: *app
     image: ghcr.io/martian56/tessery-server:${TESSERY_IMAGE_TAG:-latest}
+    networks: [default, proxy]
+    labels:
+      caddy: ${TESSERY_DOMAIN}
+      caddy.reverse_proxy: "{{upstreams 8080}}"
+      caddy.encode: zstd gzip
 
   worker:
     <<: *app
     image: ghcr.io/martian56/tessery-worker:${TESSERY_IMAGE_TAG:-latest}
 
   caddy:
-    image: caddy:2.10-alpine
+    image: lucaslorentz/caddy-docker-proxy:2.13.1-alpine
     restart: unless-stopped
+    labels:
+      tessery.proxy: "true"
     environment:
-      TESSERY_DOMAIN: ${TESSERY_DOMAIN}
+      CADDY_INGRESS_NETWORKS: tessery-proxy
+    networks: [proxy]
     ports:
       - "${TESSERY_HTTP_PORT:-80}:80"
       - "${TESSERY_HTTPS_PORT:-443}:443"
       - "${TESSERY_HTTPS_PORT:-443}:443/udp"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - caddydata:/data
-      - caddyconfig:/config
-    depends_on: [server]
 
   postgres:
     image: postgres:18
@@ -85,10 +91,14 @@ services:
       timeout: 5s
       retries: 30
 
+networks:
+  proxy:
+    name: tessery-proxy
+    external: true
+
 volumes:
   pgdata: {}
   redisdata: {}
   mqdata: {}
   tesserydata: {}
   caddydata: {}
-  caddyconfig: {}

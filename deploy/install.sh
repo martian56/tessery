@@ -21,7 +21,7 @@ systemctl enable --now docker >/dev/null 2>&1 || true
 mkdir -p "$DIR"
 cd "$DIR"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
-for f in compose.yml Caddyfile .env.example; do
+for f in compose.yml .env.example; do
   if [ -n "$HERE" ] && [ "$HERE" != "$DIR" ] && [ -f "$HERE/$f" ]; then
     cp "$HERE/$f" "$f"
   elif [ ! -f "$f" ]; then
@@ -50,6 +50,7 @@ else
 fi
 
 say "Starting Tessery"
+docker network inspect tessery-proxy >/dev/null 2>&1 || docker network create tessery-proxy >/dev/null
 docker compose pull
 docker compose up -d
 
