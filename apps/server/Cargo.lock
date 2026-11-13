@@ -3526,6 +3526,7 @@ dependencies = [
  "sha2 0.11.1",
  "sqlx",
  "ssh-key",
+ "tessery-cloud",
  "tessery-core",
  "tessery-db",
  "tessery-engine",
@@ -3540,6 +3541,21 @@ dependencies = [
  "tracing-subscriber",
  "utoipa",
  "uuid",
+]
+
+[[package]]
+name = "tessery-cloud"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "hex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "time",
+ "tokio",
+ "utoipa",
 ]
 
 [[package]]
@@ -3614,12 +3630,14 @@ name = "tessery-worker"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "dotenvy",
  "rand 0.10.3",
  "serde",
  "serde_json",
  "sqlx",
  "tar",
+ "tessery-cloud",
  "tessery-core",
  "tessery-db",
  "tessery-git",

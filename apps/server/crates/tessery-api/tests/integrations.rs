@@ -17,7 +17,17 @@ async fn fake_digitalocean() -> String {
     }
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move { axum::serve(listener, Router::new().route("/v2/account", get(account))).await.unwrap() });
+    let routes = Router::new()
+        .route("/v2/account", get(account))
+        .route("/v2/regions", get(|| async { json!({ "regions": [{ "slug": "fra1", "name": "Frankfurt 1", "available": true }] }).to_string() }))
+        .route("/v2/sizes", get(|| async { json!({ "sizes": [{ "slug": "s-1vcpu-1gb", "description": "Basic", "memory": 1024, "vcpus": 1, "disk": 25, "price_monthly": 6.0, "price_hourly": 0.00893, "regions": ["fra1"], "available": true }] }).to_string() }))
+        .route("/v2/droplets", axum::routing::post(|body: String| async move {
+            let v: Value = serde_json::from_str(&body).unwrap();
+            assert!(v["user_data"].as_str().unwrap().contains("ssh-ed25519 "), "the new machine trusts Tessery's key");
+            (Http::ACCEPTED, json!({ "droplet": { "id": 4242, "status": "new" } }).to_string())
+        }))
+        .route("/v2/droplets/{id}", axum::routing::delete(|| async { Http::NO_CONTENT }));
+    tokio::spawn(async move { axum::serve(listener, routes).await.unwrap() });
     format!("http://{addr}/v2")
 }
 
@@ -54,5 +64,18 @@ async fn cloud_accounts_are_checked_before_they_are_saved() {
     let id = saved["id"].as_str().unwrap();
     assert_eq!(dev.delete(&format!("/api/orgs/{org}/integrations/{id}")).await.status(), StatusCode::FORBIDDEN);
     assert_eq!(admin.post(&format!("/api/orgs/{org}/integrations/{id}/check"), json!({})).await.status(), StatusCode::OK);
+
+    let catalog: Value = admin.json(&format!("/api/orgs/{org}/integrations/{id}/catalog")).await;
+    assert_eq!(catalog["sizes"][0]["id"], "s-1vcpu-1gb");
+    assert_eq!(catalog["sizes"][0]["monthlyUsd"], 6.0);
+    let created = admin.post(&format!("/api/orgs/{org}/servers/provision"), json!({ "integrationId": id, "name": "do-1", "region": "fra1", "size": "s-1vcpu-1gb" })).await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let server: Value = created.json().await.unwrap();
+    assert_eq!(server["status"], "creating");
+    assert_eq!(server["managed"], true);
+    assert_eq!(server["provider"], "digitalocean");
+    let sid = server["id"].as_str().unwrap();
+    assert_eq!(admin.delete(&format!("/api/orgs/{org}/servers/{sid}?deleteMachine=true")).await.status(), StatusCode::OK);
+    assert!(admin.json(&format!("/api/orgs/{org}/servers")).await.as_array().unwrap().is_empty());
     assert_eq!(admin.delete(&format!("/api/orgs/{org}/integrations/{id}")).await.status(), StatusCode::OK);
 }

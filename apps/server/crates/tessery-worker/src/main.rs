@@ -1,5 +1,6 @@
 mod deploy;
 mod jobs;
+mod provision;
 
 use anyhow::Context;
 use tessery_mq::Mq;

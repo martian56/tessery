@@ -1,3 +1,4 @@
+use serde_json::{Value, json};
 pub const DOCKERFILE: &str = include_str!("../runner/Dockerfile");
 pub const SCRIPT: &str = include_str!("../runner/run.sh");
 
@@ -43,6 +44,58 @@ pub fn required_secrets(plan: &serde_json::Value) -> Vec<RequiredSecret> {
 
 pub fn missing_secrets<'a>(required: &'a [RequiredSecret], stored: &[String]) -> Vec<&'a str> {
     required.iter().filter(|r| !r.generate && !stored.contains(&r.name)).map(|r| r.name.as_str()).collect()
+}
+
+pub const SSH_SETUP: &str = concat!(
+    "mkdir -p ~/.ssh && echo \"$SSH_KEY_B64\" | base64 -d > ~/.ssh/id_tessery && chmod 600 ~/.ssh/id_tessery && ",
+    "if [ -n \"$KNOWN_B64\" ]; then echo \"$KNOWN_B64\" | base64 -d > ~/.ssh/known_hosts; c=yes; else c=accept-new; fi && ",
+    "printf 'Host *\\n  IdentityFile ~/.ssh/id_tessery\\n  IdentitiesOnly yes\\n  StrictHostKeyChecking %s\\n  ConnectTimeout 15\\n' $c > ~/.ssh/config && ",
+    "export DOCKER_HOST=\"$REMOTE_DOCKER_HOST\" && "
+);
+
+pub const SERVER_CHECK: &str = r#"set -e
+docker info --format '{{json .}}'
+echo '::disk::'
+disk=$(docker run --rm busybox:1.37 df -Pk /)
+echo "$disk" | tail -n 1
+echo '::known::'
+cat ~/.ssh/known_hosts 2>/dev/null || true"#;
+
+pub fn parse_check(stdout: &str) -> Value {
+    let (info, rest) = stdout.split_once("::disk::").unwrap_or((stdout, ""));
+    let (disk, known) = rest.split_once("::known::").unwrap_or((rest, ""));
+    let info: Value = serde_json::from_str(info.trim()).unwrap_or(Value::Null);
+    let cols: Vec<u64> = disk.split_whitespace().filter_map(|c| c.parse().ok()).collect();
+    json!({
+        "ok": true,
+        "docker": info["ServerVersion"],
+        "os": info["OperatingSystem"],
+        "arch": info["Architecture"],
+        "cpus": info["NCPU"],
+        "memoryBytes": info["MemTotal"],
+        "diskTotalBytes": cols.first().map(|k| k * 1024),
+        "diskFreeBytes": cols.get(2).map(|k| k * 1024),
+        "knownHosts": known.trim(),
+    })
+}
+
+pub fn explain_ssh(stderr: &str) -> String {
+    let e = stderr.trim();
+    let hint = if e.contains("Permission denied") {
+        "The server refused the key. Add the public key to ~/.ssh/authorized_keys of that user."
+    } else if e.contains("Host key verification failed") || e.contains("REMOTE HOST IDENTIFICATION HAS CHANGED") {
+        "The server's host key changed since Tessery pinned it. If you reinstalled the server, forget the host key and check again."
+    } else if e.contains("Connection refused") || e.contains("timed out") || e.contains("No route to host") || e.contains("Could not resolve") {
+        "Tessery could not reach the server. Check the address, the port and the firewall."
+    } else if e.contains("permission denied while trying to connect to the Docker daemon") || e.contains("docker.sock") {
+        "Connected, but this user may not run Docker. Add it to the docker group: sudo usermod -aG docker <user>."
+    } else if e.contains("command not found") || e.contains("docker: not found") {
+        "Connected, but Docker is not installed on the server. Install it with: curl -fsSL https://get.docker.com | sh"
+    } else {
+        ""
+    };
+    let last = e.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("the check failed").trim();
+    if hint.is_empty() { last.to_owned() } else { format!("{hint} ({last})") }
 }
 
 #[cfg(test)]

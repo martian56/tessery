@@ -1,6 +1,6 @@
 use crate::audit::{self, Entry};
 use crate::auth::Principal;
-use crate::cloud::{self, ProviderSpec};
+use tessery_cloud::{self as cloud, ProviderSpec};
 use crate::error::{ApiError, ApiResult};
 use crate::rbac::{self, org_target};
 use crate::routes::dto::{OK, Ok};
@@ -140,6 +140,23 @@ pub async fn check(State(state): State<AppState>, p: Principal, Path((org, id)):
     };
     db::record_check(&state.db, id, &result).await?;
     Ok(Json(db::get(&state.db, org, id).await?.into()))
+}
+
+pub(crate) async fn fields(state: &AppState, org: Uuid, id: Uuid) -> ApiResult<(String, Map<String, Value>)> {
+    let (provider, cipher) = db::secret(&state.db, org, id).await?;
+    let plain = key(state)?.decrypt(&cipher).map_err(|e| ApiError::Internal(e.into()))?;
+    Ok((provider, serde_json::from_slice(&plain).map_err(|e| ApiError::Internal(e.into()))?))
+}
+
+/// Regions and machine sizes with prices, read live from the provider. Only for providers Tessery can create servers on.
+#[utoipa::path(get, path = "/api/orgs/{org}/integrations/{integration}/catalog", tag = "integrations", params(("org" = Uuid, Path), ("integration" = Uuid, Path)), responses((status = 200, body = tessery_cloud::Catalog)))]
+pub async fn catalog(State(state): State<AppState>, p: Principal, Path((org, id)): Path<(Uuid, Uuid)>) -> ApiResult<Json<tessery_cloud::Catalog>> {
+    rbac::require(&state, &p, &org_target(org), P::ServerManage).await?;
+    let (provider, f) = fields(&state, org, id).await?;
+    if !tessery_cloud::CAN_CREATE.contains(&provider.as_str()) {
+        return Err(ApiError::Conflict(format!("Tessery cannot create servers on {provider} yet; use Hetzner or DigitalOcean")));
+    }
+    Ok(Json(tessery_cloud::catalog(&provider, &f, &state.config.provider_apis).await.map_err(ApiError::Conflict)?))
 }
 
 #[utoipa::path(delete, path = "/api/orgs/{org}/integrations/{integration}", tag = "integrations", params(("org" = Uuid, Path), ("integration" = Uuid, Path)), responses((status = 200, body = Ok)))]

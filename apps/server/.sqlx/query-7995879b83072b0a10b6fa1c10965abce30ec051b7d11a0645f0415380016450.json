@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, org_id, name, address, public_key, known_hosts, last_check, checked_at, created_at FROM servers WHERE org_id = $1 AND id = $2",
+  "query": "SELECT id, org_id, name, address, public_key, known_hosts, last_check, checked_at, created_at, integration_id, provider, region, size, resource_id, status, status_detail FROM servers WHERE org_id = $1 ORDER BY name",
   "describe": {
     "columns": [
       {
@@ -101,11 +101,87 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 9,
+        "name": "integration_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "integration_id"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "provider",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "provider"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "region",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "region"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "size",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "resource_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "resource_id"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "status_detail",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "status_detail"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
         "Uuid"
       ]
     },
@@ -118,8 +194,15 @@
       false,
       true,
       true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
       false
     ]
   },
-  "hash": "9ead960e04a010b272409ee61c5950daac2a7fb908105a9e6f7a14d0d2f42715"
+  "hash": "7995879b83072b0a10b6fa1c10965abce30ec051b7d11a0645f0415380016450"
 }

@@ -112,6 +112,13 @@ pub fn summary(provider: &str, f: &Map<String, Value>) -> Value {
 
 pub type Endpoints = std::collections::BTreeMap<String, String>;
 
+pub fn endpoints_from_env() -> Endpoints {
+    ["hetzner", "digitalocean", "aws", "azure", "azure_login"]
+        .iter()
+        .filter_map(|p| std::env::var(format!("TESSERY_{}_API", p.to_uppercase())).ok().map(|v| ((*p).to_owned(), v)))
+        .collect()
+}
+
 fn endpoint(apis: &Endpoints, provider: &str, default: &str) -> String {
     apis.get(provider).cloned().unwrap_or_else(|| default.to_owned())
 }
@@ -244,6 +251,223 @@ pub fn sigv4(r: &SigV4) -> String {
     format!("AWS4-HMAC-SHA256 Credential={}/{scope}, SignedHeaders={signed}, Signature={signature}", r.access_key)
 }
 
+pub const CAN_CREATE: &[&str] = &["hetzner", "digitalocean"];
+
+#[derive(Serialize, ToSchema, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Region {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Serialize, ToSchema, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Size {
+    pub id: String,
+    pub name: String,
+    pub cpus: u32,
+    pub memory_gb: f64,
+    pub disk_gb: u32,
+    pub monthly_usd: f64,
+    pub hourly_usd: f64,
+    /// Regions that offer this size.
+    pub regions: Vec<String>,
+}
+
+#[derive(Serialize, ToSchema, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Catalog {
+    pub regions: Vec<Region>,
+    pub sizes: Vec<Size>,
+}
+
+pub struct NewMachine<'a> {
+    pub name: &'a str,
+    pub region: &'a str,
+    pub size: &'a str,
+    pub public_key: &'a str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MachineState {
+    Starting,
+    Running { ip: String },
+    Gone,
+}
+
+pub fn cloud_init(public_key: &str) -> String {
+    format!(
+        "#cloud-config\nusers:\n  - name: deploy\n    shell: /bin/bash\n    ssh_authorized_keys:\n      - {}\nruncmd:\n  - curl -fsSL https://get.docker.com | sh\n  - usermod -aG docker deploy\n  - ufw allow 22/tcp\n  - ufw allow 80/tcp\n  - ufw allow 443/tcp\n  - ufw allow 443/udp\n  - ufw --force enable\n",
+        public_key.trim()
+    )
+}
+
+pub fn machine_name(name: &str) -> String {
+    let s: String = name.to_lowercase().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+    let s = s.trim_matches('-').to_owned();
+    if s.is_empty() { "tessery".into() } else { s.chars().take(60).collect() }
+}
+
+fn json(body: &str) -> Value {
+    serde_json::from_str(body).unwrap_or_default()
+}
+
+fn f64_of(v: &Value) -> f64 {
+    v.as_f64().or_else(|| v.as_str().and_then(|s| s.parse().ok())).unwrap_or_default()
+}
+
+fn token(f: &Map<String, Value>) -> String {
+    f.get("token").and_then(Value::as_str).unwrap_or_default().to_owned()
+}
+
+pub fn digitalocean_catalog(regions: &Value, sizes: &Value) -> Catalog {
+    let regions: Vec<Region> = regions["regions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|r| r["available"].as_bool().unwrap_or(true))
+        .map(|r| Region { id: r["slug"].as_str().unwrap_or_default().to_owned(), name: r["name"].as_str().unwrap_or_default().to_owned() })
+        .collect();
+    let mut sizes: Vec<Size> = sizes["sizes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|s| s["available"].as_bool().unwrap_or(true) && s["memory"].as_u64().unwrap_or(0) >= 1024)
+        .map(|s| Size {
+            id: s["slug"].as_str().unwrap_or_default().to_owned(),
+            name: s["description"].as_str().filter(|d| !d.is_empty()).unwrap_or_else(|| s["slug"].as_str().unwrap_or_default()).to_owned(),
+            cpus: s["vcpus"].as_u64().unwrap_or(0) as u32,
+            memory_gb: s["memory"].as_f64().unwrap_or(0.0) / 1024.0,
+            disk_gb: s["disk"].as_u64().unwrap_or(0) as u32,
+            monthly_usd: f64_of(&s["price_monthly"]),
+            hourly_usd: f64_of(&s["price_hourly"]),
+            regions: s["regions"].as_array().into_iter().flatten().filter_map(|r| r.as_str().map(str::to_owned)).collect(),
+        })
+        .collect();
+    sizes.sort_by(|a, b| a.monthly_usd.total_cmp(&b.monthly_usd));
+    Catalog { regions, sizes }
+}
+
+pub fn hetzner_catalog(locations: &Value, types: &Value) -> Catalog {
+    let regions: Vec<Region> = locations["locations"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|l| Region { id: l["name"].as_str().unwrap_or_default().to_owned(), name: l["city"].as_str().unwrap_or_default().to_owned() })
+        .collect();
+    let mut sizes: Vec<Size> = types["server_types"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|t| t["deprecation"].is_null() && !t["deprecated"].as_bool().unwrap_or(false))
+        .filter_map(|t| {
+            let prices = t["prices"].as_array()?;
+            let monthly = prices.iter().map(|p| f64_of(&p["price_monthly"]["gross"])).fold(f64::INFINITY, f64::min);
+            let hourly = prices.iter().map(|p| f64_of(&p["price_hourly"]["gross"])).fold(f64::INFINITY, f64::min);
+            Some(Size {
+                id: t["name"].as_str()?.to_owned(),
+                name: format!("{} ({})", t["name"].as_str()?.to_uppercase(), t["architecture"].as_str().unwrap_or("x86")),
+                cpus: t["cores"].as_u64().unwrap_or(0) as u32,
+                memory_gb: f64_of(&t["memory"]),
+                disk_gb: t["disk"].as_u64().unwrap_or(0) as u32,
+                monthly_usd: if monthly.is_finite() { monthly } else { 0.0 },
+                hourly_usd: if hourly.is_finite() { hourly } else { 0.0 },
+                regions: prices.iter().filter_map(|p| p["location"].as_str().map(str::to_owned)).collect(),
+            })
+        })
+        .collect();
+    sizes.sort_by(|a, b| a.monthly_usd.total_cmp(&b.monthly_usd));
+    Catalog { regions, sizes }
+}
+
+pub async fn catalog(provider: &str, f: &Map<String, Value>, apis: &Endpoints) -> Result<Catalog, String> {
+    let http = client();
+    match provider {
+        "digitalocean" => {
+            let base = endpoint(apis, "digitalocean", "https://api.digitalocean.com/v2");
+            let regions = send("DigitalOcean", http.get(format!("{base}/regions?per_page=200")).bearer_auth(token(f))).await?;
+            let sizes = send("DigitalOcean", http.get(format!("{base}/sizes?per_page=200")).bearer_auth(token(f))).await?;
+            Ok(digitalocean_catalog(&json(&regions), &json(&sizes)))
+        }
+        "hetzner" => {
+            let base = endpoint(apis, "hetzner", "https://api.hetzner.cloud/v1");
+            let locations = send("Hetzner", http.get(format!("{base}/locations")).bearer_auth(token(f))).await?;
+            let types = send("Hetzner", http.get(format!("{base}/server_types?per_page=50")).bearer_auth(token(f))).await?;
+            Ok(hetzner_catalog(&json(&locations), &json(&types)))
+        }
+        other => Err(format!("Tessery cannot create servers on {other} yet")),
+    }
+}
+
+pub async fn create_machine(provider: &str, f: &Map<String, Value>, apis: &Endpoints, m: &NewMachine<'_>) -> Result<String, String> {
+    let http = client();
+    let user_data = cloud_init(m.public_key);
+    let name = machine_name(m.name);
+    match provider {
+        "digitalocean" => {
+            let base = endpoint(apis, "digitalocean", "https://api.digitalocean.com/v2");
+            let body = json!({ "name": name, "region": m.region, "size": m.size, "image": "ubuntu-24-04-x64", "user_data": user_data, "tags": ["tessery"] });
+            let r = send("DigitalOcean", http.post(format!("{base}/droplets")).bearer_auth(token(f)).json(&body)).await?;
+            json(&r).pointer("/droplet/id").map(|id| id.to_string()).ok_or_else(|| "DigitalOcean did not return the new Droplet".into())
+        }
+        "hetzner" => {
+            let base = endpoint(apis, "hetzner", "https://api.hetzner.cloud/v1");
+            let body = json!({ "name": name, "location": m.region, "server_type": m.size, "image": "ubuntu-24.04", "user_data": user_data, "labels": { "tessery": "true" } });
+            let r = send("Hetzner", http.post(format!("{base}/servers")).bearer_auth(token(f)).json(&body)).await?;
+            json(&r).pointer("/server/id").map(|id| id.to_string()).ok_or_else(|| "Hetzner did not return the new server".into())
+        }
+        other => Err(format!("Tessery cannot create servers on {other} yet")),
+    }
+}
+
+pub async fn machine_state(provider: &str, f: &Map<String, Value>, apis: &Endpoints, id: &str) -> Result<MachineState, String> {
+    let http = client();
+    let (name, url) = match provider {
+        "digitalocean" => ("DigitalOcean", format!("{}/droplets/{id}", endpoint(apis, "digitalocean", "https://api.digitalocean.com/v2"))),
+        "hetzner" => ("Hetzner", format!("{}/servers/{id}", endpoint(apis, "hetzner", "https://api.hetzner.cloud/v1"))),
+        other => return Err(format!("Tessery cannot manage servers on {other} yet")),
+    };
+    let r = http.get(url).bearer_auth(token(f)).send().await.map_err(|e| format!("could not reach {name}: {e}"))?;
+    if r.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(MachineState::Gone);
+    }
+    let status = r.status();
+    let body = r.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(status_error(name, status, &body));
+    }
+    let v = json(&body);
+    let (running, ip) = match provider {
+        "digitalocean" => (
+            v.pointer("/droplet/status").and_then(Value::as_str) == Some("active"),
+            v.pointer("/droplet/networks/v4").and_then(Value::as_array).and_then(|n| n.iter().find(|x| x["type"] == "public")).and_then(|x| x["ip_address"].as_str()).map(str::to_owned),
+        ),
+        _ => (
+            v.pointer("/server/status").and_then(Value::as_str) == Some("running"),
+            v.pointer("/server/public_net/ipv4/ip").and_then(Value::as_str).map(str::to_owned),
+        ),
+    };
+    Ok(match (running, ip) {
+        (true, Some(ip)) => MachineState::Running { ip },
+        _ => MachineState::Starting,
+    })
+}
+
+pub async fn delete_machine(provider: &str, f: &Map<String, Value>, apis: &Endpoints, id: &str) -> Result<(), String> {
+    let http = client();
+    let (name, url) = match provider {
+        "digitalocean" => ("DigitalOcean", format!("{}/droplets/{id}", endpoint(apis, "digitalocean", "https://api.digitalocean.com/v2"))),
+        "hetzner" => ("Hetzner", format!("{}/servers/{id}", endpoint(apis, "hetzner", "https://api.hetzner.cloud/v1"))),
+        other => return Err(format!("Tessery cannot manage servers on {other} yet")),
+    };
+    let r = http.delete(url).bearer_auth(token(f)).send().await.map_err(|e| format!("could not reach {name}: {e}"))?;
+    let status = r.status();
+    if status.is_success() || status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(());
+    }
+    Err(status_error(name, status, &r.text().await.unwrap_or_default()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,5 +503,38 @@ mod tests {
         let f = clean(aws, &input).unwrap();
         let shown = summary("aws", &f).to_string();
         assert!(shown.contains("AKIA…MPLE") && !shown.contains("s3cr3t"));
+    }
+
+    #[test]
+    fn reads_provider_catalogs_cheapest_first() {
+        let regions = json!({ "regions": [{ "slug": "fra1", "name": "Frankfurt 1", "available": true }, { "slug": "old1", "name": "Old", "available": false }] });
+        let sizes = json!({ "sizes": [
+            { "slug": "s-2vcpu-4gb", "description": "Basic", "memory": 4096, "vcpus": 2, "disk": 80, "price_monthly": 24.0, "price_hourly": 0.0357, "regions": ["fra1"], "available": true },
+            { "slug": "s-1vcpu-1gb", "description": "Basic", "memory": 1024, "vcpus": 1, "disk": 25, "price_monthly": 6.0, "price_hourly": 0.00893, "regions": ["fra1"], "available": true },
+            { "slug": "s-1vcpu-512mb", "memory": 512, "vcpus": 1, "disk": 10, "price_monthly": 4.0, "price_hourly": 0.006, "regions": ["fra1"], "available": true }
+        ] });
+        let c = digitalocean_catalog(&regions, &sizes);
+        assert_eq!(c.regions.len(), 1);
+        assert_eq!(c.sizes.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["s-1vcpu-1gb", "s-2vcpu-4gb"], "too small for Docker builds is left out");
+        let types = json!({ "server_types": [
+            { "name": "cx23", "cores": 2, "memory": 4.0, "disk": 40, "architecture": "x86", "deprecation": null, "prices": [{ "location": "fsn1", "price_monthly": { "gross": "4.1400" }, "price_hourly": { "gross": "0.0066" } }] },
+            { "name": "cx22", "cores": 2, "memory": 4.0, "disk": 40, "architecture": "x86", "deprecation": { "announced": "2025" }, "prices": [] }
+        ] });
+        let h = hetzner_catalog(&json!({ "locations": [{ "name": "fsn1", "city": "Falkenstein" }] }), &types);
+        assert_eq!(h.sizes.len(), 1);
+        assert!((h.sizes[0].monthly_usd - 4.14).abs() < 1e-9);
+        assert_eq!(h.sizes[0].regions, ["fsn1"]);
+    }
+
+    #[test]
+    fn cloud_init_sets_up_docker_for_the_deploy_user() {
+        let c = cloud_init("ssh-ed25519 AAAA tessery vps
+");
+        assert!(c.starts_with("#cloud-config
+"));
+        assert!(c.contains("      - ssh-ed25519 AAAA tessery vps
+"));
+        assert!(c.contains("usermod -aG docker deploy"));
+        assert_eq!(machine_name("My VPS #1"), "my-vps--1");
     }
 }

@@ -8,13 +8,13 @@ use crate::state::AppState;
 use tessery_core::Permission as P;
 use tessery_db::servers::{self as db, NewServer, ServerUpdate};
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::time::Duration;
 use time::OffsetDateTime;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 #[derive(Serialize, ToSchema)]
@@ -45,6 +45,16 @@ pub struct ServerDto {
     pub created_at: OffsetDateTime,
     /// Environments that deploy to this server.
     pub used_by: Vec<ServerUse>,
+    /// `creating` and `configuring` while Tessery sets up a new machine, then `ready`, or `failed`.
+    pub status: String,
+    pub status_detail: String,
+    /// Set when Tessery created the machine through a connected cloud account.
+    pub provider: Option<String>,
+    pub region: Option<String>,
+    pub size: Option<String>,
+    pub integration_id: Option<Uuid>,
+    /// Whether removing the server can also delete the machine at the provider.
+    pub managed: bool,
 }
 
 impl ServerDto {
@@ -59,6 +69,13 @@ impl ServerDto {
             checked_at: s.checked_at,
             created_at: s.created_at,
             used_by,
+            managed: s.resource_id.is_some() && s.integration_id.is_some(),
+            status: s.status,
+            status_detail: s.status_detail,
+            provider: s.provider,
+            region: s.region,
+            size: s.size,
+            integration_id: s.integration_id,
         }
     }
 }
@@ -215,8 +232,17 @@ pub async fn update(State(state): State<AppState>, p: Principal, Path((org, id))
     Ok(Json(ServerDto::new(s, u)))
 }
 
-#[utoipa::path(delete, path = "/api/orgs/{org}/servers/{server}", tag = "servers", params(("org" = Uuid, Path), ("server" = Uuid, Path)), responses((status = 200, body = Ok), (status = 409)))]
-pub async fn delete(State(state): State<AppState>, p: Principal, Path((org, id)): Path<(Uuid, Uuid)>) -> ApiResult<Json<Ok>> {
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteQuery {
+    /// Also delete the machine at the provider, which stops its billing. Only for servers Tessery created.
+    #[serde(default)]
+    pub delete_machine: bool,
+}
+
+#[utoipa::path(delete, path = "/api/orgs/{org}/servers/{server}", tag = "servers", params(("org" = Uuid, Path), ("server" = Uuid, Path), DeleteQuery), responses((status = 200, body = Ok), (status = 409)))]
+pub async fn delete(State(state): State<AppState>, p: Principal, Path((org, id)): Path<(Uuid, Uuid)>, Query(q): Query<DeleteQuery>) -> ApiResult<Json<Ok>> {
     let d = rbac::require(&state, &p, &org_target(org), P::ServerManage).await?;
     let mut all = uses(&state, org, None).await?;
     let u = used_by(&mut all, id);
@@ -228,57 +254,22 @@ pub async fn delete(State(state): State<AppState>, p: Principal, Path((org, id))
     if !running.is_empty() {
         return Err(ApiError::Conflict(format!("these environments still run on this server; stop them first: {}", running.join(", "))));
     }
+    let current = db::get(&state.db, org, id).await?;
+    let deleted_machine = match (q.delete_machine, current.integration_id, current.resource_id.as_deref()) {
+        (true, Some(integration), Some(resource)) => {
+            let (provider, f) = crate::routes::integrations::fields(&state, org, integration).await?;
+            tessery_cloud::delete_machine(&provider, &f, &state.config.provider_apis, resource).await.map_err(|e| ApiError::Conflict(format!("the machine was not deleted: {e}")))?;
+            true
+        }
+        (true, ..) => return Err(ApiError::Conflict("Tessery did not create this machine or its cloud account was disconnected; delete it at the provider".into())),
+        _ => false,
+    };
     let mut tx = state.db.begin().await.map_err(|e| ApiError::Internal(e.into()))?;
     let s = db::get(&mut *tx, org, id).await?;
     db::delete(&mut *tx, org, id).await?;
-    audit::record(&mut *tx, &p, Entry::new(Some(org), "server.delete", "server", id).decision(d).details(json!({ "name": s.name, "address": s.address }))).await?;
+    audit::record(&mut *tx, &p, Entry::new(Some(org), "server.delete", "server", id).decision(d).details(json!({ "name": s.name, "address": s.address, "deletedMachine": deleted_machine }))).await?;
     tx.commit().await.map_err(|e| ApiError::Internal(e.into()))?;
     Ok(Json(OK))
-}
-
-const CHECK: &str = r#"set -e
-docker info --format '{{json .}}'
-echo '::disk::'
-disk=$(docker run --rm busybox:1.37 df -Pk /)
-echo "$disk" | tail -n 1
-echo '::known::'
-cat ~/.ssh/known_hosts 2>/dev/null || true"#;
-
-fn parse_check(stdout: &str) -> Value {
-    let (info, rest) = stdout.split_once("::disk::").unwrap_or((stdout, ""));
-    let (disk, known) = rest.split_once("::known::").unwrap_or((rest, ""));
-    let info: Value = serde_json::from_str(info.trim()).unwrap_or(Value::Null);
-    let cols: Vec<u64> = disk.split_whitespace().filter_map(|c| c.parse().ok()).collect();
-    json!({
-        "ok": true,
-        "docker": info["ServerVersion"],
-        "os": info["OperatingSystem"],
-        "arch": info["Architecture"],
-        "cpus": info["NCPU"],
-        "memoryBytes": info["MemTotal"],
-        "diskTotalBytes": cols.first().map(|k| k * 1024),
-        "diskFreeBytes": cols.get(2).map(|k| k * 1024),
-        "knownHosts": known.trim(),
-    })
-}
-
-fn explain(stderr: &str) -> String {
-    let e = stderr.trim();
-    let hint = if e.contains("Permission denied") {
-        "The server refused the key. Add the public key to ~/.ssh/authorized_keys of that user."
-    } else if e.contains("Host key verification failed") || e.contains("REMOTE HOST IDENTIFICATION HAS CHANGED") {
-        "The server's host key changed since Tessery pinned it. If you reinstalled the server, forget the host key and check again."
-    } else if e.contains("Connection refused") || e.contains("timed out") || e.contains("No route to host") || e.contains("Could not resolve") {
-        "Tessery could not reach the server. Check the address, the port and the firewall."
-    } else if e.contains("permission denied while trying to connect to the Docker daemon") || e.contains("docker.sock") {
-        "Connected, but this user may not run Docker. Add it to the docker group: sudo usermod -aG docker <user>."
-    } else if e.contains("command not found") || e.contains("docker: not found") {
-        "Connected, but Docker is not installed on the server. Install it with: curl -fsSL https://get.docker.com | sh"
-    } else {
-        ""
-    };
-    let last = e.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("the check failed").trim();
-    if hint.is_empty() { last.to_owned() } else { format!("{hint} ({last})") }
 }
 
 #[utoipa::path(post, path = "/api/orgs/{org}/servers/{server}/check", tag = "servers", params(("org" = Uuid, Path), ("server" = Uuid, Path)), responses((status = 200, body = ServerDto)))]
@@ -287,13 +278,13 @@ pub async fn check(State(state): State<AppState>, p: Principal, Path((org, id)):
     let creds = db::credentials(&state.db, org, id).await?;
     let pem = String::from_utf8(key(&state)?.decrypt(&creds.private_key).map_err(|e| ApiError::Internal(e.into()))?).map_err(|e| ApiError::Internal(e.into()))?;
     let host = Engine { url: Some(creds.address.clone()), ssh_key: Some(pem), known_hosts: Some(creds.known_hosts.clone()).filter(|k| !k.trim().is_empty()) };
-    let (result, pin) = match runtime::remote_script(&host, CHECK, &[], None, Duration::from_secs(120)).await {
+    let (result, pin) = match runtime::remote_script(&host, tessery_core::runner::SERVER_CHECK, &[], None, Duration::from_secs(120)).await {
         Ok(out) if out.ok => {
-            let mut v = parse_check(&out.stdout);
+            let mut v = tessery_core::runner::parse_check(&out.stdout);
             let known = v.as_object_mut().and_then(|o| o.remove("knownHosts")).and_then(|k| k.as_str().map(str::to_owned)).filter(|k| !k.is_empty());
             (v, known)
         }
-        Ok(out) => (json!({ "ok": false, "error": explain(&out.stderr) }), None),
+        Ok(out) => (json!({ "ok": false, "error": tessery_core::runner::explain_ssh(&out.stderr) }), None),
         Err(ApiError::Conflict(e)) => (json!({ "ok": false, "error": e }), None),
         Err(e) => return Err(e),
     };
@@ -302,6 +293,45 @@ pub async fn check(State(state): State<AppState>, p: Principal, Path((org, id)):
     let mut all = uses(&state, org, Some(&p)).await?;
     let u = used_by(&mut all, id);
     Ok(Json(ServerDto::new(s, u)))
+}
+
+#[derive(Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProvisionInput {
+    /// A connected Hetzner or DigitalOcean account.
+    pub integration_id: Uuid,
+    pub name: String,
+    pub region: String,
+    pub size: String,
+}
+
+/// Creates a machine at the provider and sets it up as a server: Docker, a `deploy` user with Tessery's key, and a firewall for SSH, HTTP and HTTPS.
+/// The provider bills the machine from now on. The server shows `creating`, then `configuring`, then `ready`.
+#[utoipa::path(post, path = "/api/orgs/{org}/servers/provision", tag = "servers", params(("org" = Uuid, Path)), request_body = ProvisionInput, responses((status = 201, body = ServerDto)))]
+pub async fn provision(State(state): State<AppState>, p: Principal, Path(org): Path<Uuid>, Json(req): Json<ProvisionInput>) -> ApiResult<(StatusCode, Json<ServerDto>)> {
+    let d = rbac::require(&state, &p, &org_target(org), P::ServerManage).await?;
+    check_input(Some(&req.name), None)?;
+    let name = req.name.trim();
+    let (provider, f) = crate::routes::integrations::fields(&state, org, req.integration_id).await?;
+    if !tessery_cloud::CAN_CREATE.contains(&provider.as_str()) {
+        return Err(ApiError::invalid("integrationId", "Tessery can create servers on Hetzner and DigitalOcean"));
+    }
+    let (pem, public) = generate_key(name)?;
+    let machine = tessery_cloud::NewMachine { name, region: req.region.trim(), size: req.size.trim(), public_key: &public };
+    let resource = tessery_cloud::create_machine(&provider, &f, &state.config.provider_apis, &machine).await.map_err(|e| ApiError::invalid("size", e))?;
+    let cipher = key(&state)?.encrypt(pem.as_bytes());
+    let new = db::NewMachineServer { org_id: org, name, private_key: &cipher, public_key: &public, integration_id: req.integration_id, provider: &provider, region: machine.region, size: machine.size, resource_id: &resource, created_by: p.user.id };
+    let created = db::create_machine(&state.db, new).await;
+    let s = match created {
+        Result::Ok(s) => s,
+        Err(e) => {
+            let _ = tessery_cloud::delete_machine(&provider, &f, &state.config.provider_apis, &resource).await;
+            return Err(e.into());
+        }
+    };
+    audit::record(&state.db, &p, Entry::new(Some(org), "server.provision", "server", s.id).decision(d).details(json!({ "name": name, "provider": provider, "region": machine.region, "size": machine.size, "machine": resource }))).await?;
+    state.mq.publish(tessery_mq::Job::ProvisionServer { server_id: s.id }).await.map_err(|e| ApiError::Internal(anyhow::anyhow!(e)))?;
+    Ok((StatusCode::CREATED, Json(ServerDto::new(s, Vec::new()))))
 }
 
 pub async fn connection_for(state: &AppState, project: Uuid, server: Uuid) -> ApiResult<tessery_mq::ServerConnection> {
@@ -333,12 +363,12 @@ mod tests {
 
     #[test]
     fn reads_a_check_and_explains_failures() {
-        let v = parse_check("{\"ServerVersion\":\"28.1\",\"NCPU\":2,\"MemTotal\":4096,\"Architecture\":\"x86_64\",\"OperatingSystem\":\"Ubuntu\"}\n::disk::\n/dev/sda1 40000000 10000000 30000000 25% /\n::known::\n[h]:22 ssh-ed25519 AAA\n");
+        let v = tessery_core::runner::parse_check("{\"ServerVersion\":\"28.1\",\"NCPU\":2,\"MemTotal\":4096,\"Architecture\":\"x86_64\",\"OperatingSystem\":\"Ubuntu\"}\n::disk::\n/dev/sda1 40000000 10000000 30000000 25% /\n::known::\n[h]:22 ssh-ed25519 AAA\n");
         assert_eq!(v["docker"], "28.1");
         assert_eq!(v["diskFreeBytes"], 30000000u64 * 1024);
         assert_eq!(v["knownHosts"], "[h]:22 ssh-ed25519 AAA");
-        assert!(CHECK.contains("disk=$(docker run"), "a failed disk probe fails the check");
-        assert!(explain("deploy@h: Permission denied (publickey).").starts_with("The server refused the key"));
+        assert!(tessery_core::runner::SERVER_CHECK.contains("disk=$(docker run"), "a failed disk probe fails the check");
+        assert!(tessery_core::runner::explain_ssh("deploy@h: Permission denied (publickey).").starts_with("The server refused the key"));
     }
 
     #[test]

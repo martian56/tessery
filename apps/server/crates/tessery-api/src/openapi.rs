@@ -12,7 +12,7 @@ use utoipa::OpenApi;
         access::list_bindings, access::create_binding, access::delete_binding,
         orgs::list, orgs::create, orgs::get, orgs::update, orgs::delete, orgs::list_members, orgs::add_member, orgs::remove_member,
         integrations::providers, integrations::list, integrations::create, integrations::update, integrations::check, integrations::delete,
-        servers::list, servers::create, servers::update, servers::delete, servers::check,
+        servers::list, servers::create, servers::provision, integrations::catalog, servers::update, servers::delete, servers::check,
         teams::list, teams::create, teams::get, teams::update, teams::delete, teams::add_member, teams::remove_member,
         projects::list, projects::create, projects::get, projects::save, projects::move_to_team, projects::delete, projects::versions, projects::version, projects::generated,
         delivery::list_checkpoints, delivery::create_checkpoint, delivery::checkpoint_doc, delivery::checkpoint_diff,

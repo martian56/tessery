@@ -86,12 +86,6 @@ async fn exec(program: &str, args: &[String], envs: &[(&str, &str)], stdin: Opti
     Ok(Output { ok: out.status.success(), stdout: String::from_utf8_lossy(&out.stdout).into_owned(), stderr: String::from_utf8_lossy(&out.stderr).into_owned() })
 }
 
-const SSH_SETUP: &str = concat!(
-    "mkdir -p ~/.ssh && echo \"$SSH_KEY_B64\" | base64 -d > ~/.ssh/id_tessery && chmod 600 ~/.ssh/id_tessery && ",
-    "if [ -n \"$KNOWN_B64\" ]; then echo \"$KNOWN_B64\" | base64 -d > ~/.ssh/known_hosts; c=yes; else c=accept-new; fi && ",
-    "printf 'Host *\\n  IdentityFile ~/.ssh/id_tessery\\n  IdentitiesOnly yes\\n  StrictHostKeyChecking %s\\n  ConnectTimeout 15\\n' $c > ~/.ssh/config && ",
-    "export DOCKER_HOST=\"$REMOTE_DOCKER_HOST\" && "
-);
 
 pub async fn ensure_runner() -> ApiResult<()> {
     let image = tessery_core::runner::image();
@@ -119,7 +113,7 @@ pub async fn remote_script(host: &Engine, script: &str, args: &[String], stdin: 
     ensure_runner().await?;
     let mut full: Vec<String> = ["run", "--rm", "-i", "-e", "SSH_KEY_B64", "-e", "KNOWN_B64", "-e", "REMOTE_DOCKER_HOST"].map(str::to_owned).to_vec();
     full.push(tessery_core::runner::image());
-    full.extend(["sh".to_owned(), "-c".to_owned(), format!("{SSH_SETUP}{script}"), "remote".to_owned()]);
+    full.extend(["sh".to_owned(), "-c".to_owned(), format!("{}{script}", tessery_core::runner::SSH_SETUP), "remote".to_owned()]);
     full.extend(args.iter().cloned());
     exec(&docker_bin(), &full, &[("SSH_KEY_B64", &key), ("KNOWN_B64", &known), ("REMOTE_DOCKER_HOST", &url)], stdin, timeout).await
 }

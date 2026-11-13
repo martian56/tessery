@@ -56,6 +56,8 @@ pub fn api() -> Router<AppState> {
         .route("/orgs/{org}/integrations/{integration}/check", post(integrations::check))
         .route("/orgs/{org}/servers/{server}", axum::routing::patch(servers::update).delete(servers::delete))
         .route("/orgs/{org}/servers/{server}/check", post(servers::check))
+        .route("/orgs/{org}/servers/provision", post(servers::provision))
+        .route("/orgs/{org}/integrations/{integration}/catalog", get(integrations::catalog))
         .route(
             "/orgs/{org}/teams/{team}",
             get(teams::get).patch(teams::update).delete(teams::delete),
