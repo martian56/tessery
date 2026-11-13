@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT smtp, smtp_password FROM instance_settings",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "smtp",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "instance_settings",
+            "name": "smtp"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "smtp_password",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "instance_settings",
+            "name": "smtp_password"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "edee2076dce04aff5cb4d0ce0a18c4466bb46da6679267c67213be3cb71ee742"
+}

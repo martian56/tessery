@@ -63,11 +63,11 @@ function AddMemberDialog({ org, open, onClose, roles }: { org: string; open: boo
     onClose()
   }
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()} title="Add member" description="Add an existing account by email, or create a new account with an initial password."
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()} title="Add member" description="Add an existing account by email, or create a new one. New people get an email to choose their password when email is set up; otherwise give them an initial password."
       footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={isLoading || !form.email.trim()} onClick={submit}>{isLoading ? 'Adding…' : 'Add member'}</Button></>}>
       <Field label="Email" wide><Input size="md" type="email" autoFocus value={form.email} onChange={set('email')} /></Field>
       <Field label="Name" wide hint="Only needed for a new account."><Input size="md" value={form.name} onChange={set('name')} /></Field>
-      <Field label="Initial password" wide hint="Only needed for a new account. At least 10 characters."><Input size="md" type="password" value={form.password} onChange={set('password')} /></Field>
+      <Field label="Initial password" wide hint="Only for a new account, and only when this instance cannot send email. At least 10 characters."><Input size="md" type="password" value={form.password} onChange={set('password')} /></Field>
       {roles.length > 0 && <Field label="Organization role" wide><Select value={form.role} onChange={set('role')} options={roles} /></Field>}
     </Dialog>
   )

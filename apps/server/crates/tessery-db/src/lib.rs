@@ -12,6 +12,7 @@ pub mod settings;
 pub mod teams;
 pub mod telemetry;
 pub mod tokens;
+pub mod tokens_password;
 pub mod types;
 pub mod users;
 

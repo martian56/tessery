@@ -211,7 +211,7 @@ pub struct AddMember {
     pub email: String,
     /// Required when the email does not belong to an existing account.
     pub name: Option<String>,
-    /// Initial password for a new account. Required when the account does not exist yet.
+    /// Initial password for a new account. Leave it out to email an invitation instead, when email is set up.
     pub password: Option<String>,
     /// Role granted at organization scope. Defaults to `viewer`.
     pub role: Option<String>,
@@ -222,6 +222,7 @@ pub async fn add_member(
     State(state): State<AppState>,
     p: Principal,
     Path(org): Path<Uuid>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<AddMember>,
 ) -> ApiResult<(StatusCode, Json<MemberDto>)> {
     let target = org_target(org);
@@ -239,17 +240,22 @@ pub async fn add_member(
     .await?;
 
     let existing = tessery_db::users::find_by_email(&state.db, &email).await?;
+    let mut invite = false;
     let new_hash = match (&existing, &req.password) {
         (Some(_), _) => None,
-        (None, Some(pw)) => {
+        (None, Some(pw)) if !pw.is_empty() => {
             password::validate(pw)?;
             Some(password::hash(pw.clone()).await?)
         }
-        (None, None) => {
-            return Err(ApiError::invalid(
-                "password",
-                "is required to create a new account",
-            ));
+        (None, _) => {
+            if crate::mail::settings(&state).await?.is_none() {
+                return Err(ApiError::invalid(
+                    "password",
+                    "is required to create a new account, or set up email to send an invitation",
+                ));
+            }
+            invite = true;
+            None
         }
     };
     let mut tx = state.db.begin().await.map_err(tessery_db::DbError::from)?;
@@ -292,6 +298,10 @@ pub async fn add_member(
     )
     .await?;
     tx.commit().await.map_err(tessery_db::DbError::from)?;
+    if invite {
+        let org_name = tessery_db::orgs::get(&state.db, org).await?.name;
+        crate::routes::email::send_invite(&state, &headers, user.id, &user.email, &org_name, &p.user.name).await?;
+    }
     Ok((
         StatusCode::CREATED,
         Json(MemberDto {

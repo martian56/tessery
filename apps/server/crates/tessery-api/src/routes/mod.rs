@@ -5,6 +5,7 @@ pub mod auth;
 pub mod backups;
 pub mod delivery;
 pub mod dto;
+pub mod email;
 pub mod git;
 pub mod integrations;
 pub mod mcp;
@@ -52,6 +53,11 @@ pub fn api() -> Router<AppState> {
         .route("/orgs/{org}/teams", get(teams::list).post(teams::create))
         .route("/orgs/{org}/servers", get(servers::list).post(servers::create))
         .route("/integrations/providers", get(integrations::providers))
+        .route("/admin/email", get(email::get_settings).put(email::put_settings))
+        .route("/admin/email/test", post(email::test))
+        .route("/auth/password/forgot", post(email::forgot))
+        .route("/auth/password/token", get(email::token_info))
+        .route("/auth/password/reset", post(email::reset))
         .route("/orgs/{org}/integrations", get(integrations::list).post(integrations::create))
         .route("/orgs/{org}/integrations/{integration}", axum::routing::patch(integrations::update).delete(integrations::delete))
         .route("/orgs/{org}/integrations/{integration}/check", post(integrations::check))
