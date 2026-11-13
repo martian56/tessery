@@ -162,7 +162,7 @@ fn stages(doc: &Value) -> Vec<Stage> {
         .unwrap_or_default()
 }
 
-fn env_target(project_target: &Target, env: &str) -> Target {
+pub(crate) fn env_target(project_target: &Target, env: &str) -> Target {
     match project_target {
         Target::Project { org, team, project } => Target::Environment { org: *org, team: *team, project: *project, env: env.to_owned() },
         t => t.clone(),

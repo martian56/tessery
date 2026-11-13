@@ -2,6 +2,7 @@ pub mod access;
 pub mod admin;
 pub mod audit_log;
 pub mod auth;
+pub mod backups;
 pub mod delivery;
 pub mod dto;
 pub mod git;
@@ -125,6 +126,8 @@ pub fn api() -> Router<AppState> {
         .route("/projects/{project}/environments/{env}/status", get(runtime::status))
         .route("/projects/{project}/environments/{env}/stop", post(delivery::stop_env))
         .route("/projects/{project}/environments/{env}/logs", get(runtime::logs))
+        .route("/projects/{project}/environments/{env}/backups", get(backups::list).post(backups::create))
+        .route("/backups/{backup}/restore", post(backups::restore))
         .route("/projects/{project}/environments/{env}/traces", get(telemetry::traces))
         .route("/projects/{project}/environments/{env}/traces/{trace}", get(telemetry::trace))
         .route("/otlp/{project}/{env}/v1/{signal}", post(telemetry::ingest))

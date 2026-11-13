@@ -1,4 +1,5 @@
 pub mod audit;
+pub mod backups;
 pub mod bindings;
 pub mod delivery;
 pub mod error;

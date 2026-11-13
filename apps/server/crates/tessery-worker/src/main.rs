@@ -1,3 +1,4 @@
+mod backups;
 mod deploy;
 mod dns;
 mod jobs;
@@ -38,12 +39,16 @@ async fn main() -> anyhow::Result<()> {
 
     let sweeper = {
         let db = db.clone();
+        let mq = mq.clone();
         tokio::spawn(async move {
             let mut tick = tokio::time::interval(Duration::from_secs(60));
             loop {
                 tick.tick().await;
                 if let Err(e) = jobs::sweep_expired_grants(&db).await {
                     tracing::error!(error = %e, "sweeping expired grants failed");
+                }
+                if let Err(e) = backups::schedule(&db, &mq).await {
+                    tracing::error!(error = %e, "scheduling backups failed");
                 }
             }
         })

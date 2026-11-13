@@ -27,6 +27,8 @@ pub enum Job {
     PushRemote { project_id: Uuid },
     Deploy { release_id: Uuid },
     ProvisionServer { server_id: Uuid },
+    Backup { backup_id: Uuid },
+    RestoreBackup { backup_id: Uuid },
     Teardown {
         project_id: Uuid,
         env: String,
@@ -50,6 +52,8 @@ impl Job {
             Job::PushRemote { project_id } => format!("push remote for {project_id}"),
             Job::Deploy { release_id } => format!("deploy release {release_id}"),
             Job::ProvisionServer { server_id } => format!("create server {server_id}"),
+            Job::Backup { backup_id } => format!("backup {backup_id}"),
+            Job::RestoreBackup { backup_id } => format!("restore backup {backup_id}"),
             Job::Teardown { project_id, env, destroy, .. } => format!("{} {env} of {project_id}", if *destroy { "destroy" } else { "stop" }),
         }
     }

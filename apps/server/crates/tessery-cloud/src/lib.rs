@@ -293,6 +293,103 @@ pub async fn r2_list_buckets(f: &Map<String, Value>, apis: &Endpoints) -> Result
     Ok(out)
 }
 
+#[derive(Debug, Clone)]
+pub struct S3 {
+    pub endpoint: String,
+    pub region: String,
+    pub access_key: String,
+    pub secret: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct S3Object {
+    pub key: String,
+    pub size: u64,
+}
+
+impl S3 {
+    pub fn r2(f: &Map<String, Value>, apis: &Endpoints) -> Option<S3> {
+        let s = |k: &str| f.get(k).and_then(Value::as_str).unwrap_or_default().to_owned();
+        if s("r2AccessKeyId").is_empty() || s("r2SecretAccessKey").is_empty() {
+            return None;
+        }
+        Some(S3 {
+            endpoint: endpoint(apis, "r2", &format!("https://{}.r2.cloudflarestorage.com", s("accountId"))),
+            region: "auto".into(),
+            access_key: s("r2AccessKeyId"),
+            secret: s("r2SecretAccessKey"),
+        })
+    }
+
+    fn signed(&self, method: reqwest::Method, path: &str, query: &str, body: &[u8]) -> reqwest::RequestBuilder {
+        let host = self.endpoint.trim_start_matches("https://").trim_start_matches("http://").trim_end_matches('/').to_owned();
+        let now = OffsetDateTime::now_utc();
+        let amz = format!("{:04}{:02}{:02}T{:02}{:02}{:02}Z", now.year(), now.month() as u8, now.day(), now.hour(), now.minute(), now.second());
+        let hash = hex::encode(Sha256::digest(body));
+        let headers = [("host", host.as_str()), ("x-amz-content-sha256", hash.as_str()), ("x-amz-date", amz.as_str())];
+        let auth = sigv4(&SigV4 { method: method.as_str(), path, query, headers: &headers, payload: body, region: &self.region, service: "s3", access_key: &self.access_key, secret: &self.secret, amz_date: &amz });
+        let url = format!("{}{path}{}", self.endpoint.trim_end_matches('/'), if query.is_empty() { String::new() } else { format!("?{query}") });
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(600))
+            .user_agent("tessery")
+            .build()
+            .expect("an HTTP client")
+            .request(method, url)
+            .header("x-amz-content-sha256", hash)
+            .header("x-amz-date", amz)
+            .header("authorization", auth)
+            .body(body.to_vec())
+    }
+
+    pub async fn ensure_bucket(&self, bucket: &str) -> Result<(), String> {
+        let path = format!("/{}", s3_encode(bucket));
+        let r = self.signed(reqwest::Method::HEAD, &path, "", b"").send().await.map_err(|e| format!("could not reach the bucket: {e}"))?;
+        if r.status().is_success() {
+            return Ok(());
+        }
+        send("object storage", self.signed(reqwest::Method::PUT, &path, "", b"")).await.map(drop)
+    }
+
+    pub async fn put(&self, bucket: &str, key: &str, body: &[u8]) -> Result<(), String> {
+        send("object storage", self.signed(reqwest::Method::PUT, &object_path(bucket, key), "", body)).await.map(drop)
+    }
+
+    pub async fn get(&self, bucket: &str, key: &str) -> Result<Vec<u8>, String> {
+        let r = self.signed(reqwest::Method::GET, &object_path(bucket, key), "", b"").send().await.map_err(|e| format!("could not reach object storage: {e}"))?;
+        let status = r.status();
+        let bytes = r.bytes().await.map_err(|e| e.to_string())?;
+        if status.is_success() { Ok(bytes.to_vec()) } else { Err(status_error("object storage", status, &String::from_utf8_lossy(&bytes))) }
+    }
+
+    pub async fn delete(&self, bucket: &str, key: &str) -> Result<(), String> {
+        send("object storage", self.signed(reqwest::Method::DELETE, &object_path(bucket, key), "", b"")).await.map(drop)
+    }
+
+    pub async fn list(&self, bucket: &str, prefix: &str) -> Result<Vec<S3Object>, String> {
+        let query = format!("list-type=2&prefix={}", s3_encode(prefix));
+        let body = send("object storage", self.signed(reqwest::Method::GET, &format!("/{}", s3_encode(bucket)), &query, b"")).await?;
+        let mut out = Vec::new();
+        let mut rest = body.as_str();
+        while let Some(start) = rest.find("<Contents>") {
+            let end = rest[start..].find("</Contents>").map_or(rest.len(), |i| start + i + 11);
+            let item = &rest[start..end];
+            if let Some(key) = between(item, "<Key>", "</Key>") {
+                out.push(S3Object { key, size: between(item, "<Size>", "</Size>").and_then(|s| s.parse().ok()).unwrap_or(0) });
+            }
+            rest = &rest[end..];
+        }
+        Ok(out)
+    }
+}
+
+pub fn s3_encode(v: &str) -> String {
+    v.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-._~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+}
+
+fn object_path(bucket: &str, key: &str) -> String {
+    format!("/{}/{}", s3_encode(bucket), key.split('/').map(s3_encode).collect::<Vec<_>>().join("/"))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DnsChange {
     Created,

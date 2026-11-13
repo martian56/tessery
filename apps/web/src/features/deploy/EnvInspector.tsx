@@ -6,6 +6,7 @@ import { PROVIDERS, PROVIDER_BY_ID } from '@tessery/core/catalog/providers'
 import { Badge, Button, Empty, Field, Input, NumberInput, Section, Select, Switch, useDialogs } from '@/ui'
 import ins from '@/features/design/Inspector.module.css'
 import { SecretsSection, TargetSection } from './EnvTarget'
+import { BackupsSection } from './BackupsSection'
 
 export function EnvInspector() {
   const dispatch = useAppDispatch()
@@ -33,6 +34,7 @@ export function EnvInspector() {
       </Section>
       <TargetSection doc={doc} env={env} />
       <SecretsSection doc={doc} env={env} />
+      <BackupsSection doc={doc} env={env} />
       <Section title="Overrides">
         {Object.keys(env.overrides).length ? Object.entries(env.overrides).map(([nid, o]) => <div key={nid} className={ins.link}><span>{doc.nodes.find((n) => n.id === nid)?.name}</span><Badge mono>{PROVIDER_BY_ID[o.providerId ?? '']?.name ?? '-'} · {o.mode}</Badge></div>) : <span className="muted">Every node uses its default placement.</span>}
       </Section>
