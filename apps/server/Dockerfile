@@ -1,4 +1,4 @@
-FROM node:22-trixie-slim AS web
+FROM node:22-trixie-slim@sha256:68c76cfad89921b927eae28ba21407475e29d0ce450afcdbe70c1532db042b64 AS web
 WORKDIR /repo
 COPY packages/core/package.json packages/core/package-lock.json packages/core/
 RUN cd packages/core && npm ci
@@ -10,7 +10,7 @@ ENV VITE_API_URL=/api
 RUN cd packages/core && npm run build:engine \
     && cd ../../apps/web && npm run build
 
-FROM rust:1.99.1-slim-trixie AS rust
+FROM rust:1.99.1-slim-trixie@sha256:f6c4a35d21dbb3c89d7a8d056c193e94fc09037f2b58dd858b09c39a47dd02d7 AS rust
 RUN apt-get update && apt-get install -y --no-install-recommends pkg-config cmake build-essential && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 ENV SQLX_OFFLINE=true CARGO_TERM_COLOR=never
@@ -20,9 +20,9 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release --locked --bin tessery-server --bin tessery-worker \
     && cp target/release/tessery-server target/release/tessery-worker /usr/local/bin/
 
-FROM docker:28-cli AS docker
+FROM docker:28-cli@sha256:625d9431a9f54c5a2bc90f24f0e1c3d55b1349fd857dd85035f98c2c9acbdd4d AS docker
 
-FROM debian:trixie-slim AS runtime
+FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --no-create-home tessery \
     && mkdir -p /var/lib/tessery && chown tessery /var/lib/tessery
