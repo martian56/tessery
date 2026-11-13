@@ -71,6 +71,17 @@ pub const PROVIDERS: &[ProviderSpec] = &[
             field("subscriptionId", "Subscription ID", false, "00000000-0000-0000-0000-000000000000"),
         ],
     },
+    ProviderSpec {
+        id: "cloudflare",
+        name: "Cloudflare",
+        help: "In the Cloudflare dashboard, open Manage Account, Account API Tokens, and create a token with DNS edit on your zones. Add Tunnel, R2 and Access edit to use those features. The R2 keys are optional and come from R2, Manage API tokens.",
+        fields: &[
+            field("accountId", "Account ID", false, "49a99400cf3d841e0c19e70c629ef483"),
+            field("token", "API token", true, ""),
+            FieldSpec { key: "r2AccessKeyId", label: "R2 access key ID", secret: false, multiline: false, optional: true, placeholder: "for backups to R2" },
+            FieldSpec { key: "r2SecretAccessKey", label: "R2 secret access key", secret: true, multiline: false, optional: true, placeholder: "" },
+        ],
+    },
 ];
 
 pub fn provider(id: &str) -> Option<&'static ProviderSpec> {
@@ -105,6 +116,7 @@ pub fn summary(provider: &str, f: &Map<String, Value>) -> Value {
     match provider {
         "aws" => json!({ "accessKeyId": mask(s("accessKeyId")), "region": f.get("region").and_then(Value::as_str).unwrap_or("us-east-1") }),
         "azure" => json!({ "tenantId": s("tenantId"), "clientId": s("clientId"), "subscriptionId": s("subscriptionId") }),
+        "cloudflare" => json!({ "accountId": s("accountId"), "token": mask(s("token")), "r2": if s("r2AccessKeyId").is_empty() { Value::Null } else { Value::String(mask(s("r2AccessKeyId"))) } }),
         "gcp" => serde_json::from_str::<Value>(s("serviceAccount")).map(|j| json!({ "clientEmail": j["client_email"], "projectId": j["project_id"] })).unwrap_or(json!({})),
         _ => json!({ "token": mask(s("token")) }),
     }
@@ -113,7 +125,7 @@ pub fn summary(provider: &str, f: &Map<String, Value>) -> Value {
 pub type Endpoints = std::collections::BTreeMap<String, String>;
 
 pub fn endpoints_from_env() -> Endpoints {
-    ["hetzner", "digitalocean", "aws", "azure", "azure_login"]
+    ["hetzner", "digitalocean", "aws", "azure", "azure_login", "cloudflare", "r2"]
         .iter()
         .filter_map(|p| std::env::var(format!("TESSERY_{}_API", p.to_uppercase())).ok().map(|v| ((*p).to_owned(), v)))
         .collect()
@@ -130,7 +142,7 @@ fn client() -> reqwest::Client {
 fn status_error(name: &str, status: reqwest::StatusCode, body: &str) -> String {
     let detail: String = serde_json::from_str::<Value>(body)
         .ok()
-        .and_then(|v| v.pointer("/error/message").or(v.get("message")).or(v.get("error_description")).and_then(Value::as_str).map(str::to_owned))
+        .and_then(|v| v.pointer("/error/message").or(v.pointer("/errors/0/message")).or(v.get("message")).or(v.get("error_description")).and_then(Value::as_str).map(str::to_owned))
         .or_else(|| between(body, "<Message>", "</Message>"))
         .unwrap_or_else(|| status.canonical_reason().unwrap_or("error").to_owned());
     match status.as_u16() {
@@ -208,8 +220,73 @@ pub async fn verify(provider: &str, f: &Map<String, Value>, apis: &Endpoints) ->
             let v: Value = serde_json::from_str(&sub).unwrap_or_default();
             Ok(v["displayName"].as_str().map_or_else(|| format!("subscription {}", s("subscriptionId")), str::to_owned))
         }
+        "cloudflare" => {
+            let zones = cloudflare_zones(f, apis).await?;
+            let mut out = match zones.len() {
+                0 => "no zones yet".to_owned(),
+                n => format!("{n} zone{}: {}", if n == 1 { "" } else { "s" }, zones.iter().map(|z| z.name.as_str()).collect::<Vec<_>>().join(", ")),
+            };
+            if !s("r2AccessKeyId").is_empty() {
+                r2_list_buckets(f, apis).await?;
+                out.push_str(", R2 ready");
+            }
+            Ok(out)
+        }
         other => Err(format!("unknown provider {other}")),
     }
+}
+
+#[derive(Serialize, ToSchema, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Zone {
+    pub id: String,
+    pub name: String,
+}
+
+fn cloudflare_base(apis: &Endpoints) -> String {
+    endpoint(apis, "cloudflare", "https://api.cloudflare.com/client/v4")
+}
+
+pub async fn cloudflare_zones(f: &Map<String, Value>, apis: &Endpoints) -> Result<Vec<Zone>, String> {
+    let s = |k: &str| f.get(k).and_then(Value::as_str).unwrap_or_default().to_owned();
+    let http = client();
+    let base = cloudflare_base(apis);
+    let account = s("accountId");
+    if send("Cloudflare", http.get(format!("{base}/accounts/{account}/tokens/verify")).bearer_auth(s("token"))).await.is_err() {
+        send("Cloudflare", http.get(format!("{base}/user/tokens/verify")).bearer_auth(s("token"))).await?;
+    }
+    let body = send("Cloudflare", http.get(format!("{base}/zones?account.id={account}&per_page=50")).bearer_auth(s("token"))).await?;
+    let v: Value = serde_json::from_str(&body).unwrap_or_default();
+    Ok(v["result"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|z| Some(Zone { id: z["id"].as_str()?.to_owned(), name: z["name"].as_str()?.to_owned() }))
+        .collect())
+}
+
+pub fn zone_for<'a>(zones: &'a [Zone], domain: &str) -> Option<&'a Zone> {
+    let d = domain.trim_end_matches('.').to_lowercase();
+    zones.iter().filter(|z| d == z.name || d.ends_with(&format!(".{}", z.name))).max_by_key(|z| z.name.len())
+}
+
+pub async fn r2_list_buckets(f: &Map<String, Value>, apis: &Endpoints) -> Result<Vec<String>, String> {
+    let s = |k: &str| f.get(k).and_then(Value::as_str).unwrap_or_default().to_owned();
+    let base = endpoint(apis, "r2", &format!("https://{}.r2.cloudflarestorage.com", s("accountId")));
+    let host = base.trim_start_matches("https://").trim_start_matches("http://").trim_end_matches('/').to_owned();
+    let now = OffsetDateTime::now_utc();
+    let amz = format!("{:04}{:02}{:02}T{:02}{:02}{:02}Z", now.year(), now.month() as u8, now.day(), now.hour(), now.minute(), now.second());
+    let empty = hex::encode(Sha256::digest(b""));
+    let headers = [("host", host.as_str()), ("x-amz-content-sha256", empty.as_str()), ("x-amz-date", amz.as_str())];
+    let auth = sigv4(&SigV4 { method: "GET", path: "/", query: "", headers: &headers, payload: b"", region: "auto", service: "s3", access_key: &s("r2AccessKeyId"), secret: &s("r2SecretAccessKey"), amz_date: &amz });
+    let body = send("Cloudflare R2", client().get(format!("{base}/")).header("x-amz-content-sha256", &empty).header("x-amz-date", &amz).header("authorization", auth)).await?;
+    let mut out = Vec::new();
+    let mut rest = body.as_str();
+    while let Some(name) = between(rest, "<Name>", "</Name>") {
+        rest = &rest[rest.find("</Name>").map_or(rest.len(), |i| i + 7)..];
+        out.push(name);
+    }
+    Ok(out)
 }
 
 pub struct SigV4<'a> {
@@ -546,6 +623,14 @@ mod tests {
         assert_eq!(h.sizes[0].regions, ["fsn1"]);
         assert_eq!(h.sizes[0].currency, "EUR");
         assert_eq!(h.sizes[0].region_prices[0].region, "fsn1");
+    }
+
+    #[test]
+    fn picks_the_closest_cloudflare_zone() {
+        let zones = vec![Zone { id: "a".into(), name: "fermohost.dev".into() }, Zone { id: "b".into(), name: "lab.fermohost.dev".into() }];
+        assert_eq!(zone_for(&zones, "web.lab.fermohost.dev").unwrap().id, "b");
+        assert_eq!(zone_for(&zones, "fermohost.dev").unwrap().id, "a");
+        assert!(zone_for(&zones, "notfermohost.dev").is_none());
     }
 
     #[test]
