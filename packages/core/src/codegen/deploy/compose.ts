@@ -77,7 +77,12 @@ export function envCompose(doc: ProjectDoc, env: Environment): string {
       extra_hosts: w.role === 'app' && !(env.target?.kind === 'docker' && env.target.host) ? ['host.docker.internal:host-gateway'] : undefined,
       ports: !host && w.public && w.port ? [publishedPorts(hostPort(doc, env.id, w.name), replicas, w.port)] : undefined,
       networks: host ? ['default', 'proxy'] : undefined,
-      labels: host ? { caddy: host, 'caddy.reverse_proxy': `{{upstreams ${w.port}}}`, 'caddy.encode': 'zstd gzip' } : undefined,
+      labels: host ? {
+        caddy: host,
+        'caddy.reverse_proxy': `{{upstreams ${w.port}}}`,
+        'caddy.reverse_proxy.lb_try_duration': '5s',
+        'caddy.encode': 'zstd gzip',
+      } : undefined,
       volumes: w.volume ? [`${w.name}-data:${w.volume}`] : undefined,
       healthcheck: healthcheck(w),
       depends_on: dependsOn(doc, w, all.filter((x) => !x.schedule)),

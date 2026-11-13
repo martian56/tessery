@@ -19,6 +19,7 @@ export interface DeployPlan {
   rollout: { kind: 'deployment' | 'statefulset'; name: string }[]
   checks: { name: string; port: number; path: string }[]
   autoRollback: boolean
+  strategy: Environment['strategy']
 }
 
 export const targetOf = (env: Environment): DeployTarget => env.target ?? { kind: 'git' }
@@ -54,6 +55,7 @@ export function plan(doc: ProjectDoc, env: Environment): DeployPlan {
     rollout: all.filter((w) => !w.schedule).map((w) => ({ kind: w.role === 'data' ? 'statefulset' : 'deployment', name: w.name })),
     checks: all.filter((w) => w.httpHealth && w.port && !w.schedule).map((w) => ({ name: w.name, port: w.port!, path: w.httpHealth! })),
     autoRollback: env.autoRollback,
+    strategy: env.strategy,
   }
 }
 
