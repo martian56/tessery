@@ -403,19 +403,22 @@ pub async fn capabilities(provider: &str, f: &Map<String, Value>, apis: &Endpoin
             let base = cloudflare_base(apis);
             let account = s("accountId");
             let token = s("token");
-            let zone = cloudflare_zones(f, apis).await.ok().and_then(|z| z.into_iter().next());
+            let zones = cloudflare_zones(f, apis).await.unwrap_or_default();
             let zone_probe = |path: String, body: Value, patch: bool| {
                 let req = if patch { http.patch(path) } else { http.post(path) };
                 probe(req.bearer_auth(&token).json(&body))
             };
-            let (dns, settings) = match &zone {
-                Some(z) => futures_util::join!(
+            let per_zone = futures_util::future::join_all(zones.iter().take(25).map(|z| async {
+                futures_util::join!(
                     zone_probe(format!("{base}/zones/{}/dns_records", z.id), json!({ "type": "A", "name": "tessery-permission-check", "content": "not-an-address" }), false),
                     zone_probe(format!("{base}/zones/{}/settings/ssl", z.id), json!({ "value": "not-a-mode" }), true),
-                ),
-                None => (None, None),
-            };
-            let has_r2_keys = !s("r2AccessKeyId").is_empty();
+                )
+            }))
+            .await;
+            let any = |results: Vec<Option<bool>>| if results.contains(&Some(true)) { Some(true) } else if !results.is_empty() && results.iter().all(|r| *r == Some(false)) { Some(false) } else { None };
+            let dns = any(per_zone.iter().map(|(d, _)| *d).collect());
+            let settings = any(per_zone.iter().map(|(_, z)| *z).collect());
+            let has_r2_keys = !s("r2AccessKeyId").is_empty() && !s("r2SecretAccessKey").is_empty();
             let (tunnel, access, r2) = futures_util::join!(
                 probe(http.post(format!("{base}/accounts/{account}/cfd_tunnel")).bearer_auth(&token).json(&json!({}))),
                 probe(http.post(format!("{base}/accounts/{account}/access/apps")).bearer_auth(&token).json(&json!({}))),
@@ -656,7 +659,7 @@ pub async fn create_machine(provider: &str, f: &Map<String, Value>, apis: &Endpo
     match provider {
         "digitalocean" => {
             let base = endpoint(apis, "digitalocean", "https://api.digitalocean.com/v2");
-            let body = json!({ "name": name, "region": m.region, "size": m.size, "image": "ubuntu-24-04-x64", "user_data": user_data, "tags": ["tessery"] });
+            let body = json!({ "name": name, "region": m.region, "size": m.size, "image": "ubuntu-24-04-x64", "user_data": user_data });
             let r = send("DigitalOcean", http.post(format!("{base}/droplets")).bearer_auth(token(f)).json(&body)).await?;
             json(&r).pointer("/droplet/id").map(|id| id.to_string()).ok_or_else(|| "DigitalOcean did not return the new Droplet".into())
         }
