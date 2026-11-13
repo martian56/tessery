@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE servers SET last_check = $5, checked_at = now(),\n             known_hosts = CASE WHEN known_hosts = '' AND $6::text IS NOT NULL THEN $6 ELSE known_hosts END\n           WHERE id = $1 AND address = $2 AND private_key = $3 AND known_hosts = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Text",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "95794496e1dfe960b47e67a5a270d192c901d3b621e07f6975b4d6c2399b5138"
+}

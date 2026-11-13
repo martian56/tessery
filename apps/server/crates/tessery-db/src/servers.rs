@@ -113,9 +113,21 @@ pub async fn update(ex: impl PgExecutor<'_>, org: Uuid, id: Uuid, u: ServerUpdat
     .or_not_found()
 }
 
-pub async fn record_check(ex: impl PgExecutor<'_>, id: Uuid, check: &serde_json::Value) -> DbResult<()> {
-    sqlx::query!("UPDATE servers SET last_check = $2, checked_at = now() WHERE id = $1", id, check).execute(ex).await?;
-    Ok(())
+pub async fn record_check(ex: impl PgExecutor<'_>, id: Uuid, used: &Credentials, check: &serde_json::Value, pin: Option<&str>) -> DbResult<bool> {
+    let r = sqlx::query!(
+        r#"UPDATE servers SET last_check = $5, checked_at = now(),
+             known_hosts = CASE WHEN known_hosts = '' AND $6::text IS NOT NULL THEN $6 ELSE known_hosts END
+           WHERE id = $1 AND address = $2 AND private_key = $3 AND known_hosts = $4"#,
+        id,
+        used.address,
+        used.private_key,
+        used.known_hosts,
+        check,
+        pin
+    )
+    .execute(ex)
+    .await?;
+    Ok(r.rows_affected() == 1)
 }
 
 pub async fn delete(ex: impl PgExecutor<'_>, org: Uuid, id: Uuid) -> DbResult<()> {

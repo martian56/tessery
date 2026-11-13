@@ -63,12 +63,33 @@ impl ServerDto {
     }
 }
 
-async fn uses(state: &AppState, org: Uuid) -> ApiResult<Vec<(Uuid, ServerUse)>> {
+async fn uses(state: &AppState, org: Uuid, viewer: Option<&Principal>) -> ApiResult<Vec<(Uuid, ServerUse)>> {
     let mut out = Vec::new();
     for p in db::project_docs(&state.db, org).await? {
+        if let Some(viewer) = viewer
+            && !rbac::can(state, viewer, &rbac::project_target(state, p.id).await?, P::ProjectRead).await?
+        {
+            continue;
+        }
         for env in p.doc["environments"].as_array().into_iter().flatten() {
             let Some(server) = env.pointer("/target/server").and_then(Value::as_str).and_then(|s| s.parse::<Uuid>().ok()) else { continue };
             out.push((server, ServerUse { project_id: p.id, project: p.name.clone(), env: env["name"].as_str().or(env["id"].as_str()).unwrap_or_default().to_owned() }));
+        }
+    }
+    Ok(out)
+}
+
+async fn running_on(state: &AppState, org: Uuid, server: Uuid) -> ApiResult<Vec<String>> {
+    let mut out = Vec::new();
+    for p in db::project_docs(&state.db, org).await? {
+        let Ok(repo) = state.repos.open(p.id).await else { continue };
+        for head in tessery_db::delivery::heads(&state.db, p.id).await? {
+            let checkpoint = tessery_db::delivery::get_checkpoint(&state.db, p.id, head.checkpoint_id).await?;
+            let Ok(raw) = repo.read_file(&checkpoint.commit_sha, &format!("deploy/{}/plan.json", head.env_key)).await else { continue };
+            let plan: Value = serde_json::from_slice(&raw).unwrap_or_default();
+            if plan.pointer("/target/server").and_then(Value::as_str) == Some(server.to_string().as_str()) {
+                out.push(format!("{} / {}", p.name, head.env_key));
+            }
         }
     }
     Ok(out)
@@ -121,7 +142,7 @@ fn parse_key(pem: &str) -> ApiResult<String> {
 #[utoipa::path(get, path = "/api/orgs/{org}/servers", tag = "servers", params(("org" = Uuid, Path)), responses((status = 200, body = [ServerDto])))]
 pub async fn list(State(state): State<AppState>, p: Principal, Path(org): Path<Uuid>) -> ApiResult<Json<Vec<ServerDto>>> {
     rbac::require(&state, &p, &org_target(org), P::ServerRead).await?;
-    let mut all = uses(&state, org).await?;
+    let mut all = uses(&state, org, Some(&p)).await?;
     Ok(Json(db::list(&state.db, org).await?.into_iter().map(|s| { let u = used_by(&mut all, s.id); ServerDto::new(s, u) }).collect()))
 }
 
@@ -189,7 +210,7 @@ pub async fn update(State(state): State<AppState>, p: Principal, Path((org, id))
     }).await?;
     audit::record(&mut *tx, &p, Entry::new(Some(org), "server.update", "server", id).decision(d).details(json!({ "name": s.name, "address": s.address, "newKey": new_key.is_some(), "forgetHostKey": req.forget_host_key }))).await?;
     tx.commit().await.map_err(|e| ApiError::Internal(e.into()))?;
-    let mut all = uses(&state, org).await?;
+    let mut all = uses(&state, org, Some(&p)).await?;
     let u = used_by(&mut all, id);
     Ok(Json(ServerDto::new(s, u)))
 }
@@ -197,11 +218,15 @@ pub async fn update(State(state): State<AppState>, p: Principal, Path((org, id))
 #[utoipa::path(delete, path = "/api/orgs/{org}/servers/{server}", tag = "servers", params(("org" = Uuid, Path), ("server" = Uuid, Path)), responses((status = 200, body = Ok), (status = 409)))]
 pub async fn delete(State(state): State<AppState>, p: Principal, Path((org, id)): Path<(Uuid, Uuid)>) -> ApiResult<Json<Ok>> {
     let d = rbac::require(&state, &p, &org_target(org), P::ServerManage).await?;
-    let mut all = uses(&state, org).await?;
+    let mut all = uses(&state, org, None).await?;
     let u = used_by(&mut all, id);
     if !u.is_empty() {
         let list: Vec<String> = u.iter().map(|x| format!("{} / {}", x.project, x.env)).collect();
         return Err(ApiError::Conflict(format!("these environments still deploy to this server: {}", list.join(", "))));
+    }
+    let running = running_on(&state, org, id).await?;
+    if !running.is_empty() {
+        return Err(ApiError::Conflict(format!("these environments still run on this server; stop them first: {}", running.join(", "))));
     }
     let mut tx = state.db.begin().await.map_err(|e| ApiError::Internal(e.into()))?;
     let s = db::get(&mut *tx, org, id).await?;
@@ -214,7 +239,8 @@ pub async fn delete(State(state): State<AppState>, p: Principal, Path((org, id))
 const CHECK: &str = r#"set -e
 docker info --format '{{json .}}'
 echo '::disk::'
-docker run --rm busybox:1.37 df -Pk / | tail -n 1
+disk=$(docker run --rm busybox:1.37 df -Pk /)
+echo "$disk" | tail -n 1
 echo '::known::'
 cat ~/.ssh/known_hosts 2>/dev/null || true"#;
 
@@ -261,25 +287,27 @@ pub async fn check(State(state): State<AppState>, p: Principal, Path((org, id)):
     let creds = db::credentials(&state.db, org, id).await?;
     let pem = String::from_utf8(key(&state)?.decrypt(&creds.private_key).map_err(|e| ApiError::Internal(e.into()))?).map_err(|e| ApiError::Internal(e.into()))?;
     let host = Engine { url: Some(creds.address.clone()), ssh_key: Some(pem), known_hosts: Some(creds.known_hosts.clone()).filter(|k| !k.trim().is_empty()) };
-    let result = match runtime::remote_script(&host, CHECK, &[], None, Duration::from_secs(120)).await {
+    let (result, pin) = match runtime::remote_script(&host, CHECK, &[], None, Duration::from_secs(120)).await {
         Ok(out) if out.ok => {
             let mut v = parse_check(&out.stdout);
-            let known = v["knownHosts"].as_str().unwrap_or_default().to_owned();
-            if creds.known_hosts.trim().is_empty() && !known.is_empty() {
-                db::update(&state.db, org, id, ServerUpdate { name: None, address: None, private_key: None, public_key: None, known_hosts: Some(&known) }).await?;
-            }
-            v.as_object_mut().map(|o| o.remove("knownHosts"));
-            v
+            let known = v.as_object_mut().and_then(|o| o.remove("knownHosts")).and_then(|k| k.as_str().map(str::to_owned)).filter(|k| !k.is_empty());
+            (v, known)
         }
-        Ok(out) => json!({ "ok": false, "error": explain(&out.stderr) }),
-        Err(ApiError::Conflict(e)) => json!({ "ok": false, "error": e }),
+        Ok(out) => (json!({ "ok": false, "error": explain(&out.stderr) }), None),
+        Err(ApiError::Conflict(e)) => (json!({ "ok": false, "error": e }), None),
         Err(e) => return Err(e),
     };
-    db::record_check(&state.db, id, &result).await?;
+    db::record_check(&state.db, id, &creds, &result, pin.as_deref()).await?;
     let s = db::get(&state.db, org, id).await?;
-    let mut all = uses(&state, org).await?;
+    let mut all = uses(&state, org, Some(&p)).await?;
     let u = used_by(&mut all, id);
     Ok(Json(ServerDto::new(s, u)))
+}
+
+pub async fn connection_for(state: &AppState, project: Uuid, server: Uuid) -> ApiResult<tessery_mq::ServerConnection> {
+    let org = db::org_of_project(&state.db, project).await?;
+    let c = db::credentials(&state.db, org, server).await.map_err(|_| ApiError::Conflict("the server this environment runs on was removed".into()))?;
+    Ok(tessery_mq::ServerConnection { address: c.address, private_key: c.private_key, known_hosts: c.known_hosts })
 }
 
 pub async fn engine_for(state: &AppState, project: Uuid, server: Uuid) -> ApiResult<Engine> {
@@ -309,6 +337,7 @@ mod tests {
         assert_eq!(v["docker"], "28.1");
         assert_eq!(v["diskFreeBytes"], 30000000u64 * 1024);
         assert_eq!(v["knownHosts"], "[h]:22 ssh-ed25519 AAA");
+        assert!(CHECK.contains("disk=$(docker run"), "a failed disk probe fails the check");
         assert!(explain("deploy@h: Permission denied (publickey).").starts_with("The server refused the key"));
     }
 

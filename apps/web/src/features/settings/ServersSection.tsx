@@ -13,7 +13,7 @@ const gb = (bytes?: unknown) => (typeof bytes === 'number' ? `${(bytes / 1024 **
 interface Check { ok: boolean; error?: string; docker?: string; os?: string; arch?: string; cpus?: number; memoryBytes?: number; diskFreeBytes?: number; diskTotalBytes?: number }
 
 export function ServersSection({ org, perms }: { org: string; perms: Perms }) {
-  const { data: servers, isLoading } = useListServersQuery(org)
+  const { data: servers, isLoading, error, refetch } = useListServersQuery(org)
   const [adding, setAdding] = useState(false)
   const canManage = perms.can('server:manage')
 
@@ -21,7 +21,13 @@ export function ServersSection({ org, perms }: { org: string; perms: Perms }) {
     <>
       <PageTitle title="Servers" description="Machines with Docker that environments deploy to over SSH, such as a VPS. Add one here, then pick it in an environment's Deploys to settings."
         actions={canManage && <Button variant="primary" icon={<Plus />} onClick={() => setAdding(true)}>Add server</Button>} />
-      {!isLoading && !servers?.length && (
+      {error && !servers && (
+        <Card>
+          <div className={s.serverError}>Could not load servers: {errorMessage(error)}</div>
+          <div><Button size="sm" icon={<RefreshCw />} onClick={() => refetch()}>Try again</Button></div>
+        </Card>
+      )}
+      {!isLoading && servers && !servers.length && (
         <Card>
           <div className={muted}>No servers yet. Environments can still run on the Docker engine Tessery itself uses.</div>
         </Card>

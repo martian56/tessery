@@ -12,6 +12,13 @@ use uuid::Uuid;
 pub const JOBS_QUEUE: &str = "tessery.jobs";
 pub const DEAD_LETTER_QUEUE: &str = "tessery.jobs.dead";
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ServerConnection {
+    pub address: String,
+    pub private_key: Vec<u8>,
+    pub known_hosts: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Job {
@@ -26,6 +33,8 @@ pub enum Job {
         kubeconfig: Option<Vec<u8>>,
         #[serde(default)]
         connection: Vec<(String, Vec<u8>)>,
+        #[serde(default)]
+        server: Option<ServerConnection>,
         destroy: bool,
     },
 }

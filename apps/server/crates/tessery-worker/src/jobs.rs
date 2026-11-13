@@ -22,11 +22,11 @@ pub async fn run(ctx: &Ctx, job: Job) -> Result<()> {
         Job::SweepExpiredGrants => sweep_expired_grants(&ctx.db).await,
         Job::PushRemote { project_id } => push_remote(ctx, project_id).await,
         Job::Deploy { release_id } => crate::deploy::deploy(ctx, release_id).await,
-        Job::Teardown { project_id, env, plan, kubeconfig, mut connection, destroy } => {
+        Job::Teardown { project_id, env, plan, kubeconfig, mut connection, server, destroy } => {
             if let Some(k) = kubeconfig {
                 connection.push(("KUBECONFIG".into(), k));
             }
-            let r = crate::deploy::teardown(ctx, project_id, &env, &plan, &connection, destroy).await;
+            let r = crate::deploy::teardown(ctx, project_id, &env, &plan, &connection, server.as_ref(), destroy).await;
             match &r {
                 Ok(()) => tracing::info!(%project_id, env, destroy, "environment torn down"),
                 Err(e) => tracing::warn!(%project_id, env, error = %e, "teardown failed"),
