@@ -233,3 +233,12 @@ test('removing the last table still drops it and keeps the history', () => {
   assert.match(next.migrations[1].sql, /DROP TABLE orders;/)
   assert.ok(next.migrations[1].destructive.length)
 })
+
+test('public nodes with several replicas and no domain still get host ports', () => {
+  const doc = tasksTemplate()
+  const env = { ...doc.environments[0], scale: 2, target: { kind: 'docker' as const } }
+  const web = workloads(doc, env).find((w) => w.public && w.port && !w.schedule)!
+  const compose = envCompose(doc, env)
+  const port = plan(doc, env).endpoints.find((e) => e.name === web.name)!.url.split(':').pop()
+  assert.ok(compose.includes(`"${port}-${Number(port) + 1}:${web.port}"`), 'each replica takes a port from a small range starting at the endpoint port')
+})
