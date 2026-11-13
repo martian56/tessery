@@ -1,4 +1,5 @@
 mod deploy;
+mod dns;
 mod jobs;
 mod provision;
 

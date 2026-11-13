@@ -36,6 +36,8 @@ pub enum Job {
         connection: Vec<(String, Vec<u8>)>,
         #[serde(default)]
         server: Option<ServerConnection>,
+        #[serde(default)]
+        org_id: Option<Uuid>,
         destroy: bool,
     },
 }
