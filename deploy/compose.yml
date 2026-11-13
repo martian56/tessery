@@ -1,0 +1,94 @@
+name: tessery
+
+x-app: &app
+  restart: unless-stopped
+  environment: &appenv
+    TESSERY_DATABASE_URL: postgres://tessery:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/tessery
+    TESSERY_REDIS_URL: redis://redis:6379
+    TESSERY_AMQP_URL: amqp://tessery:${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env}@rabbitmq:5672/%2f
+    TESSERY_BIND: 0.0.0.0:8080
+    TESSERY_SECRET_KEY: ${TESSERY_SECRET_KEY:?set TESSERY_SECRET_KEY in .env}
+    TESSERY_PUBLIC_URL: https://${TESSERY_DOMAIN:?set TESSERY_DOMAIN in .env}
+    TESSERY_TELEMETRY_URL: https://${TESSERY_DOMAIN}
+    TESSERY_COOKIE_SECURE: "true"
+    TESSERY_TRUST_PROXY: "true"
+    TESSERY_COMPOSE_DIR: ${TESSERY_COMPOSE_DIR:-}
+    RUST_LOG: ${RUST_LOG:-info}
+  volumes:
+    - tesserydata:/var/lib/tessery
+    - /var/run/docker.sock:/var/run/docker.sock
+  group_add: ["${DOCKER_GID:-0}"]
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    rabbitmq: { condition: service_healthy }
+
+services:
+  server:
+    <<: *app
+    image: ghcr.io/martian56/tessery-server:${TESSERY_IMAGE_TAG:-latest}
+
+  worker:
+    <<: *app
+    image: ghcr.io/martian56/tessery-worker:${TESSERY_IMAGE_TAG:-latest}
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      TESSERY_DOMAIN: ${TESSERY_DOMAIN}
+    ports:
+      - "${TESSERY_HTTP_PORT:-80}:80"
+      - "${TESSERY_HTTPS_PORT:-443}:443"
+      - "${TESSERY_HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on: [server]
+
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tessery
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: tessery
+    volumes: ["pgdata:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tessery -d tessery"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redisdata:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: tessery
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes: ["mqdata:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+  mqdata: {}
+  tesserydata: {}
+  caddydata: {}
+  caddyconfig: {}
