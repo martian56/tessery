@@ -19,3 +19,5 @@
 .providerDot { width: 10px; height: 10px; border-radius: 50%; }
 .spin { animation: settings-spin 1s linear infinite; vertical-align: -1px; }
 @keyframes settings-spin { to { transform: rotate(360deg); } }
+.capabilities { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--sp-2) var(--sp-5); font-size: var(--fs-11); }
+.capability { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); }

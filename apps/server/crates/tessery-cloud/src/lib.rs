@@ -361,6 +361,87 @@ pub fn dns_names(plan: &Value) -> Vec<String> {
     out
 }
 
+#[derive(Serialize, ToSchema, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Capability {
+    pub key: &'static str,
+    pub label: &'static str,
+    /// `true` when allowed, `false` when the provider refused, `null` when it could not be told.
+    pub allowed: Option<bool>,
+    /// What to add to the credential when it is not allowed.
+    pub needs: &'static str,
+}
+
+fn judge(status: reqwest::StatusCode) -> Option<bool> {
+    match status.as_u16() {
+        401 | 403 => Some(false),
+        200..=299 | 400 | 409 | 422 => Some(true),
+        _ => None,
+    }
+}
+
+async fn probe(req: reqwest::RequestBuilder) -> Option<bool> {
+    req.timeout(Duration::from_secs(10)).send().await.ok().and_then(|r| judge(r.status()))
+}
+
+pub async fn capabilities(provider: &str, f: &Map<String, Value>, apis: &Endpoints) -> Vec<Capability> {
+    let s = |k: &str| f.get(k).and_then(Value::as_str).unwrap_or_default().to_owned();
+    let http = client();
+    let cap = |key, label, allowed, needs| Capability { key, label, allowed, needs };
+    match provider {
+        "hetzner" => {
+            let base = endpoint(apis, "hetzner", "https://api.hetzner.cloud/v1");
+            let write = probe(http.post(format!("{base}/servers")).bearer_auth(s("token")).json(&json!({}))).await;
+            vec![cap("servers", "Create and delete servers", write, "a Read & Write API token")]
+        }
+        "digitalocean" => {
+            let base = endpoint(apis, "digitalocean", "https://api.digitalocean.com/v2");
+            let write = probe(http.post(format!("{base}/droplets")).bearer_auth(s("token")).json(&json!({}))).await;
+            vec![cap("servers", "Create and delete servers", write, "a token with write scope, or droplet create and delete in a custom scope")]
+        }
+        "cloudflare" => {
+            let base = cloudflare_base(apis);
+            let account = s("accountId");
+            let token = s("token");
+            let zone = cloudflare_zones(f, apis).await.ok().and_then(|z| z.into_iter().next());
+            let zone_probe = |path: String, body: Value, patch: bool| {
+                let req = if patch { http.patch(path) } else { http.post(path) };
+                probe(req.bearer_auth(&token).json(&body))
+            };
+            let (dns, settings) = match &zone {
+                Some(z) => futures_util::join!(
+                    zone_probe(format!("{base}/zones/{}/dns_records", z.id), json!({ "type": "A", "name": "tessery-permission-check", "content": "not-an-address" }), false),
+                    zone_probe(format!("{base}/zones/{}/settings/ssl", z.id), json!({ "value": "not-a-mode" }), true),
+                ),
+                None => (None, None),
+            };
+            let has_r2_keys = !s("r2AccessKeyId").is_empty();
+            let (tunnel, access, r2) = futures_util::join!(
+                probe(http.post(format!("{base}/accounts/{account}/cfd_tunnel")).bearer_auth(&token).json(&json!({}))),
+                probe(http.post(format!("{base}/accounts/{account}/access/apps")).bearer_auth(&token).json(&json!({}))),
+                async {
+                    if has_r2_keys { Some(true) } else { probe(http.post(format!("{base}/accounts/{account}/r2/buckets")).bearer_auth(&token).json(&json!({ "name": "Not A Valid Name" }))).await }
+                },
+            );
+            vec![
+                cap("dns", "Manage DNS records", dns, "Zone, DNS, Edit (and Zone, Zone, Read)"),
+                cap("zoneSettings", "Change SSL and proxy settings", settings, "Zone, Zone Settings, Edit"),
+                cap("tunnel", "Create Cloudflare Tunnels", tunnel, "Account, Cloudflare Tunnel, Edit"),
+                cap("r2", "Store backups in R2", r2, "Account, Workers R2 Storage, Edit, or R2 access keys"),
+                cap("access", "Protect environments with Access", access, "Account, Access: Apps and Policies, Edit"),
+            ]
+        }
+        _ => Vec::new(),
+    }
+}
+
+pub fn allows(check: Option<&Value>, key: &str) -> bool {
+    check
+        .and_then(|c| c["capabilities"].as_array())
+        .and_then(|caps| caps.iter().find(|c| c["key"] == key))
+        .is_none_or(|c| c["allowed"].as_bool() != Some(false))
+}
+
 pub struct SigV4<'a> {
     pub method: &'a str,
     pub path: &'a str,
@@ -702,6 +783,18 @@ mod tests {
         let plan = json!({ "target": { "kind": "docker", "domain": "lab.fermohost.dev" }, "endpoints": [{ "url": "https://web.lab.fermohost.dev" }, { "url": "https://shop.fermohost.dev" }, { "url": "https://a.b.lab.fermohost.dev" }] });
         assert_eq!(dns_names(&plan), ["*.lab.fermohost.dev", "shop.fermohost.dev", "a.b.lab.fermohost.dev"]);
         assert!(dns_names(&json!({ "target": { "kind": "docker" } })).is_empty());
+    }
+
+    #[test]
+    fn reads_permission_from_refusals_and_validation_errors() {
+        assert_eq!(judge(reqwest::StatusCode::FORBIDDEN), Some(false));
+        assert_eq!(judge(reqwest::StatusCode::UNPROCESSABLE_ENTITY), Some(true));
+        assert_eq!(judge(reqwest::StatusCode::BAD_REQUEST), Some(true));
+        assert_eq!(judge(reqwest::StatusCode::BAD_GATEWAY), None);
+        let check = json!({ "capabilities": [{ "key": "servers", "allowed": false }, { "key": "dns", "allowed": null }] });
+        assert!(!allows(Some(&check), "servers"));
+        assert!(allows(Some(&check), "dns"), "unknown is not a refusal");
+        assert!(allows(None, "servers"), "accounts checked before capabilities existed keep working");
     }
 
     #[test]
