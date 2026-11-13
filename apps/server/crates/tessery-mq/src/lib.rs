@@ -26,6 +26,7 @@ pub enum Job {
     SweepExpiredGrants,
     PushRemote { project_id: Uuid },
     Deploy { release_id: Uuid },
+    ProvisionServer { server_id: Uuid },
     Teardown {
         project_id: Uuid,
         env: String,
@@ -46,6 +47,7 @@ impl Job {
             Job::SweepExpiredGrants => "sweep expired grants".into(),
             Job::PushRemote { project_id } => format!("push remote for {project_id}"),
             Job::Deploy { release_id } => format!("deploy release {release_id}"),
+            Job::ProvisionServer { server_id } => format!("create server {server_id}"),
             Job::Teardown { project_id, env, destroy, .. } => format!("{} {env} of {project_id}", if *destroy { "destroy" } else { "stop" }),
         }
     }

@@ -49,10 +49,7 @@ impl Config {
             trust_proxy: flag("TESSERY_TRUST_PROXY", false),
             data_dir: PathBuf::from(var("TESSERY_DATA_DIR", "./data")),
             oidc: crate::routes::sso::OidcConfig::from_env(),
-            provider_apis: ["hetzner", "digitalocean", "aws", "azure", "azure_login"]
-                .iter()
-                .filter_map(|p| std::env::var(format!("TESSERY_{}_API", p.to_uppercase())).ok().map(|v| ((*p).to_owned(), v)))
-                .collect(),
+            provider_apis: tessery_cloud::endpoints_from_env(),
             engine: tessery_engine::EngineConfig {
                 node: PathBuf::from(var("TESSERY_NODE_BIN", "node")),
                 script: engine_script(),

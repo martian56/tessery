@@ -395,6 +395,23 @@ export interface paths {
         patch: operations["update"];
         trace?: never;
     };
+    "/api/orgs/{org}/integrations/{integration}/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Regions and machine sizes with prices, read live from the provider. Only for providers Tessery can create servers on. */
+        get: operations["catalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/orgs/{org}/integrations/{integration}/check": {
         parameters: {
             query?: never;
@@ -501,6 +518,26 @@ export interface paths {
         get: operations["list"];
         put?: never;
         post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orgs/{org}/servers/provision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Creates a machine at the provider and sets it up as a server: Docker, a `deploy` user with Tessery's key, and a firewall for SSH, HTTP and HTTPS.
+         *     The provider bills the machine from now on. The server shows `creating`, then `configuring`, then `ready`.
+         */
+        post: operations["provision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1152,6 +1189,10 @@ export interface components {
             subject: components["schemas"]["SubjectRef"];
             subjectName?: string | null;
         };
+        Catalog: {
+            regions: components["schemas"]["Region"][];
+            sizes: components["schemas"]["Size"][];
+        };
         ChangePassword: {
             currentPassword: string;
             newPassword: string;
@@ -1482,6 +1523,16 @@ export interface components {
             id: string;
             name: string;
         };
+        ProvisionInput: {
+            /**
+             * Format: uuid
+             * @description A connected Hetzner or DigitalOcean account.
+             */
+            integrationId: string;
+            name: string;
+            region: string;
+            size: string;
+        };
         PutRemote: {
             autoPush?: boolean;
             /** @description Omit to keep the stored token, send an empty string to remove it. */
@@ -1492,6 +1543,17 @@ export interface components {
         };
         PutSecret: {
             value: string;
+        };
+        Region: {
+            id: string;
+            name: string;
+        };
+        RegionPrice: {
+            /** Format: double */
+            hourly: number;
+            /** Format: double */
+            monthly: number;
+            region: string;
         };
         ReleaseDto: {
             /** Format: uuid */
@@ -1606,11 +1668,22 @@ export interface components {
             hostKeyPinned: boolean;
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            integrationId?: string | null;
             /** @description Result of the last check: `ok`, `error`, and on success `docker`, `os`, `arch`, `cpus`, `memoryBytes`, `diskFreeBytes`, `diskTotalBytes`. */
             lastCheck?: Record<string, never> | null;
+            /** @description Whether removing the server can also delete the machine at the provider. */
+            managed: boolean;
             name: string;
+            /** @description Set when Tessery created the machine through a connected cloud account. */
+            provider?: string | null;
             /** @description Add this line to `~/.ssh/authorized_keys` of the SSH user. Empty when the key was pasted in. */
             publicKey: string;
+            region?: string | null;
+            size?: string | null;
+            /** @description `creating` and `configuring` while Tessery sets up a new machine, then `ready`, or `failed`. */
+            status: string;
+            statusDetail: string;
             /** @description Environments that deploy to this server. */
             usedBy: components["schemas"]["ServerUse"][];
         };
@@ -1646,6 +1719,29 @@ export interface components {
         };
         SetupStatus: {
             required: boolean;
+        };
+        Size: {
+            /** Format: int32 */
+            cpus: number;
+            /** @description `USD` or `EUR`. */
+            currency: string;
+            /** Format: int32 */
+            diskGb: number;
+            /** Format: double */
+            hourly: number;
+            id: string;
+            /** Format: double */
+            memoryGb: number;
+            /**
+             * Format: double
+             * @description Price in `currency`, as the provider bills it, including any tax it adds.
+             */
+            monthly: number;
+            name: string;
+            /** @description Prices that differ by region, when the provider has them. `monthly` and `hourly` are the lowest. */
+            regionPrices: components["schemas"]["RegionPrice"][];
+            /** @description Regions that offer this size. */
+            regions: string[];
         };
         SpanDto: {
             attributes: Record<string, never>;
@@ -2573,6 +2669,28 @@ export interface operations {
             };
         };
     };
+    catalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org: string;
+                integration: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Catalog"];
+                };
+            };
+        };
+    };
     check: {
         parameters: {
             query?: never;
@@ -2849,9 +2967,37 @@ export interface operations {
             };
         };
     };
-    delete: {
+    provision: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                org: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProvisionInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerDto"];
+                };
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: {
+                /** @description Also delete the machine at the provider, which stops its billing. Only for servers Tessery created. */
+                deleteMachine?: boolean;
+            };
             header?: never;
             path: {
                 org: string;

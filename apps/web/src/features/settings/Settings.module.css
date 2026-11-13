@@ -17,3 +17,5 @@
 .providerCard { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-5); border: 1px solid var(--line-2); border-radius: var(--r-3); background: var(--bg-1); }
 .providerHead { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); }
 .providerDot { width: 10px; height: 10px; border-radius: 50%; }
+.spin { animation: settings-spin 1s linear infinite; vertical-align: -1px; }
+@keyframes settings-spin { to { transform: rotate(360deg); } }

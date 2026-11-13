@@ -47,13 +47,13 @@ struct Plan {
     target: Value,
 }
 
-struct Log {
+pub(crate) struct Log {
     tx: mpsc::UnboundedSender<String>,
     writer: tokio::task::JoinHandle<()>,
 }
 
 impl Log {
-    fn start(db: tessery_db::PgPool, release: Option<Uuid>) -> Self {
+    pub(crate) fn start(db: tessery_db::PgPool, release: Option<Uuid>) -> Self {
         let (tx, mut rx) = mpsc::unbounded_channel::<String>();
         let Some(release) = release else {
             let writer = tokio::spawn(async move {
@@ -379,7 +379,7 @@ fn private_files(values: &[(String, String)], kind: &str) -> Result<Vec<u8>> {
     Ok(b.into_inner()?)
 }
 
-async fn ensure_runner_image(cfg: &RunnerConfig, log: &Log) -> Result<()> {
+pub(crate) async fn ensure_runner_image(cfg: &RunnerConfig, log: &Log) -> Result<()> {
     let image = cfg.image();
     if docker(cfg, &["image", "inspect", &image]).await.is_ok() {
         return Ok(());

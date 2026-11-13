@@ -13,10 +13,12 @@ path = "src/main.rs"
 
 [dependencies]
 tessery-core.workspace = true
+tessery-cloud.workspace = true
 tessery-db.workspace = true
 tessery-mq.workspace = true
 tessery-git.workspace = true
 anyhow.workspace = true
+base64.workspace = true
 dotenvy.workspace = true
 rand.workspace = true
 serde.workspace = true
