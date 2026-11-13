@@ -157,12 +157,12 @@ impl Engine {
         Ok(self.typed::<Pong>("ping", json!({})).await?.version)
     }
 
-    pub async fn generate(&self, doc: &Value) -> Result<BTreeMap<String, String>> {
+    pub async fn generate(&self, doc: &Value, migrations: Option<&Value>) -> Result<BTreeMap<String, String>> {
         #[derive(Deserialize)]
         struct Out {
             files: BTreeMap<String, String>,
         }
-        Ok(self.typed::<Out>("generate", json!({ "doc": doc })).await?.files)
+        Ok(self.typed::<Out>("generate", json!({ "doc": doc, "migrations": migrations })).await?.files)
     }
 
     pub async fn apply(&self, doc: &Value, ops: &[Value]) -> Result<Applied> {
@@ -227,7 +227,7 @@ mod tests {
         assert_eq!(applied.doc["nodes"].as_array().unwrap().len(), 1);
         assert!(applied.results[0].is_string(), "addNode returns the new node id");
 
-        let files = engine.generate(&applied.doc).await.unwrap();
+        let files = engine.generate(&applied.doc, None).await.unwrap();
         assert!(files.contains_key("services/api/go.mod"), "{:?}", files.keys().collect::<Vec<_>>());
 
         let err = engine.apply(&doc, &[json!({ "op": "dropDatabase" })]).await.unwrap_err();
@@ -236,7 +236,7 @@ mod tests {
         let mut calls = tokio::task::JoinSet::new();
         for _ in 0..8 {
             let e = engine.clone();
-            calls.spawn(async move { e.generate(&doc_with_service()).await });
+            calls.spawn(async move { e.generate(&doc_with_service(), None).await });
         }
         while let Some(r) = calls.join_next().await {
             assert!(r.unwrap().unwrap().contains_key("services/api/go.mod"), "concurrent calls share the pool");

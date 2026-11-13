@@ -1,5 +1,5 @@
 import { baseApi } from '../base'
-import type { Checkpoint, CheckpointDiff, Pipeline, Release, ReleaseLog, Remote, SecretInfo } from '../types'
+import type { Checkpoint, CheckpointDiff, Pipeline, Release, ReleaseLog, ReleasePreview, Remote, SecretInfo } from '../types'
 import type { ProjectDoc } from '@tessery/core/domain/types'
 
 const releaseChanges = ['Pipeline', 'Releases'] as const
@@ -18,7 +18,11 @@ export const deliveryApi = baseApi.injectEndpoints({
 
     pipeline: b.query<Pipeline, string>({ query: (pid) => `/projects/${pid}/pipeline`, providesTags: ['Pipeline'] }),
     releases: b.query<Release[], string>({ query: (pid) => `/projects/${pid}/releases`, providesTags: ['Releases'] }),
-    createRelease: b.mutation<Release, { pid: string; env: string; checkpointId: string; note?: string; redeploy?: boolean }>({
+    releasePreview: b.query<ReleasePreview, { pid: string; env: string; checkpointId: string }>({
+      query: ({ pid, env, checkpointId }) => ({ url: `/projects/${pid}/releases/preview`, params: { env, checkpointId } }),
+      keepUnusedDataFor: 0,
+    }),
+    createRelease: b.mutation<Release, { pid: string; env: string; checkpointId: string; note?: string; redeploy?: boolean; confirmDestructive?: boolean }>({
       query: ({ pid, ...body }) => ({ url: `/projects/${pid}/releases`, method: 'POST', body }),
       invalidatesTags: [...releaseChanges, 'Remote'],
     }),
@@ -55,7 +59,7 @@ export const deliveryApi = baseApi.injectEndpoints({
 
 export const {
   useCheckpointsQuery, useCreateCheckpointMutation, useLazyCheckpointDocQuery, useCheckpointDiffQuery,
-  usePipelineQuery, useReleasesQuery, useCreateReleaseMutation, useDecideReleaseMutation,
+  usePipelineQuery, useReleasesQuery, useLazyReleasePreviewQuery, useCreateReleaseMutation, useDecideReleaseMutation,
   useStopEnvMutation, useLazyReleaseLogQuery, useSecretsQuery, usePutSecretMutation, useDeleteSecretMutation,
   useRemoteQuery, usePutRemoteMutation, useDeleteRemoteMutation, usePushRemoteMutation,
 } = deliveryApi

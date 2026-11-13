@@ -203,6 +203,39 @@ async fn missing_secrets(state: &AppState, project: Uuid, commit: &str, env: &st
     Ok(tessery_core::runner::missing_secrets(&required, &stored).into_iter().map(str::to_owned).collect())
 }
 
+async fn open_repo(state: &AppState, project: Uuid) -> ApiResult<Option<tessery_git::Repo>> {
+    match state.repos.open(project).await {
+        Ok(r) => Ok(Some(r)),
+        Err(tessery_git::GitError::Missing) => Ok(None),
+        Err(e) => Err(git_err(e)),
+    }
+}
+
+async fn read_json(state: &AppState, project: Uuid, commit: &str, path: &str) -> ApiResult<Option<Value>> {
+    let Some(repo) = open_repo(state, project).await? else { return Ok(None) };
+    let Some(raw) = repo.read_file_if_exists(commit, path).await.map_err(git_err)? else { return Ok(None) };
+    serde_json::from_slice(&raw).map(Some).map_err(|e| ApiError::Internal(anyhow::anyhow!("{path} in {commit} is not valid JSON: {e}")))
+}
+
+pub async fn previous_migrations(state: &AppState, project: Uuid) -> ApiResult<Option<Value>> {
+    let Some(repo) = open_repo(state, project).await? else { return Ok(None) };
+    let Some(commit) = repo.resolve(&format!("refs/heads/{}", tessery_git::GENERATED)).await.map_err(git_err)? else { return Ok(None) };
+    read_json(state, project, &commit, tessery_core::migrations::MIGRATIONS_FILE).await
+}
+
+async fn release_migrations(state: &AppState, project: Uuid, env: &str, commit: &str) -> ApiResult<Vec<tessery_core::migrations::PendingMigration>> {
+    let released = db::list_releases(&state.db, project, 500)
+        .await?
+        .into_iter()
+        .filter(|r| r.env_key == env && r.status == ReleaseStatus::Released)
+        .max_by_key(|r| r.requested_at);
+    let Some(last) = released else { return Ok(Vec::new()) };
+    let Some(next) = read_json(state, project, commit, tessery_core::migrations::MIGRATIONS_FILE).await? else { return Ok(Vec::new()) };
+    let running = db::get_checkpoint(&state.db, project, last.checkpoint_id).await?.commit_sha;
+    let current = read_json(state, project, &running, tessery_core::migrations::MIGRATIONS_FILE).await?;
+    Ok(tessery_core::migrations::pending_migrations(current.as_ref(), &next))
+}
+
 async fn needs_runner(state: &AppState, project: Uuid, commit: &str, env: &str) -> bool {
     let Ok(repo) = state.repos.open(project).await else { return false };
     let Ok(raw) = repo.read_file(commit, &format!("deploy/{env}/plan.json")).await else { return false };
@@ -284,7 +317,8 @@ pub async fn create_checkpoint(
         return Err(ApiError::StaleVersion);
     }
     let doc = crate::routes::projects::ProjectDto::from(saved.clone()).doc;
-    let generated = state.engine.generate(&doc).await.map_err(engine_err)?;
+    let previous = previous_migrations(&state, project).await?;
+    let generated = state.engine.generate(&doc, previous.as_ref()).await.map_err(engine_err)?;
     if generated.len() > MAX_FILES || generated.values().map(String::len).sum::<usize>() > MAX_TOTAL_BYTES {
         return Err(ApiError::Conflict("the generated project is too large to checkpoint".into()));
     }
@@ -479,6 +513,57 @@ pub struct CreateRelease {
     /// Deploy the checkpoint the environment already runs again, e.g. after changing a secret.
     #[serde(default)]
     pub redeploy: bool,
+    /// Required when the release runs migrations that can drop or fail on existing data.
+    #[serde(default)]
+    pub confirm_destructive: bool,
+}
+
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleasePreviewQuery {
+    pub env: String,
+    pub checkpoint_id: Uuid,
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationDto {
+    pub database: String,
+    pub file: String,
+    pub sql: String,
+    /// What can drop data or fail on existing rows. Empty when the migration only adds or renames.
+    pub destructive: Vec<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleasePreviewDto {
+    /// Database migrations this release runs that the environment has not run yet.
+    pub migrations: Vec<MigrationDto>,
+}
+
+impl From<tessery_core::migrations::PendingMigration> for MigrationDto {
+    fn from(m: tessery_core::migrations::PendingMigration) -> Self {
+        Self { database: m.database, file: m.file, sql: m.sql, destructive: m.destructive }
+    }
+}
+
+/// What releasing a checkpoint into an environment would change, such as the database migrations it runs.
+#[utoipa::path(get, path = "/api/projects/{project}/releases/preview", tag = "delivery", params(("project" = Uuid, Path), ReleasePreviewQuery), responses((status = 200, body = ReleasePreviewDto)))]
+pub async fn release_preview(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+    Query(q): Query<ReleasePreviewQuery>,
+) -> ApiResult<Json<ReleasePreviewDto>> {
+    let project_target = rbac::project_target(&state, project).await?;
+    rbac::require(&state, &p, &env_target(&project_target, &q.env), P::DeploymentRead).await?;
+    let checkpoint = db::get_checkpoint(&state.db, project, q.checkpoint_id)
+        .await
+        .map_err(|_| ApiError::invalid("checkpointId", "checkpoint not found"))?;
+    let migrations = release_migrations(&state, project, &q.env, &checkpoint.commit_sha).await?;
+    Ok(Json(ReleasePreviewDto { migrations: migrations.into_iter().map(Into::into).collect() }))
 }
 
 /// Releases a checkpoint into an environment. Goes live at once unless the environment requires
@@ -513,8 +598,19 @@ pub async fn create_release(
         return Err(ApiError::Conflict(format!("checkpoint {} has not been released to {} yet", checkpoint.seq, all[idx - 1].name)));
     }
     let head = db::heads(&mut *tx, project).await?.into_iter().find(|h| h.env_key == stage.key);
-    if !req.redeploy && head.is_some_and(|h| h.checkpoint_id == checkpoint.id) {
+    if !req.redeploy && head.as_ref().is_some_and(|h| h.checkpoint_id == checkpoint.id) {
         return Err(ApiError::Conflict(format!("{} already runs checkpoint {}", stage.name, checkpoint.seq)));
+    }
+
+    if !req.confirm_destructive {
+        let risky: Vec<String> = release_migrations(&state, project, &stage.key, &checkpoint.commit_sha)
+            .await?
+            .into_iter()
+            .flat_map(|m| m.destructive.into_iter().map(move |d| format!("{} {}: {d}", m.database, m.file)))
+            .collect();
+        if !risky.is_empty() {
+            return Err(ApiError::Conflict(format!("this release runs migrations that can lose data; confirm them first: {}", risky.join("; "))));
+        }
     }
 
     let runner = needs_runner(&state, project, &checkpoint.commit_sha, &stage.key).await;

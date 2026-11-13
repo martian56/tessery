@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ArrowRight, Check, ChevronDown, CircleX, Clock, ExternalLink, GitCommitHorizontal, KeyRound, LoaderCircle, Plus, RotateCw, ScrollText, Square, X } from 'lucide-react'
 import clsx from 'clsx'
-import { useCheckpointsQuery, useCreateReleaseMutation, useDecideReleaseMutation, usePipelineQuery, useReleasesQuery, useStopEnvMutation } from '@/api/endpoints/delivery'
+import { useCheckpointsQuery, useCreateReleaseMutation, useDecideReleaseMutation, useLazyReleasePreviewQuery, usePipelineQuery, useReleasesQuery, useStopEnvMutation } from '@/api/endpoints/delivery'
 import { useMeQuery } from '@/api/endpoints/identity'
 import { errorMessage, type Checkpoint, type Endpoint, type Release, type Stage } from '@/api/types'
 import { usePermissions } from '@/app/usePermissions'
@@ -12,6 +12,7 @@ import { bus } from '@/lib/bus'
 import { timeAgo } from '@/lib/format'
 import { useEnvSecrets } from '@/features/deploy/useEnvSecrets'
 import { DeployLog } from './DeployLog'
+import { MigrationList } from './MigrationList'
 import s from './Delivery.module.css'
 
 const ago = (iso: string) => timeAgo(new Date(iso).getTime())
@@ -58,6 +59,7 @@ function StageCard({ pid, stage, first, previous, checkpoints, latest, onLog }: 
   const perms = usePermissions({ org, project: pid, env: stage.key })
   const { data: me } = useMeQuery()
   const [release, { isLoading: releasing }] = useCreateReleaseMutation()
+  const [preview] = useLazyReleasePreviewQuery()
   const [decide, { isLoading: deciding }] = useDecideReleaseMutation()
   const [stopEnv, { isLoading: stopping }] = useStopEnvMutation()
   const canRun = perms.can('deployment:run')
@@ -67,13 +69,25 @@ function StageCard({ pid, stage, first, previous, checkpoints, latest, onLog }: 
   const blocked = stage.target !== 'git' && missing.length > 0
 
   const send = async (cp: Checkpoint) => {
+    const p = await preview({ pid, env: stage.key, checkpointId: cp.id })
+    if (p.error) return toast(errorMessage(p.error), 'err')
+    const risky = (p.data?.migrations ?? []).filter((m) => m.destructive.length)
+    if (risky.length) {
+      const ok = await dialogs.confirm({
+        title: `Checkpoint ${cp.seq} changes data in ${stage.name}`,
+        body: <MigrationList migrations={risky} />,
+        ok: 'Release and run them',
+        danger: true,
+      })
+      if (!ok) return
+    }
     let note = ''
     if (stage.requiresApproval) {
       const v = await dialogs.prompt({ title: `Request release of checkpoint ${cp.seq} to ${stage.name}`, body: `${stage.name} requires approval from someone else with deployment:approve.`, fields: [{ name: 'note', label: 'Note for the approver', placeholder: 'What changed and why it is safe' }], ok: 'Request approval' })
       if (!v) return
       note = v.note
     }
-    const r = await release({ pid, env: stage.key, checkpointId: cp.id, note })
+    const r = await release({ pid, env: stage.key, checkpointId: cp.id, note, confirmDestructive: risky.length > 0 })
     if ('error' in r) toast(errorMessage(r.error), 'err')
     else if (r.data.status === 'queued') onLog(r.data)
     else toast(r.data.status === 'pending' ? `Waiting for approval to release to ${stage.name}` : `${stage.name} now runs checkpoint ${cp.seq}`, 'ok')

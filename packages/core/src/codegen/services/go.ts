@@ -2,7 +2,7 @@ import GO_DB from '../runtime/go-db.txt'
 import GO_SESSION from '../runtime/go-session.txt'
 import { builtInAuth } from '../deploy/runtime'
 import { ownerColumn } from './typescript'
-import { migrationSql, sqlType } from '../backend'
+import { sqlType } from '../backend'
 import { type Files, type Route, type ServiceModel, camel, comment, envExample, ident, pascal, readme, stepLines } from './model'
 import { type CrudRoute, type DataAccess, columnTypes, dataAccess, orderBy, primaryKey, writable } from './crud'
 
@@ -240,8 +240,8 @@ ${goTables(da)}${sender}${handlers(m, r, da)}
 `
     if (m.routes.some((rt) => goGuarded(m, rt))) f[`${dir}/session.go`] = GO_SESSION
     if (da) {
-      f[`${dir}/db.go`] = GO_DB.replace('__SCHEMA_FILE__', da.file)
-      f[`${dir}/migrations/${da.file}`] = migrationSql(da.schema, da.node.techId)
+      f[`${dir}/db.go`] = GO_DB.replace('__MIGRATIONS_DIR__', da.node.name)
+      for (const mg of da.migrations) f[`${dir}/migrations/${da.node.name}/${mg.file}`] = mg.sql
     }
   } else {
     f[`${dir}/main.go`] = m.kind === 'cron'

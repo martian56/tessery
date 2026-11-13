@@ -3,7 +3,7 @@ import PY_DB from '../runtime/py-db.txt'
 import PY_SESSION from '../runtime/py-session.txt'
 import { builtInAuth } from '../deploy/runtime'
 import { ownerColumn } from './typescript'
-import { migrationSql, sqlType } from '../backend'
+import { sqlType } from '../backend'
 import { type CrudRoute, type DataAccess, columnTypes, dataAccess, orderBy, primaryKey, writable } from './crud'
 
 type Server = 'fastapi' | 'flask' | 'litestar' | 'strawberry' | 'grpc'
@@ -355,8 +355,8 @@ export function pythonService(m: ServiceModel, contracts: { proto: string; svc?:
   if (m.kind === 'api' && (s === 'fastapi' || s === 'flask' || s === 'litestar') && m.routes.some((r) => pyGuarded(m, r))) f[`${pkg}/session.py`] = PY_SESSION
   if (da) {
     deps.push('psycopg[binary]>=3.2', 'psycopg-pool>=3.2')
-    f[`${m.dir}/migrations/${da.file}`] = migrationSql(da.schema, da.node.techId)
-    f[`${pkg}/db.py`] = PY_DB.replace('__DB_ENV__', da.dep.env).replace('__SCHEMA_FILE__', da.file)
+    for (const mg of da.migrations) f[`${m.dir}/migrations/${da.node.name}/${mg.file}`] = mg.sql
+    f[`${pkg}/db.py`] = PY_DB.replace('__DB_ENV__', da.dep.env).replace('__MIGRATIONS_DIR__', da.node.name)
   }
   let cmd: string
   if (m.kind !== 'api') {

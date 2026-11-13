@@ -354,6 +354,14 @@ impl Repo {
         self.run_bytes(&["cat-file", "blob", &format!("{commit}:{path}")], &[], None).await
     }
 
+    pub async fn read_file_if_exists(&self, commit: &str, path: &str) -> Result<Option<Vec<u8>>> {
+        validate_path(path)?;
+        if self.run_status(&["cat-file", "-e", &format!("{commit}:{path}")]).await?.0 != 0 {
+            return Ok(None);
+        }
+        self.read_file(commit, path).await.map(Some)
+    }
+
     pub async fn archive(&self, commit: &str) -> Result<Vec<u8>> {
         if !commit.chars().all(|c| c.is_ascii_hexdigit()) {
             return Err(GitError::InvalidRef(commit.to_owned()));

@@ -1,5 +1,6 @@
 pub mod access;
 pub mod ids;
+pub mod migrations;
 pub mod permission;
 pub mod role;
 pub mod runner;
