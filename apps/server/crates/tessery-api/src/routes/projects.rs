@@ -445,7 +445,7 @@ pub async fn generated(
     rbac::require(&state, &p, &target, P::ProjectRead).await?;
     let saved = tessery_db::projects::get(&state.db, project).await?;
     let doc = ProjectDto::from(saved).doc;
-    let previous = crate::routes::delivery::previous_migrations(&state, project).await;
+    let previous = crate::routes::delivery::previous_migrations(&state, project).await?;
     let files = state.engine.generate(&doc, previous.as_ref()).await.map_err(crate::routes::delivery::engine_err)?;
     Ok(Json(GeneratedDto { files }))
 }

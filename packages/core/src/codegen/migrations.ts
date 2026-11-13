@@ -36,8 +36,9 @@ export function planMigrations(doc: ProjectDoc, previous?: MigrationState): Migr
   const databases: Record<string, DatabaseMigrations> = {}
   for (const schema of Object.values(doc.databases)) {
     const node = doc.nodes.find((n) => n.id === schema.nodeId)
-    if (!node || !schema.tables.length) continue
+    if (!node) continue
     const before = previous?.databases[node.id]
+    if (!schema.tables.length && !before?.migrations.length) continue
     if (!before || !before.migrations.length) {
       databases[node.id] = { node: node.name, tech: node.techId, tables: snapshot(schema.tables), migrations: [{ file: '0001_init.sql', sql: migrationSql(schema, node.techId), destructive: [] }] }
       continue
@@ -86,101 +87,136 @@ const sameRef = (a?: Column['ref'], b?: Column['ref']) => (a?.table ?? '') === (
 const sameIndex = (a: Index, b: Index) => a.name === b.name && a.unique === b.unique && a.method === b.method && a.columns.join(',') === b.columns.join(',')
 const quoteValue = (v: string) => `'${v.replace(/'/g, "''")}'`
 const defaultSql = (d: string) => (/^(-?\d+(\.\d+)?|true|false|null|'.*'|\w+\(.*\))$/i.test(d) ? d : quoteValue(d))
+const sameEnum = (p: Column, c: Column) => (p.enumValues ?? []).join('\u0000') === (c.enumValues ?? []).join('\u0000') && (p.type === 'enum') === (c.type === 'enum')
+
+const widens = (p: Column, c: Column) =>
+  (p.type === 'int' && c.type === 'bigint') ||
+  (p.type === 'varchar' && (c.type === 'text' || (c.type === 'varchar' && (c.length ?? 255) >= (p.length ?? 255))))
+
+const CONSTRAINTS = ['check', 'key', 'fkey'] as const
+
+function renameConstraint(table: string, from: string, to: string): string {
+  return `DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = ${quoteValue(from)}) THEN ALTER TABLE ${table} RENAME CONSTRAINT ${from} TO ${to}; END IF; END $$;`
+}
 
 export function diffSchema(before: Table[], after: DbSchema, techId: string): Change {
   const dialect = dialectOf(techId)
-  const col = (n: string) => (dialect === 'pg' ? `"${n}"` : n)
-  const out: string[] = []
+  const pg = dialect === 'pg'
+  const col = (n: string) => (pg ? `"${n}"` : n)
   const destructive: string[] = []
   const notes: string[] = []
+  const renames: string[] = []
+  const dropConstraints: string[] = []
+  const creates: string[] = []
+  const changes: string[] = []
+  const drops: string[] = []
+  const foreignKeys: string[] = []
+  const indexes: string[] = []
+  const tableDrops: string[] = []
   const now = after.tables
   const oldById = new Map(before.map((t) => [t.id, t]))
   const newById = new Map(now.map((t) => [t.id, t]))
+  const alter = (bucket: string[], t: string, s: string) => bucket.push(`ALTER TABLE ${t} ${s};`)
+  const fk = (t: string, c: Column) => {
+    if (!c.ref) return
+    foreignKeys.push(`ALTER TABLE ${t} ADD CONSTRAINT ${t}_${c.name}_fkey FOREIGN KEY (${col(c.name)}) REFERENCES ${c.ref.table}(${c.ref.column}) ON DELETE ${c.ref.onDelete.toUpperCase()};`)
+  }
 
   for (const t of now) {
     const o = oldById.get(t.id)
-    if (o && o.name !== t.name) {
-      out.push(`ALTER TABLE ${o.name} RENAME TO ${t.name};`)
+    if (!o) continue
+    if (o.name !== t.name) {
+      renames.push(`ALTER TABLE ${o.name} RENAME TO ${t.name};`)
+      if (pg) for (const c of o.columns) for (const k of CONSTRAINTS) renames.push(renameConstraint(t.name, `${o.name}_${c.name}_${k}`, `${t.name}_${c.name}_${k}`))
       notes.push(`rename ${o.name} to ${t.name}`)
+    }
+    for (const c of t.columns) {
+      const p = o.columns.find((x) => x.id === c.id)
+      if (!p || p.name === c.name) continue
+      renames.push(`ALTER TABLE ${t.name} RENAME COLUMN ${col(p.name)} TO ${col(c.name)};`)
+      if (pg) for (const k of CONSTRAINTS) renames.push(renameConstraint(t.name, `${t.name}_${p.name}_${k}`, `${t.name}_${c.name}_${k}`))
+      notes.push(`rename ${t.name}.${p.name} to ${c.name}`)
     }
   }
 
-  const added = byDependency(now.filter((t) => !oldById.has(t.id)))
-  for (const t of added) {
-    out.push(createTableSql(t, dialect, false), ...t.indexes.map((ix) => indexSql(t, ix, dialect, false)))
+  for (const t of byDependency(now.filter((x) => !oldById.has(x.id)))) {
+    creates.push(createTableSql({ ...t, columns: t.columns.map((c) => ({ ...c, ref: undefined })) }, dialect, false))
+    t.columns.forEach((c) => fk(t.name, c))
+    indexes.push(...t.indexes.map((ix) => indexSql(t, ix, dialect, false)))
     notes.push(`create ${t.name}`)
   }
 
   for (const t of now) {
     const o = oldById.get(t.id)
     if (!o) continue
-    const alter = (s: string) => out.push(`ALTER TABLE ${t.name} ${s};`)
-    const oldCols = new Map(o.columns.map((c) => [c.id, c]))
-    const newIds = new Set(t.columns.map((c) => c.id))
-
     for (const ix of o.indexes) {
       const n = t.indexes.find((x) => x.id === ix.id)
-      if (!n || !sameIndex(ix, n)) out.push(dialect === 'pg' ? `DROP INDEX IF EXISTS ${ix.name};` : `DROP INDEX ${ix.name} ON ${t.name};`)
+      if (!n || !sameIndex(ix, n)) dropConstraints.push(pg ? `DROP INDEX IF EXISTS ${ix.name};` : `DROP INDEX ${ix.name} ON ${t.name};`)
     }
-
-    for (const c of t.columns) {
-      const p = oldCols.get(c.id)
-      if (p && p.name !== c.name) {
-        alter(`RENAME COLUMN ${col(p.name)} TO ${col(c.name)}`)
-        notes.push(`rename ${t.name}.${p.name} to ${c.name}`)
+    for (const p of o.columns) {
+      const c = t.columns.find((x) => x.id === p.id)
+      if (!c) {
+        if (pg && p.ref) alter(dropConstraints, t.name, `DROP CONSTRAINT IF EXISTS ${t.name}_${p.name}_fkey`)
+        alter(drops, t.name, `DROP COLUMN ${col(p.name)}`)
+        destructive.push(`drops column ${t.name}.${p.name} and its values`)
+        notes.push(`drop ${t.name}.${p.name}`)
       }
     }
-
-    for (const p of o.columns) {
-      if (newIds.has(p.id)) continue
-      alter(`DROP COLUMN ${col(p.name)}`)
-      destructive.push(`drops column ${t.name}.${p.name} and its values`)
-      notes.push(`drop ${t.name}.${p.name}`)
-    }
-
     for (const c of t.columns) {
-      const p = oldCols.get(c.id)
+      const p = o.columns.find((x) => x.id === c.id)
       if (!p) {
-        alter(`ADD COLUMN ${columnSql(c, dialect, true)}`)
+        alter(changes, t.name, `ADD COLUMN ${columnSql({ ...c, ref: undefined }, dialect, true)}`)
+        fk(t.name, c)
         if (!c.nullable && !c.pk && !c.default) destructive.push(`adds required column ${t.name}.${c.name} without a default, which fails if ${t.name} has rows`)
         notes.push(`add ${t.name}.${c.name}`)
         continue
       }
-      changeColumn(t, p, c, dialect, alter, destructive, notes)
+      changeColumn({ dialect, table: t.name, p, c, alter: (bucket, s) => alter(bucket === 'drop' ? dropConstraints : bucket === 'fk' ? foreignKeys : changes, t.name, s), manual: (s) => changes.push(`-- ${s}`), fk: () => fk(t.name, c), destructive, notes })
     }
-
     if (o.columns.filter((c) => c.pk).map((c) => c.id).join() !== t.columns.filter((c) => c.pk).map((c) => c.id).join()) {
-      out.push(`-- The primary key of ${t.name} changed. Write this part of the migration by hand.`)
+      changes.push(`-- The primary key of ${t.name} changed. Write this part of the migration by hand.`)
       destructive.push(`changes the primary key of ${t.name}, which is not migrated automatically`)
     }
-
     for (const ix of t.indexes) {
       const p = o.indexes.find((x) => x.id === ix.id)
-      if (!p || !sameIndex(p, ix)) out.push(indexSql(t, ix, dialect, false))
+      if (!p || !sameIndex(p, ix)) indexes.push(indexSql(t, ix, dialect, false))
     }
   }
 
-  const removed = byDependency(before.filter((t) => !newById.has(t.id))).reverse()
-  for (const t of removed) {
-    out.push(`DROP TABLE ${t.name};`)
+  for (const t of byDependency(before.filter((x) => !newById.has(x.id))).reverse()) {
+    tableDrops.push(`DROP TABLE ${t.name};`)
     destructive.push(`drops table ${t.name} and all its rows`)
     notes.push(`drop ${t.name}`)
   }
 
-  return { statements: out, destructive, summary: notes[0] ?? 'changes' }
+  const added = [...now.filter((t) => !oldById.has(t.id)).flatMap((t) => t.columns), ...now.flatMap((t) => {
+    const o = oldById.get(t.id)
+    return o ? t.columns.filter((c) => { const p = o.columns.find((x) => x.id === c.id); return !p || p.type !== c.type }) : []
+  })]
+  const extension = pg && added.some((c) => c.type === 'vector') ? ['CREATE EXTENSION IF NOT EXISTS vector;'] : []
+  const statements = [...extension, ...renames, ...dropConstraints, ...creates, ...changes, ...drops, ...foreignKeys, ...indexes, ...tableDrops]
+  return { statements, destructive, summary: notes[0] ?? 'changes' }
 }
 
-const widens = (p: Column, c: Column) =>
-  (p.type === 'int' && c.type === 'bigint') ||
-  (p.type === 'varchar' && (c.type === 'text' || (c.type === 'varchar' && (c.length ?? 255) >= (p.length ?? 255))))
+interface ColumnChange {
+  dialect: Dialect
+  table: string
+  p: Column
+  c: Column
+  alter: (bucket: 'drop' | 'change' | 'fk', s: string) => void
+  manual: (s: string) => void
+  fk: () => void
+  destructive: string[]
+  notes: string[]
+}
 
-function changeColumn(t: Table, p: Column, c: Column, dialect: Dialect, alter: (s: string) => void, destructive: string[], notes: string[]) {
+function changeColumn({ dialect, table, p, c, alter, manual, fk, destructive, notes }: ColumnChange) {
   const name = dialect === 'pg' ? `"${c.name}"` : c.name
-  const where = `${t.name}.${c.name}`
+  const where = `${table}.${c.name}`
   const oldType = sqlType(p, dialect)
   const newType = sqlType(c, dialect)
   const typeChanged = oldType !== newType
-  const enumChanged = (p.enumValues ?? []).join('\u0000') !== (c.enumValues ?? []).join('\u0000') || (p.type === 'enum') !== (c.type === 'enum')
+  const enumChanged = !sameEnum(p, c)
   const nullChanged = !!p.nullable !== !!c.nullable && !c.pk
   const defaultChanged = (p.default ?? '') !== (c.default ?? '')
   const uniqueChanged = !!p.unique !== !!c.unique
@@ -189,43 +225,44 @@ function changeColumn(t: Table, p: Column, c: Column, dialect: Dialect, alter: (
   notes.push(`change ${where}`)
 
   if (dialect === 'mysql') {
-    if (typeChanged || nullChanged || defaultChanged || enumChanged) alter(`MODIFY COLUMN ${columnSql({ ...c, ref: undefined, unique: false }, dialect, false)}`)
+    if (typeChanged || nullChanged || defaultChanged || enumChanged) alter('change', `MODIFY COLUMN ${columnSql({ ...c, ref: undefined, unique: false }, dialect, false)}`)
     if (typeChanged && !widens(p, c)) destructive.push(`changes ${where} from ${oldType} to ${newType}, which fails or loses data if values do not convert`)
     if (nullChanged && !c.nullable) destructive.push(`makes ${where} required, which fails if it has empty values`)
     if (uniqueChanged || refChanged) {
+      manual(`Change the unique and foreign key constraints on ${where} by hand; they are not migrated automatically on MySQL.`)
       destructive.push(`changes constraints on ${where}, which needs a hand-written migration on MySQL`)
     }
     return
   }
 
-  const check = `${t.name}_${c.name}_check`
-  if (enumChanged && p.type === 'enum') alter(`DROP CONSTRAINT IF EXISTS ${check}`)
-  if (refChanged && p.ref) alter(`DROP CONSTRAINT IF EXISTS ${t.name}_${c.name}_fkey`)
-  if (uniqueChanged && p.unique) alter(`DROP CONSTRAINT IF EXISTS ${t.name}_${c.name}_key`)
+  const check = `${table}_${c.name}_check`
+  if (enumChanged && p.type === 'enum') alter('drop', `DROP CONSTRAINT IF EXISTS ${check}`)
+  if (refChanged && p.ref) alter('drop', `DROP CONSTRAINT IF EXISTS ${table}_${c.name}_fkey`)
+  if (uniqueChanged && p.unique) alter('drop', `DROP CONSTRAINT IF EXISTS ${table}_${c.name}_key`)
   if (typeChanged) {
-    if (p.type === 'serial' || c.type === 'serial') {
-      alter(`ALTER COLUMN ${name} TYPE ${c.type === 'serial' ? 'bigint' : newType} USING ${name}::${c.type === 'serial' ? 'bigint' : newType}`)
-      destructive.push(`changes ${where} to or from an auto-increment column; check its sequence by hand`)
-    } else {
-      alter(`ALTER COLUMN ${name} TYPE ${newType} USING ${name}::${newType}`)
-      if (!widens(p, c)) destructive.push(`changes ${where} from ${oldType} to ${newType}, which fails or loses data if values do not convert`)
-    }
+    if (p.default) alter('change', `ALTER COLUMN ${name} DROP DEFAULT`)
+    const target = c.type === 'serial' ? 'bigint' : newType
+    alter('change', `ALTER COLUMN ${name} TYPE ${target} USING ${name}::${target}`)
+    if (p.type === 'serial' || c.type === 'serial') destructive.push(`changes ${where} to or from an auto-increment column; check its sequence by hand`)
+    else if (!widens(p, c)) destructive.push(`changes ${where} from ${oldType} to ${newType}, which fails or loses data if values do not convert`)
+    if (c.default) alter('change', `ALTER COLUMN ${name} SET DEFAULT ${defaultSql(c.default)}`)
+  } else if (defaultChanged) {
+    alter('change', c.default ? `ALTER COLUMN ${name} SET DEFAULT ${defaultSql(c.default)}` : `ALTER COLUMN ${name} DROP DEFAULT`)
   }
-  if (defaultChanged) alter(c.default ? `ALTER COLUMN ${name} SET DEFAULT ${defaultSql(c.default)}` : `ALTER COLUMN ${name} DROP DEFAULT`)
   if (nullChanged) {
-    alter(`ALTER COLUMN ${name} ${c.nullable ? 'DROP' : 'SET'} NOT NULL`)
+    alter('change', `ALTER COLUMN ${name} ${c.nullable ? 'DROP' : 'SET'} NOT NULL`)
     if (!c.nullable) destructive.push(`makes ${where} required, which fails if it has empty values`)
   }
   if (enumChanged && c.type === 'enum' && c.enumValues?.length) {
-    alter(`ADD CONSTRAINT ${check} CHECK (${name} IN (${c.enumValues.map(quoteValue).join(', ')}))`)
+    alter('change', `ADD CONSTRAINT ${check} CHECK (${name} IN (${c.enumValues.map(quoteValue).join(', ')}))`)
     if ((p.enumValues ?? []).some((v) => !c.enumValues!.includes(v))) destructive.push(`removes allowed values from ${where}, which fails if rows use them`)
   }
   if (uniqueChanged && c.unique) {
-    alter(`ADD CONSTRAINT ${t.name}_${c.name}_key UNIQUE (${name})`)
+    alter('change', `ADD CONSTRAINT ${table}_${c.name}_key UNIQUE (${name})`)
     destructive.push(`makes ${where} unique, which fails if it has duplicates`)
   }
   if (refChanged && c.ref) {
-    alter(`ADD CONSTRAINT ${t.name}_${c.name}_fkey FOREIGN KEY (${name}) REFERENCES ${c.ref.table}(${c.ref.column}) ON DELETE ${c.ref.onDelete.toUpperCase()}`)
+    fk()
     destructive.push(`adds a foreign key on ${where}, which fails if rows point at missing ${c.ref.table}`)
   }
 }

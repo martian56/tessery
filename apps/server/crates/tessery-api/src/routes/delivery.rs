@@ -203,25 +203,37 @@ async fn missing_secrets(state: &AppState, project: Uuid, commit: &str, env: &st
     Ok(tessery_core::runner::missing_secrets(&required, &stored).into_iter().map(str::to_owned).collect())
 }
 
-async fn read_json(state: &AppState, project: Uuid, commit: &str, path: &str) -> Option<Value> {
-    let repo = state.repos.open(project).await.ok()?;
-    let raw = repo.read_file(commit, path).await.ok()?;
-    serde_json::from_slice(&raw).ok()
+async fn open_repo(state: &AppState, project: Uuid) -> ApiResult<Option<tessery_git::Repo>> {
+    match state.repos.open(project).await {
+        Ok(r) => Ok(Some(r)),
+        Err(tessery_git::GitError::Missing) => Ok(None),
+        Err(e) => Err(git_err(e)),
+    }
 }
 
-pub async fn previous_migrations(state: &AppState, project: Uuid) -> Option<Value> {
-    let repo = state.repos.open(project).await.ok()?;
-    let commit = repo.resolve(&format!("refs/heads/{}", tessery_git::GENERATED)).await.ok()??;
+async fn read_json(state: &AppState, project: Uuid, commit: &str, path: &str) -> ApiResult<Option<Value>> {
+    let Some(repo) = open_repo(state, project).await? else { return Ok(None) };
+    let Some(raw) = repo.read_file_if_exists(commit, path).await.map_err(git_err)? else { return Ok(None) };
+    serde_json::from_slice(&raw).map(Some).map_err(|e| ApiError::Internal(anyhow::anyhow!("{path} in {commit} is not valid JSON: {e}")))
+}
+
+pub async fn previous_migrations(state: &AppState, project: Uuid) -> ApiResult<Option<Value>> {
+    let Some(repo) = open_repo(state, project).await? else { return Ok(None) };
+    let Some(commit) = repo.resolve(&format!("refs/heads/{}", tessery_git::GENERATED)).await.map_err(git_err)? else { return Ok(None) };
     read_json(state, project, &commit, tessery_core::migrations::MIGRATIONS_FILE).await
 }
 
-async fn release_migrations(state: &AppState, project: Uuid, running: Option<&str>, commit: &str) -> Vec<tessery_core::migrations::PendingMigration> {
-    let Some(next) = read_json(state, project, commit, tessery_core::migrations::MIGRATIONS_FILE).await else { return Vec::new() };
-    let current = match running {
-        Some(c) => read_json(state, project, c, tessery_core::migrations::MIGRATIONS_FILE).await,
-        None => None,
-    };
-    tessery_core::migrations::pending_migrations(current.as_ref(), &next)
+async fn release_migrations(state: &AppState, project: Uuid, env: &str, commit: &str) -> ApiResult<Vec<tessery_core::migrations::PendingMigration>> {
+    let released = db::list_releases(&state.db, project, 500)
+        .await?
+        .into_iter()
+        .filter(|r| r.env_key == env && r.status == ReleaseStatus::Released)
+        .max_by_key(|r| r.requested_at);
+    let Some(last) = released else { return Ok(Vec::new()) };
+    let Some(next) = read_json(state, project, commit, tessery_core::migrations::MIGRATIONS_FILE).await? else { return Ok(Vec::new()) };
+    let running = db::get_checkpoint(&state.db, project, last.checkpoint_id).await?.commit_sha;
+    let current = read_json(state, project, &running, tessery_core::migrations::MIGRATIONS_FILE).await?;
+    Ok(tessery_core::migrations::pending_migrations(current.as_ref(), &next))
 }
 
 async fn needs_runner(state: &AppState, project: Uuid, commit: &str, env: &str) -> bool {
@@ -305,7 +317,7 @@ pub async fn create_checkpoint(
         return Err(ApiError::StaleVersion);
     }
     let doc = crate::routes::projects::ProjectDto::from(saved.clone()).doc;
-    let previous = previous_migrations(&state, project).await;
+    let previous = previous_migrations(&state, project).await?;
     let generated = state.engine.generate(&doc, previous.as_ref()).await.map_err(engine_err)?;
     if generated.len() > MAX_FILES || generated.values().map(String::len).sum::<usize>() > MAX_TOTAL_BYTES {
         return Err(ApiError::Conflict("the generated project is too large to checkpoint".into()));
@@ -537,11 +549,6 @@ impl From<tessery_core::migrations::PendingMigration> for MigrationDto {
     }
 }
 
-async fn running_commit(ex: impl sqlx::PgExecutor<'_> + Copy, project: Uuid, env: &str) -> ApiResult<Option<String>> {
-    let Some(head) = db::heads(ex, project).await?.into_iter().find(|h| h.env_key == env) else { return Ok(None) };
-    Ok(Some(db::get_checkpoint(ex, project, head.checkpoint_id).await?.commit_sha))
-}
-
 /// What releasing a checkpoint into an environment would change, such as the database migrations it runs.
 #[utoipa::path(get, path = "/api/projects/{project}/releases/preview", tag = "delivery", params(("project" = Uuid, Path), ReleasePreviewQuery), responses((status = 200, body = ReleasePreviewDto)))]
 pub async fn release_preview(
@@ -555,11 +562,7 @@ pub async fn release_preview(
     let checkpoint = db::get_checkpoint(&state.db, project, q.checkpoint_id)
         .await
         .map_err(|_| ApiError::invalid("checkpointId", "checkpoint not found"))?;
-    let running = running_commit(&state.db, project, &q.env).await?;
-    let migrations = match running {
-        Some(r) => release_migrations(&state, project, Some(&r), &checkpoint.commit_sha).await,
-        None => Vec::new(),
-    };
+    let migrations = release_migrations(&state, project, &q.env, &checkpoint.commit_sha).await?;
     Ok(Json(ReleasePreviewDto { migrations: migrations.into_iter().map(Into::into).collect() }))
 }
 
@@ -599,12 +602,9 @@ pub async fn create_release(
         return Err(ApiError::Conflict(format!("{} already runs checkpoint {}", stage.name, checkpoint.seq)));
     }
 
-    if let Some(h) = &head
-        && !req.confirm_destructive
-    {
-        let running = db::get_checkpoint(&mut *tx, project, h.checkpoint_id).await?.commit_sha;
-        let risky: Vec<String> = release_migrations(&state, project, Some(&running), &checkpoint.commit_sha)
-            .await
+    if !req.confirm_destructive {
+        let risky: Vec<String> = release_migrations(&state, project, &stage.key, &checkpoint.commit_sha)
+            .await?
             .into_iter()
             .flat_map(|m| m.destructive.into_iter().map(move |d| format!("{} {}: {d}", m.database, m.file)))
             .collect();

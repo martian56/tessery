@@ -195,3 +195,13 @@ test('design changes become numbered migrations that keep data', () => {
   assert.ok(generateAll(tasksTemplate())['services/tasks-api/migrations/tasks-db/0001_init.sql'], 'services ship their migrations')
   assert.deepEqual(parseMigrationState(JSON.parse(files['db/migrations.json'])), third)
 })
+
+test('removing the last table still drops it and keeps the history', () => {
+  const { doc, db, table } = shop()
+  const first = planMigrations(doc)
+  runOp(doc, 'removeTable', { nodeId: db, tableId: table })
+  const next = planMigrations(doc, first).databases[db]
+  assert.equal(next.migrations.length, 2)
+  assert.match(next.migrations[1].sql, /DROP TABLE orders;/)
+  assert.ok(next.migrations[1].destructive.length)
+})
