@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE integrations SET last_check = $2, checked_at = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "19f6510f968c6c66f1d1ba4141f5cf38e59d2f7960f3d99c8c57b96c5bb712b2"
+}

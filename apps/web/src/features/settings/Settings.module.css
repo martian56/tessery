@@ -13,3 +13,7 @@
 .publicKey { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-4); border: 1px solid var(--line-2); border-radius: var(--r-2); font-size: var(--fs-11); }
 .keyLine { display: flex; align-items: center; gap: var(--sp-3); }
 .keyLine code { flex: 1; overflow-x: auto; white-space: nowrap; padding: var(--sp-2) var(--sp-3); background: var(--bg-0, transparent); border-radius: var(--r-1, 4px); }
+.providerGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--sp-4); }
+.providerCard { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-5); border: 1px solid var(--line-2); border-radius: var(--r-3); background: var(--bg-1); }
+.providerHead { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); }
+.providerDot { width: 10px; height: 10px; border-radius: 50%; }

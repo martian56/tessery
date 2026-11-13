@@ -51,6 +51,8 @@ permissions! {
     TokenManage      = "token:manage",      "Access",       "Create and revoke API tokens for agents and CI";
     ServerRead       = "server:read",       "Servers",      "See servers and pick them for environments";
     ServerManage     = "server:manage",     "Servers",      "Add, check, change and remove servers";
+    IntegrationRead  = "integration:read",  "Integrations", "See connected cloud accounts";
+    IntegrationManage= "integration:manage","Integrations", "Connect, check and remove cloud accounts";
 }
 
 impl fmt::Display for Permission {

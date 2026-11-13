@@ -1,0 +1,113 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, org_id, provider, name, summary, last_check, checked_at, created_at FROM integrations WHERE org_id = $1 AND id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "integrations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "integrations",
+            "name": "org_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "provider",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "integrations",
+            "name": "provider"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "integrations",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "summary",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "integrations",
+            "name": "summary"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "last_check",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "integrations",
+            "name": "last_check"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "checked_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "integrations",
+            "name": "checked_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "integrations",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "00c68af30edbcf8d3d67f55feaf27dc7cb24e7f948aaa687e7f2368c480d1097"
+}

@@ -18,6 +18,10 @@ pub struct TestApp {
 }
 
 pub async fn spawn() -> TestApp {
+    spawn_with(|_| {}).await
+}
+
+pub async fn spawn_with(customize: impl FnOnce(&mut Config)) -> TestApp {
     let admin_url = env(
         "TESSERY_TEST_DATABASE_URL",
         "postgres://tessery:tessery@127.0.0.1:15432/tessery",
@@ -55,7 +59,7 @@ pub async fn spawn() -> TestApp {
         .unwrap();
     let base_url = admin_url.rsplit_once('/').unwrap().0;
 
-    let config = Config {
+    let mut config = Config {
         bind: "127.0.0.1:0".parse().unwrap(),
         database_url: format!("{base_url}/{db_name}"),
         db_max_connections: 5,
@@ -69,6 +73,7 @@ pub async fn spawn() -> TestApp {
         data_dir: std::env::temp_dir().join("tessery-tests").join(&db_name),
         secret_key: Some(tessery_core::SecretKey::parse(&"7".repeat(64)).unwrap()),
         oidc: None,
+        provider_apis: Default::default(),
         engine: tessery_engine::EngineConfig {
             node: "node".into(),
             script: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../packages/core/dist/tessery-engine.mjs"),
@@ -76,6 +81,7 @@ pub async fn spawn() -> TestApp {
             timeout: Duration::from_secs(30),
         },
     };
+    customize(&mut config);
     let state = tessery_api::connect(config).await.expect("connect test state");
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
