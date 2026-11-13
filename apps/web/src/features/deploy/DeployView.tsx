@@ -13,11 +13,13 @@ import { checkPlacement, effectivePlacement, placementOptions } from '@tessery/c
 import { plan, workloads } from '@tessery/core/codegen/deploy'
 import { Badge, Button, Empty, Select, Spacer, Toolbar, Tooltip, toast, type Tone } from '@/ui'
 import { fmtUsd, timeAgo } from '@/lib/format'
+import { useDockerHostLabel } from './useDockerHostLabel'
 import s from './Deploy.module.css'
 
 const STATUS_TONE: Record<ReleaseStatus, Tone> = { pending: 'warn', queued: 'info', deploying: 'info', released: 'ok', rejected: 'err', cancelled: 'neutral', failed: 'err' }
 
 export function DeployView() {
+  const hostLabel = useDockerHostLabel()
   const dispatch = useAppDispatch()
   const edit = useEdit()
   const doc = useDoc()
@@ -62,7 +64,7 @@ export function DeployView() {
         </section>
         {kind !== 'git' ? (
           <section className={s.block}>
-            <div className={s.blockHead}>Containers<span className="muted">what {env.name} runs on {kind === 'docker' ? (env.target?.kind === 'docker' && env.target.host ? env.target.host : 'the Docker engine next to Tessery') : 'Kubernetes'}. Everything, including databases, runs as a container.</span></div>
+            <div className={s.blockHead}>Containers<span className="muted">what {env.name} runs on {kind === 'docker' ? (env.target?.kind === 'docker' && (env.target.host || env.target.server) ? hostLabel(env.target) : 'the Docker engine next to Tessery') : 'Kubernetes'}. Everything, including databases, runs as a container.</span></div>
             <table className={s.table}>
               <thead><tr><th>Node</th><th>Image</th><th className={s.num}>Replicas</th><th className={s.num}>Memory</th><th>Storage</th><th>Public at</th></tr></thead>
               <tbody>

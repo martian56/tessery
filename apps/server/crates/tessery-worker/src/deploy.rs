@@ -163,7 +163,16 @@ async fn run(ctx: &Ctx, r: &Release, log: &Log) -> Result<Vec<Value>> {
 
     let required = tessery_core::runner::required_secrets(&serde_json::from_slice(&plan_raw).context("reading the deploy plan")?);
     let mut values = resolve_secrets(ctx, r, &required).await?;
-    let remote = plan.target.get("host").and_then(Value::as_str).filter(|h| kind == "docker" && h.starts_with("ssh://"));
+    let server = server_connection(ctx, r.project_id, &plan.target).await?;
+    if let Some((_, extra)) = &server {
+        values.extend(extra.iter().cloned());
+    }
+    let host_env = server.as_ref().map(|(address, _)| format!("TESSERY_DOCKER_HOST={address}")).unwrap_or_else(|| "TESSERY_DOCKER_HOST=".into());
+    let remote = server
+        .as_ref()
+        .map(|(address, _)| address.as_str())
+        .or_else(|| plan.target.get("host").and_then(Value::as_str))
+        .filter(|h| kind == "docker" && h.starts_with("ssh://"));
     let base = if remote.is_some() { ctx.runner.public_url.as_deref() } else { ctx.runner.telemetry_url.as_deref() };
     match (base, remote) {
         (Some(url), _) if ctx.secret_key.is_some() => log.line(format!("Traces go to {url}")),
@@ -181,7 +190,7 @@ async fn run(ctx: &Ctx, r: &Release, log: &Log) -> Result<Vec<Value>> {
         cfg,
         &[
             "create", "--name", &name, "--label", "tessery.release", "-v", &volume,
-            "-e", &format!("TESSERY_ENV={}", r.env_key), "-e", &format!("TESSERY_TAG={tag}"), "-e", &format!("TESSERY_RELEASE={}", r.id),
+            "-e", &format!("TESSERY_ENV={}", r.env_key), "-e", &format!("TESSERY_TAG={tag}"), "-e", &format!("TESSERY_RELEASE={}", r.id), "-e", &host_env,
             &cfg.image(), "sh", "/work/.tessery/run.sh",
         ],
     )
@@ -237,12 +246,21 @@ pub async fn teardown(ctx: &Ctx, project: Uuid, env: &str, plan: &Value, connect
         let key = ctx.secret_key.as_ref().ok_or_else(|| anyhow!("TESSERY_SECRET_KEY is not set on the worker"))?;
         values.push((name.clone(), String::from_utf8(key.decrypt(cipher)?)?));
     }
+    let target = plan.get("target").cloned().unwrap_or(Value::Null);
+    let server = server_connection(ctx, project, &target).await?;
+    let host_env = match server {
+        Some((address, extra)) => {
+            values.extend(extra);
+            format!("TESSERY_DOCKER_HOST={address}")
+        }
+        None => "TESSERY_DOCKER_HOST=".into(),
+    };
     ensure_runner_image(cfg, &log).await?;
     let name = format!("tessery-teardown-{project}-{env}");
     let _ = docker(cfg, &["rm", "-f", &name]).await;
     let volume = format!("{}:/var/run/docker.sock", cfg.socket);
     let action = if destroy { "TESSERY_ACTION=destroy" } else { "TESSERY_ACTION=stop" };
-    docker(cfg, &["create", "--name", &name, "-v", &volume, "-e", action, "-e", &format!("TESSERY_ENV={env}"), "-e", "TESSERY_TAG=none", &cfg.image(), "sh", "/work/.tessery/run.sh"]).await?;
+    docker(cfg, &["create", "--name", &name, "-v", &volume, "-e", action, "-e", &format!("TESSERY_ENV={env}"), "-e", "TESSERY_TAG=none", "-e", &host_env, &cfg.image(), "sh", "/work/.tessery/run.sh"]).await?;
     let result = async {
         let mut b = tar::Builder::new(Vec::new());
         let body = serde_json::to_vec(plan)?;
@@ -259,6 +277,22 @@ pub async fn teardown(ctx: &Ctx, project: Uuid, env: &str, plan: &Value, connect
     let _ = docker(cfg, &["rm", "-f", &name]).await;
     log.close().await;
     result.map(drop)
+}
+
+async fn server_connection(ctx: &Ctx, project: Uuid, target: &Value) -> Result<Option<(String, Vec<(String, String)>)>> {
+    let Some(id) = target.get("server").and_then(Value::as_str) else { return Ok(None) };
+    let id: Uuid = id.parse().context("the environment names an invalid server id")?;
+    let org = tessery_db::servers::org_of_project(&ctx.db, project).await?;
+    let creds = tessery_db::servers::credentials(&ctx.db, org, id)
+        .await
+        .map_err(|_| anyhow!("the server this environment deploys to was removed; pick another one in the environment settings"))?;
+    let key = ctx.secret_key.as_ref().ok_or_else(|| anyhow!("TESSERY_SECRET_KEY is not set on the worker, so server keys cannot be read"))?;
+    let pem = String::from_utf8(key.decrypt(&creds.private_key)?).context("a stored server key is not UTF-8")?;
+    let mut values = vec![("SSH_PRIVATE_KEY".to_owned(), pem)];
+    if !creds.known_hosts.trim().is_empty() {
+        values.push(("SSH_KNOWN_HOSTS".to_owned(), creds.known_hosts));
+    }
+    Ok(Some((creds.address, values)))
 }
 
 fn telemetry(ctx: &Ctx, base: Option<&str>, project: Uuid, env: &str) -> [(String, String); 2] {

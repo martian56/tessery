@@ -3,10 +3,11 @@ import { KeyRound, Plus, Trash2 } from 'lucide-react'
 import type { DeployTarget, Environment, ProjectDoc } from '@tessery/core/domain/types'
 import { dockerPublicHost, isHostname, namespaceOf, workloads } from '@tessery/core/codegen/deploy'
 import { useDeleteSecretMutation, usePutSecretMutation } from '@/api/endpoints/delivery'
+import { useListServersQuery } from '@/api/endpoints/servers'
 import { errorMessage } from '@/api/types'
 import { usePermissions } from '@/app/usePermissions'
 import { useAppSelector, useEdit } from '@/store'
-import { Badge, Button, Dialog, Field, Input, NumberInput, Section, Segmented, Textarea, Tooltip, toast, useDialogs } from '@/ui'
+import { Badge, Button, Dialog, Field, Input, NumberInput, Section, Segmented, Select, Textarea, Tooltip, toast, useDialogs } from '@/ui'
 import { useEnvSecrets } from './useEnvSecrets'
 import s from './Deploy.module.css'
 
@@ -33,9 +34,7 @@ export function TargetSection({ doc, env }: { doc: ProjectDoc; env: Environment 
         options={[{ value: 'docker', label: 'Docker' }, { value: 'kubernetes', label: 'Kubernetes' }, { value: 'git', label: 'Git only' }]} />
       {target.kind === 'docker' && (
         <>
-          <Field label="Host" hint="Empty runs on the Docker engine Tessery uses. ssh://user@server runs on any machine with Docker and SSH, like a small VPS.">
-            <Input mono value={target.host ?? ''} placeholder="this machine" onCommit={(v) => patch({ host: v.trim() })} />
-          </Field>
+          <RunsOn target={target} onChange={(p) => patch(p)} />
           <Field label="Domain" hint="Public nodes get <node>.<domain> with HTTPS. Point a wildcard DNS record at the host. Empty publishes them on host ports instead.">
             <Input mono value={target.domain ?? ''} placeholder="apps.example.com" onCommit={(v) => {
               const domain = v.trim().toLowerCase()
@@ -44,7 +43,7 @@ export function TargetSection({ doc, env }: { doc: ProjectDoc; env: Environment 
             }} />
           </Field>
           {target.domain && <PublicHosts doc={doc} env={env} target={target} onChange={(hosts) => patch({ hosts: Object.keys(hosts).length ? hosts : undefined })} />}
-          <div className={s.hint}>Runs every node as a container with Docker Compose. Databases and queues run as containers too, so this costs nothing beyond the machine. Good for development, staging and small production setups.{target.host?.startsWith('ssh://') && ' Needs an SSH_PRIVATE_KEY secret below for a user that may run docker on that host. SSH_KNOWN_HOSTS is optional and pins the host key; the deploy log prints it the first time.'}</div>
+          <div className={s.hint}>Runs every node as a container with Docker Compose. Databases and queues run as containers too, so this costs nothing beyond the machine. Good for development, staging and small production setups.{!target.server && target.host?.startsWith('ssh://') && ' Needs an SSH_PRIVATE_KEY secret below for a user that may run docker on that host. SSH_KNOWN_HOSTS is optional and pins the host key; the deploy log prints it the first time.'}</div>
         </>
       )}
       {target.kind === 'kubernetes' && (
@@ -63,6 +62,41 @@ export function TargetSection({ doc, env }: { doc: ProjectDoc; env: Environment 
 }
 
 type DockerTarget = Extract<DeployTarget, { kind: 'docker' }>
+
+const LOCAL = '__local'
+const OTHER = '__other'
+
+function RunsOn({ target, onChange }: { target: DockerTarget; onChange: (p: Record<string, unknown>) => void }) {
+  const org = useAppSelector((st) => st.project.orgId) ?? undefined
+  const perms = usePermissions({ org })
+  const { data: servers } = useListServersQuery(org ?? '', { skip: !org || !perms.can('server:read') })
+  const [other, setOther] = useState(false)
+  const choice = target.server ?? (target.host || other ? OTHER : LOCAL)
+  const options = [
+    { value: LOCAL, label: 'This machine (the Docker engine Tessery uses)' },
+    ...(servers ?? []).map((sv) => ({ value: sv.id, label: `${sv.name} (${sv.address.replace(/^ssh:\/\//, '')})`, group: 'Servers' })),
+    { value: OTHER, label: 'Another SSH address…' },
+  ]
+  const missing = target.server && servers && !servers.some((sv) => sv.id === target.server)
+  const pick = (v: string) => {
+    setOther(v === OTHER)
+    if (v === LOCAL) onChange({ server: undefined, host: undefined })
+    else if (v === OTHER) onChange({ server: undefined })
+    else onChange({ server: v, host: servers?.find((sv) => sv.id === v)?.address })
+  }
+  return (
+    <>
+      <Field label="Runs on" hint={missing ? 'That server was removed. Pick another one.' : <>Add servers such as a VPS under Organization, Servers. Tessery keeps their SSH keys.</>}>
+        <Select value={choice} options={options} onChange={pick} aria-label="Runs on" />
+      </Field>
+      {choice === OTHER && (
+        <Field label="SSH address" hint="Any machine with Docker and SSH. Prefer adding it as a server, so the key is kept with it.">
+          <Input mono value={target.host ?? ''} placeholder="ssh://deploy@203.0.113.7" onCommit={(v) => onChange({ host: v.trim() })} />
+        </Field>
+      )}
+    </>
+  )
+}
 
 function PublicHosts({ doc, env, target, onChange }: { doc: ProjectDoc; env: Environment; target: DockerTarget; onChange: (hosts: Record<string, string>) => void }) {
   const nodes = workloads(doc, env).filter((w) => w.public && w.port && !w.schedule)

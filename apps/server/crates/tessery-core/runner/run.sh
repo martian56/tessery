@@ -112,7 +112,7 @@ check_https() {
 }
 
 use_docker_host() {
-  host=$(jq -r '.target.host // empty' "$plan")
+  host=${TESSERY_DOCKER_HOST:-$(jq -r '.target.host // empty' "$plan")}
   [ -n "$host" ] || return 0
   export DOCKER_HOST="$host"
   case "$host" in ssh://*) ;; *) return 0 ;; esac

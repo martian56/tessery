@@ -7,9 +7,11 @@ import { PROVIDER_BY_ID } from '@tessery/core/catalog/providers'
 import { projectCost } from '@tessery/core/catalog/placement'
 import { Button, Dot, PanelHeader, useDialogs } from '@/ui'
 import { fmtUsd, timeAgo } from '@/lib/format'
+import { useDockerHostLabel } from './useDockerHostLabel'
 import s from './Deploy.module.css'
 
 export function DeploySidebar() {
+  const hostLabel = useDockerHostLabel()
   const dispatch = useAppDispatch()
   const edit = useEdit()
   const doc = useDoc()
@@ -37,7 +39,7 @@ export function DeploySidebar() {
               <div className={s.envMeta}>
                 {kind === 'git'
                   ? <><span style={{ color: PROVIDER_BY_ID[e.defaultProvider]?.color }}>{PROVIDER_BY_ID[e.defaultProvider]?.name}</span> · {e.defaultRegion} · your CI deploys</>
-                  : <>{e.target?.kind === 'docker' ? (e.target.host ? `Docker on ${e.target.host.replace(/^\w+:\/\//, '')}` : 'Docker on this server') : 'Kubernetes'}{e.approval ? ' · approval' : ''}</>}
+                  : <>{e.target?.kind === 'docker' ? `Docker on ${hostLabel(e.target)}` : 'Kubernetes'}{e.approval ? ' · approval' : ''}</>}
               </div>
               <div className={s.envMeta}>
                 {stage?.head ? `#${stage.head.seq} ${stage.head.name}${stage.releasedAt ? ` · ${timeAgo(new Date(stage.releasedAt).getTime())}` : ''}` : 'nothing released'}

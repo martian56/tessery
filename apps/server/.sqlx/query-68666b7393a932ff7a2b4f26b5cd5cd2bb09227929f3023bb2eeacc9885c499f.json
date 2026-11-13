@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT address, private_key, known_hosts FROM servers WHERE org_id = $1 AND id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "address",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "address"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "private_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "private_key"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "known_hosts",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "known_hosts"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "68666b7393a932ff7a2b4f26b5cd5cd2bb09227929f3023bb2eeacc9885c499f"
+}
