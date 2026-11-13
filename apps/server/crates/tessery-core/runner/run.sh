@@ -71,12 +71,13 @@ ensure_proxy() {
     return 0
   fi
   step "Starting the HTTPS proxy"
-  docker rm -f tessery-proxy >/dev/null 2>&1 || true
+  docker rm tessery-proxy >/dev/null 2>&1 || true
   if ! docker run -d --name tessery-proxy --label tessery.proxy=true --restart unless-stopped \
     --network tessery-proxy -p 80:80 -p 443:443 -p 443:443/udp \
     -e CADDY_INGRESS_NETWORKS=tessery-proxy \
     -v /var/run/docker.sock:/var/run/docker.sock:ro -v tessery-proxy-data:/data \
     lucaslorentz/caddy-docker-proxy:2.13.1-alpine >/dev/null; then
+    [ -z "$(docker ps -q --filter label=tessery.proxy)" ] || return 0
     echo "Could not start the proxy. Ports 80 and 443 on the host must be free, or used by a proxy labelled tessery.proxy=true."
     exit 1
   fi

@@ -1,11 +1,11 @@
 import type { SystemNode, DeployTarget, Environment, ProjectDoc } from '../../domain/types'
 import { TECH_BY_ID } from '../../catalog/technologies'
-import { devCompose, dockerPublicHost, envCompose, envExample, slug } from './compose'
+import { devCompose, dockerPublicHost, envCompose, envExample, isHostname, slug } from './compose'
 import { manifests, namespaceOf, publicHost } from './kubernetes'
 import { connection, hostPort, secrets, workloads, type SecretSpec } from './runtime'
 
 export * from './runtime'
-export { devCompose, dockerPublicHost, envCompose, manifests, namespaceOf, slug }
+export { devCompose, dockerPublicHost, envCompose, isHostname, manifests, namespaceOf, slug }
 
 export interface DeployPlan {
   version: 1

@@ -184,3 +184,12 @@ test('docker targets with a domain route public nodes through the shared HTTPS p
   assert.ok(plain.endpoints.every((e) => e.url.startsWith('http://localhost:')))
   assert.doesNotMatch(envCompose(doc, { ...base, target: { kind: 'docker' as const } }), /tessery-proxy/)
 })
+
+test('docker domains accept only plain host names', () => {
+  const doc = tasksTemplate()
+  const base = doc.environments[0]
+  const at = (target: Record<string, unknown>) => plan(doc, { ...base, target: { kind: 'docker' as const, ...target } }).endpoints.map((e) => e.url)
+  assert.ok(at({ domain: 'https://apps.example.com' }).every((u) => u.startsWith('http://localhost:')), 'a URL is not a domain')
+  assert.ok(at({ domain: 'apps.example.com', hosts: { web: 'https://shop.example.com/x' } }).includes('https://web.apps.example.com'), 'a bad override falls back')
+  assert.ok(at({ hosts: { web: 'shop.example.com' } }).every((u) => u.startsWith('http://localhost:')), 'overrides need a domain')
+})

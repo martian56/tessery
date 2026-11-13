@@ -23,10 +23,15 @@ export const PROXY_NETWORK = 'tessery-proxy'
 
 type DockerTarget = Extract<NonNullable<Environment['target']>, { kind: 'docker' }>
 
+const HOSTNAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
+
+export const isHostname = (v: string) => HOSTNAME.test(v)
+
 export function dockerPublicHost(name: string, t: DockerTarget): string | undefined {
+  if (!t.domain || !isHostname(t.domain)) return undefined
   const own = t.hosts?.[name]?.trim()
-  if (own) return own
-  return t.domain ? `${name}.${t.domain}` : undefined
+  if (own && isHostname(own)) return own
+  return `${name}.${t.domain}`
 }
 
 const mem = (m: string) => m.replace(/i$/, '').replace(/Mi$/, 'M').replace(/Gi$/, 'G').toLowerCase()

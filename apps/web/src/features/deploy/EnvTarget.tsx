@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { KeyRound, Plus, Trash2 } from 'lucide-react'
 import type { DeployTarget, Environment, ProjectDoc } from '@tessery/core/domain/types'
-import { dockerPublicHost, namespaceOf, workloads } from '@tessery/core/codegen/deploy'
+import { dockerPublicHost, isHostname, namespaceOf, workloads } from '@tessery/core/codegen/deploy'
 import { useDeleteSecretMutation, usePutSecretMutation } from '@/api/endpoints/delivery'
 import { errorMessage } from '@/api/types'
 import { usePermissions } from '@/app/usePermissions'
@@ -37,7 +37,11 @@ export function TargetSection({ doc, env }: { doc: ProjectDoc; env: Environment 
             <Input mono value={target.host ?? ''} placeholder="this machine" onCommit={(v) => patch({ host: v.trim() })} />
           </Field>
           <Field label="Domain" hint="Public nodes get <node>.<domain> with HTTPS. Point a wildcard DNS record at the host. Empty publishes them on host ports instead.">
-            <Input mono value={target.domain ?? ''} placeholder="apps.example.com" onCommit={(v) => patch({ domain: v.trim().toLowerCase() })} />
+            <Input mono value={target.domain ?? ''} placeholder="apps.example.com" onCommit={(v) => {
+              const domain = v.trim().toLowerCase()
+              if (domain && !isHostname(domain)) return toast(`${domain} is not a domain name. Use just the name, like apps.example.com.`, 'err')
+              patch(domain ? { domain } : { domain: undefined, hosts: undefined })
+            }} />
           </Field>
           {target.domain && <PublicHosts doc={doc} env={env} target={target} onChange={(hosts) => patch({ hosts: Object.keys(hosts).length ? hosts : undefined })} />}
           <div className={s.hint}>Runs every node as a container with Docker Compose. Databases and queues run as containers too, so this costs nothing beyond the machine. Good for development, staging and small production setups.{target.host?.startsWith('ssh://') && ' Needs an SSH_PRIVATE_KEY secret below for a user that may run docker on that host. SSH_KNOWN_HOSTS is optional and pins the host key; the deploy log prints it the first time.'}</div>
@@ -66,6 +70,7 @@ function PublicHosts({ doc, env, target, onChange }: { doc: ProjectDoc; env: Env
   const set = (name: string, v: string) => {
     const next = { ...target.hosts }
     const host = v.trim().toLowerCase()
+    if (host && !isHostname(host)) return toast(`${host} is not a domain name. Use just the name, like shop.example.com.`, 'err')
     if (host) next[name] = host
     else delete next[name]
     onChange(next)
