@@ -190,8 +190,10 @@ function CreateServerDialog({ org, onClose }: { org: string; onClose: () => void
   const [size, setSize] = useState('')
   const [name, setName] = useState('')
   const [create, { isLoading }] = useProvisionServerMutation()
-  const sizes = (catalog?.sizes ?? []).filter((sz) => !region || sz.regions.includes(region))
+  const sizes = (catalog?.sizes ?? []).filter((sz) => !region || sz.regions.includes(region)).sort((a, b) => (a.regionPrices.find((p) => p.region === region)?.monthly ?? a.monthly) - (b.regionPrices.find((p) => p.region === region)?.monthly ?? b.monthly))
+  const priced = (sz: (typeof sizes)[number]) => sz.regionPrices.find((p) => p.region === region) ?? sz
   const picked = sizes.find((sz) => sz.id === size)
+  const money = (v: number, digits = 2) => `${picked?.currency === 'EUR' || sizes[0]?.currency === 'EUR' ? '€' : '$'}${v.toFixed(digits)}`
   const provider = accounts.find((a) => a.id === chosen)?.provider
 
   const save = async () => {
@@ -204,7 +206,7 @@ function CreateServerDialog({ org, onClose }: { org: string; onClose: () => void
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()} title="Create a server" width={560}
       description="Tessery creates an Ubuntu machine in your cloud account, installs Docker, adds a deploy user with its own key and opens only SSH, HTTP and HTTPS."
-      footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!chosen || !region || !size || !name.trim() || isLoading} onClick={save}>{isLoading ? 'Creating…' : picked ? `Create for $${picked.monthlyUsd.toFixed(2)}/month` : 'Create'}</Button></>}>
+      footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!chosen || !region || !size || !name.trim() || isLoading} onClick={save}>{isLoading ? 'Creating…' : picked ? `Create for ${money(priced(picked).monthly)}/month` : 'Create'}</Button></>}>
       {!accounts.length
         ? <div className={muted}>Connect a Hetzner or DigitalOcean account under Integrations first.</div>
         : <>
@@ -217,10 +219,10 @@ function CreateServerDialog({ org, onClose }: { org: string; onClose: () => void
           </Field>
           <Field label="Size" hint="Docker builds need at least 2 GB of memory to be comfortable.">
             <Select value={size || undefined} placeholder="Pick a size" onChange={setSize} disabled={!region}
-              options={sizes.map((sz) => ({ value: sz.id, label: `${sz.name} · ${sz.cpus} CPU · ${sz.memoryGb} GB · ${sz.diskGb} GB disk · $${sz.monthlyUsd.toFixed(2)}/mo` }))} aria-label="Size" />
+              options={sizes.map((sz) => ({ value: sz.id, label: `${sz.name} · ${sz.cpus} CPU · ${sz.memoryGb} GB · ${sz.diskGb} GB disk · ${money(priced(sz).monthly)}/mo` }))} aria-label="Size" />
           </Field>
           <Field label="Name"><Input value={name} onChange={setName} placeholder={`${provider ?? 'cloud'}-1`} /></Field>
-          {picked && <div className={muted}>{provider} bills about ${picked.hourlyUsd.toFixed(4)} per hour, up to ${picked.monthlyUsd.toFixed(2)} a month, until you delete the machine.</div>}
+          {picked && <div className={muted}>{provider} bills about {money(priced(picked).hourly, 4)} per hour, up to {money(priced(picked).monthly)} a month including tax, until you delete the machine.</div>}
         </>}
     </Dialog>
   )

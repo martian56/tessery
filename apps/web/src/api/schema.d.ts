@@ -1548,6 +1548,13 @@ export interface components {
             id: string;
             name: string;
         };
+        RegionPrice: {
+            /** Format: double */
+            hourly: number;
+            /** Format: double */
+            monthly: number;
+            region: string;
+        };
         ReleaseDto: {
             /** Format: uuid */
             checkpointId: string;
@@ -1716,16 +1723,23 @@ export interface components {
         Size: {
             /** Format: int32 */
             cpus: number;
+            /** @description `USD` or `EUR`. */
+            currency: string;
             /** Format: int32 */
             diskGb: number;
             /** Format: double */
-            hourlyUsd: number;
+            hourly: number;
             id: string;
             /** Format: double */
             memoryGb: number;
-            /** Format: double */
-            monthlyUsd: number;
+            /**
+             * Format: double
+             * @description Price in `currency`, as the provider bills it, including any tax it adds.
+             */
+            monthly: number;
             name: string;
+            /** @description Prices that differ by region, when the provider has them. `monthly` and `hourly` are the lowest. */
+            regionPrices: components["schemas"]["RegionPrice"][];
             /** @description Regions that offer this size. */
             regions: string[];
         };

@@ -67,7 +67,8 @@ async fn cloud_accounts_are_checked_before_they_are_saved() {
 
     let catalog: Value = admin.json(&format!("/api/orgs/{org}/integrations/{id}/catalog")).await;
     assert_eq!(catalog["sizes"][0]["id"], "s-1vcpu-1gb");
-    assert_eq!(catalog["sizes"][0]["monthlyUsd"], 6.0);
+    assert_eq!(catalog["sizes"][0]["monthly"], 6.0);
+    assert_eq!(catalog["sizes"][0]["currency"], "USD");
     let created = admin.post(&format!("/api/orgs/{org}/servers/provision"), json!({ "integrationId": id, "name": "do-1", "region": "fra1", "size": "s-1vcpu-1gb" })).await;
     assert_eq!(created.status(), StatusCode::CREATED);
     let server: Value = created.json().await.unwrap();

@@ -163,7 +163,7 @@ pub async fn verify(provider: &str, f: &Map<String, Value>, apis: &Endpoints) ->
     match provider {
         "hetzner" => {
             let base = endpoint(apis, "hetzner", "https://api.hetzner.cloud/v1");
-            send("Hetzner", http.get(format!("{base}/datacenters?per_page=1")).bearer_auth(s("token"))).await?;
+            send("Hetzner", http.get(format!("{base}/locations")).bearer_auth(s("token"))).await?;
             Ok("Hetzner Cloud project".into())
         }
         "digitalocean" => {
@@ -268,10 +268,23 @@ pub struct Size {
     pub cpus: u32,
     pub memory_gb: f64,
     pub disk_gb: u32,
-    pub monthly_usd: f64,
-    pub hourly_usd: f64,
+    /// Price in `currency`, as the provider bills it, including any tax it adds.
+    pub monthly: f64,
+    pub hourly: f64,
+    /// `USD` or `EUR`.
+    pub currency: &'static str,
     /// Regions that offer this size.
     pub regions: Vec<String>,
+    /// Prices that differ by region, when the provider has them. `monthly` and `hourly` are the lowest.
+    pub region_prices: Vec<RegionPrice>,
+}
+
+#[derive(Serialize, ToSchema, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RegionPrice {
+    pub region: String,
+    pub monthly: f64,
+    pub hourly: f64,
 }
 
 #[derive(Serialize, ToSchema, Clone, Debug, PartialEq)]
@@ -339,12 +352,14 @@ pub fn digitalocean_catalog(regions: &Value, sizes: &Value) -> Catalog {
             cpus: s["vcpus"].as_u64().unwrap_or(0) as u32,
             memory_gb: s["memory"].as_f64().unwrap_or(0.0) / 1024.0,
             disk_gb: s["disk"].as_u64().unwrap_or(0) as u32,
-            monthly_usd: f64_of(&s["price_monthly"]),
-            hourly_usd: f64_of(&s["price_hourly"]),
+            monthly: f64_of(&s["price_monthly"]),
+            hourly: f64_of(&s["price_hourly"]),
+            currency: "USD",
+            region_prices: Vec::new(),
             regions: s["regions"].as_array().into_iter().flatten().filter_map(|r| r.as_str().map(str::to_owned)).collect(),
         })
         .collect();
-    sizes.sort_by(|a, b| a.monthly_usd.total_cmp(&b.monthly_usd));
+    sizes.sort_by(|a, b| a.monthly.total_cmp(&b.monthly));
     Catalog { regions, sizes }
 }
 
@@ -370,13 +385,18 @@ pub fn hetzner_catalog(locations: &Value, types: &Value) -> Catalog {
                 cpus: t["cores"].as_u64().unwrap_or(0) as u32,
                 memory_gb: f64_of(&t["memory"]),
                 disk_gb: t["disk"].as_u64().unwrap_or(0) as u32,
-                monthly_usd: if monthly.is_finite() { monthly } else { 0.0 },
-                hourly_usd: if hourly.is_finite() { hourly } else { 0.0 },
+                monthly: if monthly.is_finite() { monthly } else { 0.0 },
+                hourly: if hourly.is_finite() { hourly } else { 0.0 },
+                currency: "EUR",
                 regions: prices.iter().filter_map(|p| p["location"].as_str().map(str::to_owned)).collect(),
+                region_prices: prices
+                    .iter()
+                    .filter_map(|p| Some(RegionPrice { region: p["location"].as_str()?.to_owned(), monthly: f64_of(&p["price_monthly"]["gross"]), hourly: f64_of(&p["price_hourly"]["gross"]) }))
+                    .collect(),
             })
         })
         .collect();
-    sizes.sort_by(|a, b| a.monthly_usd.total_cmp(&b.monthly_usd));
+    sizes.sort_by(|a, b| a.monthly.total_cmp(&b.monthly));
     Catalog { regions, sizes }
 }
 
@@ -522,8 +542,10 @@ mod tests {
         ] });
         let h = hetzner_catalog(&json!({ "locations": [{ "name": "fsn1", "city": "Falkenstein" }] }), &types);
         assert_eq!(h.sizes.len(), 1);
-        assert!((h.sizes[0].monthly_usd - 4.14).abs() < 1e-9);
+        assert!((h.sizes[0].monthly - 4.14).abs() < 1e-9);
         assert_eq!(h.sizes[0].regions, ["fsn1"]);
+        assert_eq!(h.sizes[0].currency, "EUR");
+        assert_eq!(h.sizes[0].region_prices[0].region, "fsn1");
     }
 
     #[test]
