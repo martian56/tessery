@@ -77,15 +77,21 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for branches, commit messages and pull re
 
 ## Self-hosting
 
+On a Linux server with a domain pointing at it:
+
 ```sh
-TESSERY_SECRET_KEY=$(openssl rand -hex 32) docker compose --profile app up -d --build
+curl -fsSL https://raw.githubusercontent.com/martian56/tessery/main/deploy/install.sh | sudo bash
 ```
 
-Tessery listens on port 8080. Keep `TESSERY_SECRET_KEY` safe and stable: it encrypts environment
-secrets and git credentials. Deployed services send traces to `TESSERY_TELEMETRY_URL`; services on
-Docker hosts reached over SSH use `TESSERY_PUBLIC_URL` instead, since they run on other machines.
-The server and the worker mount the Docker socket to run deploys and read environments. On Linux,
-set `DOCKER_GID=$(getent group docker | cut -d: -f3)`.
+The script installs Docker if needed, asks for the domain, writes `/opt/tessery/.env` with generated
+secrets and starts the published images behind Caddy, which serves HTTPS. Only ports 80 and 443 are
+opened; Postgres, Redis and RabbitMQ stay on the internal network. Back up `.env`:
+`TESSERY_SECRET_KEY` encrypts environment secrets and git credentials and cannot be recovered.
+Set `TESSERY_IMAGE_TAG` in `.env` to pin a version. Every variable is described in
+[`deploy/.env.example`](deploy/.env.example).
+
+The root `docker-compose.yml` is for development: it builds from source, uses fixed passwords and
+publishes the database ports.
 
 ## Connecting an agent
 
