@@ -311,7 +311,7 @@ pub async fn teardown(ctx: &Ctx, req: TeardownRequest<'_>) -> Result<()> {
     result.map(drop)
 }
 
-async fn server_connection(ctx: &Ctx, project: Uuid, target: &Value) -> Result<Option<(String, Vec<(String, String)>)>> {
+pub(crate) async fn server_connection(ctx: &Ctx, project: Uuid, target: &Value) -> Result<Option<(String, Vec<(String, String)>)>> {
     let Some(id) = target.get("server").and_then(Value::as_str) else { return Ok(None) };
     let id: Uuid = id.parse().context("the environment names an invalid server id")?;
     let org = tessery_db::servers::org_of_project(&ctx.db, project).await?;

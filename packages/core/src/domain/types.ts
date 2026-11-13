@@ -181,7 +181,17 @@ export interface Environment {
   autoRollback: boolean
   overrides: Record<string, Partial<Placement>>
   secrets: string[]
+  backups?: BackupPolicy
 }
+
+export interface BackupPolicy {
+  integration: string
+  bucket?: string
+  every: 'hourly' | 'daily' | 'weekly'
+  keep: number
+}
+
+export const BACKUP_TECHS = ['postgres', 'timescaledb', 'pgvector', 'mysql', 'mariadb', 'mongodb']
 
 
 export interface SloDef { id: string; nodeId: string; name: string; metric: 'availability' | 'latency_p99' | 'error_rate'; target: number; window: '7d' | '28d' | '30d' }

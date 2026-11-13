@@ -182,6 +182,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/backups/{backup}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replaces the data store's contents with this backup. */
+        post: operations["restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -721,6 +738,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project}/environments/{env}/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        /** Backs up every supported data store the environment runs, now. */
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project}/environments/{env}/databases/{node}/sql": {
         parameters: {
             query?: never;
@@ -1174,6 +1208,24 @@ export interface components {
         };
         /** @enum {string} */
         AuditResult: "allowed" | "denied" | "bypassed";
+        BackupDto: {
+            bucket: string;
+            /** Format: date-time */
+            createdAt: string;
+            error: string;
+            /** Format: date-time */
+            finishedAt?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** @description `scheduled`, `manual` or `release`. */
+            kind: string;
+            node: string;
+            objectKey: string;
+            /** Format: int64 */
+            sizeBytes: number;
+            /** @description `queued`, `running`, `done`, `failed`, `restoring` or `restored`. */
+            status: string;
+        };
         BindingDto: {
             /** Format: date-time */
             createdAt: string;
@@ -1605,6 +1657,10 @@ export interface components {
             lastPushOk?: boolean | null;
             url: string;
             username: string;
+        };
+        RestoreInput: {
+            /** @description The environment id, typed by the person restoring, as confirmation. */
+            confirm: string;
         };
         RoleDto: {
             builtin: boolean;
@@ -2217,6 +2273,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Ok"];
+                };
+            };
+        };
+    };
+    restore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                backup: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreInput"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupDto"];
                 };
             };
         };
@@ -3424,6 +3505,56 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CheckpointDoc"];
                 };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+                env: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupDto"][];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+                env: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupDto"][];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

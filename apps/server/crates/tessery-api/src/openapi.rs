@@ -1,4 +1,4 @@
-use crate::routes::{access, admin, audit_log, auth, delivery, dto, integrations, orgs, projects, runtime, servers, sso, system, teams, telemetry, tokens};
+use crate::routes::{access, admin, audit_log, auth, backups, delivery, dto, integrations, orgs, projects, runtime, servers, sso, system, teams, telemetry, tokens};
 use axum::Json;
 use utoipa::OpenApi;
 
@@ -12,6 +12,7 @@ use utoipa::OpenApi;
         access::list_bindings, access::create_binding, access::delete_binding,
         orgs::list, orgs::create, orgs::get, orgs::update, orgs::delete, orgs::list_members, orgs::add_member, orgs::remove_member,
         integrations::providers, integrations::list, integrations::create, integrations::update, integrations::check, integrations::delete,
+        backups::list, backups::create, backups::restore,
         servers::list, servers::create, servers::provision, integrations::catalog, servers::update, servers::delete, servers::check,
         teams::list, teams::create, teams::get, teams::update, teams::delete, teams::add_member, teams::remove_member,
         projects::list, projects::create, projects::get, projects::save, projects::move_to_team, projects::delete, projects::versions, projects::version, projects::generated,
@@ -26,7 +27,7 @@ use utoipa::OpenApi;
     ),
     components(schemas(crate::error::ErrorBody, dto::UserDto, dto::OrgDto, dto::Ok)),
     tags(
-        (name = "system"), (name = "auth"), (name = "orgs"), (name = "members"), (name = "teams"), (name = "servers", description = "Machines with Docker that environments deploy to over SSH"), (name = "integrations", description = "Cloud provider accounts connected to an organization"),
+        (name = "system"), (name = "auth"), (name = "orgs"), (name = "members"), (name = "teams"), (name = "servers", description = "Machines with Docker that environments deploy to over SSH"), (name = "integrations", description = "Cloud provider accounts connected to an organization"), (name = "backups", description = "Database backups of environments"),
         (name = "access", description = "Roles, permissions and access grants"), (name = "projects"),
         (name = "delivery", description = "Checkpoints, environment pipeline and git remotes"), (name = "audit"),
         (name = "admin", description = "Instance administration"),
