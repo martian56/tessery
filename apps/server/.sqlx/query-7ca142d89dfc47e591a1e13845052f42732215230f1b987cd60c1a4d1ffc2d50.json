@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE backups SET status = $2, error = $3, finished_at = CASE WHEN $2 IN ('done', 'failed', 'restored') THEN now() ELSE finished_at END WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7ca142d89dfc47e591a1e13845052f42732215230f1b987cd60c1a4d1ffc2d50"
+}
