@@ -111,6 +111,71 @@ check_https() {
   [ -n "$remote" ] || docker network disconnect tessery-proxy "$(hostname)" >/dev/null 2>&1 || true
 }
 
+probe() {
+  network=$1 ip=$2 port=$3 path=$4
+  docker run --rm --network "$network" busybox:1.37 wget -q -O /dev/null -T 3 "http://$ip:$port$path" >/dev/null 2>&1
+}
+
+wait_ready() {
+  name=$1 id=$2 network="${stack}_default"
+  check=$(jq -r --arg n "$name" '.checks[]? | select(.name == $n) | "\(.port) \(.path)"' "$plan")
+  i=0
+  while [ "$i" -lt 60 ]; do
+    state=$(docker inspect -f '{{.State.Status}}' "$id" 2>/dev/null || echo gone)
+    [ "$state" = running ] || { [ "$state" = created ] || [ "$state" = restarting ]; } || return 1
+    if [ "$state" = running ]; then
+      if [ -z "$check" ]; then
+        [ "$i" -ge 2 ] && return 0
+      else
+        ip=$(docker inspect -f "{{with index .NetworkSettings.Networks \"$network\"}}{{.IPAddress}}{{end}}" "$id")
+        set -- $check
+        [ -n "$ip" ] && probe "$network" "$ip" "$1" "$2" && return 0
+      fi
+    fi
+    i=$((i + 1))
+    sleep 2
+  done
+  return 1
+}
+
+rolling_up() {
+  compose="docker compose -p $stack -f deploy/$TESSERY_ENV/compose.yaml --env-file $compose_env"
+  data=$(jq -r '.rollout[] | select(.kind == "statefulset") | .name' "$plan")
+  apps=$(jq -r '.rollout[] | select(.kind == "deployment") | .name' "$plan")
+  if [ -n "$data" ]; then
+    step "Starting data stores"
+    $compose up -d --no-deps --wait --wait-timeout 300 $data
+  fi
+  for name in $apps; do
+    old=$(docker ps -q --filter "label=com.docker.compose.project=$stack" --filter "label=com.docker.compose.service=$name")
+    if [ -z "$old" ]; then
+      step "Starting $name"
+      $compose up -d --no-deps "$name"
+      for id in $(docker ps -q --filter "label=com.docker.compose.project=$stack" --filter "label=com.docker.compose.service=$name"); do
+        wait_ready "$name" "$id" || { echo "$name did not become ready"; $compose logs --tail 40 "$name" || true; exit 1; }
+      done
+      continue
+    fi
+    count=$(echo "$old" | wc -l | tr -d ' ')
+    step "Starting the new $name next to the running one"
+    $compose up -d --no-deps --no-recreate --scale "$name=$((count * 2))" "$name"
+    new=$(docker ps -q --filter "label=com.docker.compose.project=$stack" --filter "label=com.docker.compose.service=$name" | grep -v -F "$old" || true)
+    for id in $new; do
+      if ! wait_ready "$name" "$id"; then
+        echo "The new $name did not become ready, so the running one keeps serving. Its last log lines:"
+        docker logs --tail 40 "$id" 2>&1 || true
+        docker rm -f $new >/dev/null 2>&1 || true
+        exit 1
+      fi
+    done
+    step "Stopping the old $name"
+    docker stop -t 15 $old >/dev/null
+    docker rm $old >/dev/null
+    echo "$name switched to the new version with no downtime"
+  done
+  $compose up -d --no-recreate --remove-orphans >/dev/null
+}
+
 use_docker_host() {
   host=${TESSERY_DOCKER_HOST:-$(jq -r '.target.host // empty' "$plan")}
   [ -n "$host" ] || return 0
@@ -182,8 +247,12 @@ case "$kind" in
     export TESSERY_IMAGE_PREFIX="tessery/$project/" TESSERY_TAG
     build "$TESSERY_IMAGE_PREFIX"
     ensure_proxy
-    step "Starting $stack"
-    docker compose -p "$stack" -f "deploy/$TESSERY_ENV/compose.yaml" --env-file "$compose_env" up -d --remove-orphans --wait --wait-timeout 300
+    if [ "$(jq -r '.strategy // "recreate"' "$plan")" != recreate ] && routed && [ -n "$(docker ps -q --filter "label=com.docker.compose.project=$stack")" ]; then
+      rolling_up
+    else
+      step "Starting $stack"
+      docker compose -p "$stack" -f "deploy/$TESSERY_ENV/compose.yaml" --env-file "$compose_env" up -d --remove-orphans --wait --wait-timeout 300
+    fi
     [ -n "$host" ] || check_http "${stack}_default"
     check_https "$host"
     prune_images "$TESSERY_IMAGE_PREFIX"
