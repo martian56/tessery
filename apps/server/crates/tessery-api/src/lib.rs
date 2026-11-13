@@ -13,7 +13,7 @@ use crate::error::ApiError;
 use crate::state::AppState;
 use axum::Router;
 use axum::extract::Request;
-use axum::http::{HeaderName, Method};
+use axum::http::{HeaderName, HeaderValue, Method, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use std::time::Duration;
@@ -21,6 +21,7 @@ use tower::ServiceBuilder;
 use tower_http::LatencyUnit;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
@@ -64,6 +65,8 @@ pub async fn connect(config: config::Config) -> anyhow::Result<AppState> {
     })
 }
 
+const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+
 pub fn app(state: AppState) -> Router {
     let request_id = HeaderName::from_static("x-request-id");
     let api = routes::api()
@@ -87,8 +90,15 @@ pub fn app(state: AppState) -> Router {
         router = router
             .fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(dir.join("index.html"))));
     }
+    let hsts = state.config.cookie_secure.then(|| HeaderValue::from_static("max-age=31536000; includeSubDomains"));
     router.with_state(state).layer(
         ServiceBuilder::new()
+            .layer(SetResponseHeaderLayer::if_not_present(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static(CSP)))
+            .layer(SetResponseHeaderLayer::if_not_present(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff")))
+            .layer(SetResponseHeaderLayer::if_not_present(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY")))
+            .layer(SetResponseHeaderLayer::if_not_present(header::REFERRER_POLICY, HeaderValue::from_static("strict-origin-when-cross-origin")))
+            .layer(SetResponseHeaderLayer::if_not_present(HeaderName::from_static("permissions-policy"), HeaderValue::from_static("camera=(), microphone=(), geolocation=(), payment=()")))
+            .layer(SetResponseHeaderLayer::if_not_present(header::STRICT_TRANSPORT_SECURITY, move |_: &axum::http::Response<_>| hsts.clone()))
             .layer(SetRequestIdLayer::new(request_id.clone(), MakeRequestUuid))
             .layer(
                 TraceLayer::new_for_http()
