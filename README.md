@@ -73,6 +73,8 @@ cd apps/web && npx tsc --noEmit -p .
 
 The Rust tests need the services from `docker compose up -d`.
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branches, commit messages and pull requests.
+
 ## Self-hosting
 
 ```sh
