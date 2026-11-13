@@ -18,16 +18,17 @@ fi
 docker compose version >/dev/null 2>&1 || fail "the Docker Compose plugin is missing"
 systemctl enable --now docker >/dev/null 2>&1 || true
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
 mkdir -p "$DIR"
 cd "$DIR"
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
-for f in compose.yml .env.example; do
+for f in compose.yml .env.example backup.sh restore.sh; do
   if [ -n "$HERE" ] && [ "$HERE" != "$DIR" ] && [ -f "$HERE/$f" ]; then
     cp "$HERE/$f" "$f"
   elif [ ! -f "$f" ]; then
     curl -fsSL "$SOURCE/$f" -o "$f"
   fi
 done
+chmod +x backup.sh restore.sh
 
 if [ -f .env ]; then
   say "Keeping the existing $DIR/.env"
@@ -44,6 +45,7 @@ else
     -e "s|^RABBITMQ_PASSWORD=.*|RABBITMQ_PASSWORD=$(hex 24)|" \
     -e "s|^DOCKER_GID=.*|DOCKER_GID=$(stat -c %g /var/run/docker.sock)|" \
     -e "s|^TESSERY_COMPOSE_DIR=.*|TESSERY_COMPOSE_DIR=${DIR}|" \
+    -e "s|^TESSERY_IMAGE_TAG=.*|TESSERY_IMAGE_TAG=${TESSERY_IMAGE_TAG:-latest}|" \
     .env.example > .env
   chmod 600 .env
   say "Wrote $DIR/.env. Back it up: TESSERY_SECRET_KEY cannot be recovered."
@@ -51,7 +53,7 @@ fi
 
 say "Starting Tessery"
 docker network inspect tessery-proxy >/dev/null 2>&1 || docker network create tessery-proxy >/dev/null
-docker compose pull
+[ "${TESSERY_SKIP_PULL:-}" = 1 ] || docker compose pull
 docker compose up -d
 
 say "Waiting for the server"
