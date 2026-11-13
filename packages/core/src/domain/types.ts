@@ -166,7 +166,7 @@ export interface Page { id: string; appNodeId: string; name: string; route: stri
 
 export type DeployTarget =
   | { kind: 'git' }
-  | { kind: 'docker'; host?: string; domain?: string; hosts?: Record<string, string> }
+  | { kind: 'docker'; host?: string; server?: string; domain?: string; hosts?: Record<string, string> }
   | { kind: 'kubernetes'; namespace?: string; registry?: string; domain?: string; ingressClass?: string; publicPort?: number }
 
 export interface Environment {

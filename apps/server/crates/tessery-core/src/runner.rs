@@ -33,7 +33,7 @@ pub fn required_secrets(plan: &serde_json::Value) -> Vec<RequiredSecret> {
     let target = &plan["target"];
     match target["kind"].as_str() {
         Some("kubernetes") => out.push(RequiredSecret { name: "KUBECONFIG".into(), generate: false }),
-        Some("docker") if target["host"].as_str().is_some_and(|h| h.starts_with("ssh://")) => {
+        Some("docker") if target["server"].is_null() && target["host"].as_str().is_some_and(|h| h.starts_with("ssh://")) => {
             out.push(RequiredSecret { name: "SSH_PRIVATE_KEY".into(), generate: false })
         }
         _ => {}
@@ -59,6 +59,8 @@ mod tests {
         let required = required_secrets(&plan);
         assert_eq!(required.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(), ["DB_PASSWORD", "PAYMENTS_URL", "SSH_PRIVATE_KEY"]);
         assert_eq!(missing_secrets(&required, &["PAYMENTS_URL".into()]), ["SSH_PRIVATE_KEY"]);
+        let on_server = required_secrets(&json!({ "target": { "kind": "docker", "host": "ssh://deploy@203.0.113.7", "server": "01a1d5ca-a628-79bc-adf1-a98e48cb28f3" } }));
+        assert!(on_server.is_empty(), "a saved server brings its own key");
         let k8s = required_secrets(&json!({ "target": { "kind": "kubernetes" } }));
         assert_eq!(missing_secrets(&k8s, &[]), ["KUBECONFIG"]);
     }

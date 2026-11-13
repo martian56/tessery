@@ -7,3 +7,9 @@
 .details { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--tx-3); max-width: 340px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .scope { display: inline-flex; align-items: center; gap: var(--sp-3); }
 .more { display: flex; justify-content: center; }
+.serverRow { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); }
+.serverFacts { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-5); font-size: var(--fs-11); color: var(--tx-2); }
+.serverError { font-size: var(--fs-11); color: var(--err); }
+.publicKey { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-4); border: 1px solid var(--line-2); border-radius: var(--r-2); font-size: var(--fs-11); }
+.keyLine { display: flex; align-items: center; gap: var(--sp-3); }
+.keyLine code { flex: 1; overflow-x: auto; white-space: nowrap; padding: var(--sp-2) var(--sp-3); background: var(--bg-0, transparent); border-radius: var(--r-1, 4px); }

@@ -425,6 +425,54 @@ export interface paths {
         patch: operations["update_role"];
         trace?: never;
     };
+    "/api/orgs/{org}/servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orgs/{org}/servers/{server}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete"];
+        options?: never;
+        head?: never;
+        patch: operations["update"];
+        trace?: never;
+    };
+    "/api/orgs/{org}/servers/{server}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["check"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/orgs/{org}/teams": {
         parameters: {
             query?: never;
@@ -1260,6 +1308,12 @@ export interface components {
             bypass: boolean;
             permissions: string[];
         };
+        NewServerInput: {
+            address: string;
+            name: string;
+            /** @description An unencrypted OpenSSH private key. Leave it out and Tessery generates one; add the returned public key to the server. */
+            privateKey?: string | null;
+        };
         NodeStatusDto: {
             instances: components["schemas"]["InstanceDto"][];
             name: string;
@@ -1434,6 +1488,41 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             updatedBy?: string | null;
+        };
+        ServerDto: {
+            /** @description `ssh://user@host` or `ssh://user@host:port`. */
+            address: string;
+            /** Format: date-time */
+            checkedAt?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description Whether the server's host key is pinned. Tessery pins it on the first successful check. */
+            hostKeyPinned: boolean;
+            /** Format: uuid */
+            id: string;
+            /** @description Result of the last check: `ok`, `error`, and on success `docker`, `os`, `arch`, `cpus`, `memoryBytes`, `diskFreeBytes`, `diskTotalBytes`. */
+            lastCheck?: Record<string, never> | null;
+            name: string;
+            /** @description Add this line to `~/.ssh/authorized_keys` of the SSH user. Empty when the key was pasted in. */
+            publicKey: string;
+            /** @description Environments that deploy to this server. */
+            usedBy: components["schemas"]["ServerUse"][];
+        };
+        ServerPatch: {
+            address?: string | null;
+            /** @description Forget the pinned host key, for example after reinstalling the server. */
+            forgetHostKey?: boolean;
+            name?: string | null;
+            /** @description Generate a new key pair. The old public key stops working once removed from the server. */
+            newKey?: boolean;
+            /** @description Replace the key with this unencrypted OpenSSH private key. */
+            privateKey?: string | null;
+        };
+        ServerUse: {
+            env: string;
+            project: string;
+            /** Format: uuid */
+            projectId: string;
         };
         Settings: {
             allowOrgCreation: boolean;
@@ -2463,6 +2552,128 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RoleDto"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerDto"][];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewServerInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerDto"];
+                };
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org: string;
+                server: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org: string;
+                server: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServerPatch"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerDto"];
+                };
+            };
+        };
+    };
+    check: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org: string;
+                server: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerDto"];
                 };
             };
         };

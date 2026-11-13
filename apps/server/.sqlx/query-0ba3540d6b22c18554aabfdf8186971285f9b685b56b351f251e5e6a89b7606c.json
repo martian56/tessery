@@ -1,0 +1,130 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE servers SET\n             name = COALESCE($3, name),\n             address = COALESCE($4, address),\n             private_key = COALESCE($5, private_key),\n             public_key = COALESCE($6, public_key),\n             known_hosts = COALESCE($7, known_hosts),\n             last_check = CASE WHEN $4::text IS NULL AND $5::bytea IS NULL THEN last_check END,\n             checked_at = CASE WHEN $4::text IS NULL AND $5::bytea IS NULL THEN checked_at END\n           WHERE org_id = $1 AND id = $2\n           RETURNING id, org_id, name, address, public_key, known_hosts, last_check, checked_at, created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "org_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "address",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "address"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "public_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "public_key"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "known_hosts",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "known_hosts"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "last_check",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "last_check"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "checked_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "checked_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "0ba3540d6b22c18554aabfdf8186971285f9b685b56b351f251e5e6a89b7606c"
+}

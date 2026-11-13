@@ -9,6 +9,7 @@ pub mod mcp;
 pub mod orgs;
 pub mod projects;
 pub mod runtime;
+pub mod servers;
 pub mod sso;
 pub mod system;
 pub mod teams;
@@ -47,6 +48,9 @@ pub fn api() -> Router<AppState> {
         )
         .route("/orgs/{org}/members/{user}", delete(orgs::remove_member))
         .route("/orgs/{org}/teams", get(teams::list).post(teams::create))
+        .route("/orgs/{org}/servers", get(servers::list).post(servers::create))
+        .route("/orgs/{org}/servers/{server}", axum::routing::patch(servers::update).delete(servers::delete))
+        .route("/orgs/{org}/servers/{server}/check", post(servers::check))
         .route(
             "/orgs/{org}/teams/{team}",
             get(teams::get).patch(teams::update).delete(teams::delete),

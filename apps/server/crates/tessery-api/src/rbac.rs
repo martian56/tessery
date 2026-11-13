@@ -121,6 +121,16 @@ fn target_project(t: &Target) -> Option<Uuid> {
     }
 }
 
+pub async fn can(state: &AppState, p: &Principal, target: &Target, perm: Permission) -> ApiResult<bool> {
+    let eff = effective(state, p.user.id, target).await?;
+    if let Some(scope) = &p.scope
+        && (scope.project.is_some_and(|only| target_project(target) != Some(only)) || scope.permissions.as_ref().is_some_and(|ps| !ps.contains(&perm)))
+    {
+        return Ok(false);
+    }
+    Ok(!matches!(decide(p.is_instance_admin(), &eff, perm), Decision::Denied))
+}
+
 pub async fn project_target(state: &AppState, project: Uuid) -> ApiResult<Target> {
     let (org, team) = tessery_db::projects::locate(&state.db, project).await?;
     Ok(Target::Project {

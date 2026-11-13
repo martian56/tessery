@@ -17,7 +17,7 @@ export function useEnvSecrets(doc: ProjectDoc, env: Environment | undefined) {
     if (!env) return []
     const req: SecretRow[] = requiredSecrets(doc, env).map((r) => ({ name: r.name, description: r.description, generate: r.generate, required: true }))
     if (env.target?.kind === 'kubernetes') req.push({ name: 'KUBECONFIG', description: 'Kubeconfig for the cluster', generate: false, required: true })
-    if (env.target?.kind === 'docker' && env.target.host?.startsWith('ssh://')) {
+    if (env.target?.kind === 'docker' && !env.target.server && env.target.host?.startsWith('ssh://')) {
       req.push({ name: 'SSH_PRIVATE_KEY', description: `Private key for ${env.target.host.slice(6)}`, generate: false, required: true })
       req.push({ name: 'SSH_KNOWN_HOSTS', description: 'Optional. Pins the host key (ssh-keyscan output)', generate: false, required: false })
     }

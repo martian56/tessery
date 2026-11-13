@@ -39,8 +39,11 @@ pub async fn locate(state: &AppState, project: Uuid, env: &str) -> ApiResult<Run
             let project_slug = plan["project"].as_str().unwrap_or_default();
             let stack = format!("{project_slug}-{env}").to_lowercase().replace('.', "-");
             let url = plan.pointer("/target/host").and_then(Value::as_str).filter(|h| !h.is_empty()).map(str::to_owned);
+            let server = plan.pointer("/target/server").and_then(Value::as_str).and_then(|s| s.parse::<Uuid>().ok());
             let mut host = Engine { url, ssh_key: None, known_hosts: None };
-            if host.url.as_deref().is_some_and(|u| u.starts_with("ssh://")) {
+            if let Some(server) = server {
+                host = crate::routes::servers::engine_for(state, project, server).await?;
+            } else if host.url.as_deref().is_some_and(|u| u.starts_with("ssh://")) {
                 host.ssh_key = Some(secret(state, project, env, "SSH_PRIVATE_KEY").await?.ok_or_else(|| ApiError::Conflict(format!("{env} has no SSH_PRIVATE_KEY secret")))?);
                 host.known_hosts = secret(state, project, env, "SSH_KNOWN_HOSTS").await?;
             }
@@ -83,26 +86,50 @@ async fn exec(program: &str, args: &[String], envs: &[(&str, &str)], stdin: Opti
     Ok(Output { ok: out.status.success(), stdout: String::from_utf8_lossy(&out.stdout).into_owned(), stderr: String::from_utf8_lossy(&out.stderr).into_owned() })
 }
 
-pub async fn docker(host: &Engine, args: &[String], stdin: Option<&[u8]>) -> ApiResult<Output> {
-    let Some(key) = &host.ssh_key else {
-        let envs: Vec<(&str, &str)> = host.url.as_deref().map(|h| vec![("DOCKER_HOST", h)]).unwrap_or_default();
-        return exec(&docker_bin(), args, &envs, stdin, Duration::from_secs(30)).await;
-    };
+const SSH_SETUP: &str = concat!(
+    "mkdir -p ~/.ssh && echo \"$SSH_KEY_B64\" | base64 -d > ~/.ssh/id_tessery && chmod 600 ~/.ssh/id_tessery && ",
+    "if [ -n \"$KNOWN_B64\" ]; then echo \"$KNOWN_B64\" | base64 -d > ~/.ssh/known_hosts; c=yes; else c=accept-new; fi && ",
+    "printf 'Host *\\n  IdentityFile ~/.ssh/id_tessery\\n  IdentitiesOnly yes\\n  StrictHostKeyChecking %s\\n  ConnectTimeout 15\\n' $c > ~/.ssh/config && ",
+    "export DOCKER_HOST=\"$REMOTE_DOCKER_HOST\" && "
+);
+
+pub async fn ensure_runner() -> ApiResult<()> {
+    let image = tessery_core::runner::image();
+    if exec(&docker_bin(), &["image".into(), "inspect".into(), image.clone()], &[], None, Duration::from_secs(20)).await?.ok {
+        return Ok(());
+    }
+    let dir = std::env::temp_dir().join(format!("tessery-runner-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).map_err(|e| ApiError::Internal(e.into()))?;
+    std::fs::write(dir.join("Dockerfile"), tessery_core::runner::DOCKERFILE).map_err(|e| ApiError::Internal(e.into()))?;
+    let out = exec(&docker_bin(), &["build".into(), "-q".into(), "-t".into(), image, dir.to_string_lossy().into_owned()], &[], None, Duration::from_secs(600)).await;
+    let _ = std::fs::remove_dir_all(&dir);
+    let out = out?;
+    if !out.ok {
+        return Err(ApiError::Conflict(format!("could not build the runner image: {}", out.stderr.trim())));
+    }
+    Ok(())
+}
+
+pub async fn remote_script(host: &Engine, script: &str, args: &[String], stdin: Option<&[u8]>, timeout: Duration) -> ApiResult<Output> {
     use base64::Engine as _;
     let b64 = |s: &str| base64::engine::general_purpose::STANDARD.encode(s.replace("\r\n", "\n").trim_end().to_owned() + "\n");
-    let (key, known) = (b64(key), host.known_hosts.as_deref().map(b64).unwrap_or_default());
+    let key = host.ssh_key.as_deref().map(b64).unwrap_or_default();
+    let known = host.known_hosts.as_deref().filter(|k| !k.trim().is_empty()).map(b64).unwrap_or_default();
     let url = host.url.clone().unwrap_or_default();
-    let script = concat!(
-        "mkdir -p ~/.ssh && echo \"$SSH_KEY_B64\" | base64 -d > ~/.ssh/id_tessery && chmod 600 ~/.ssh/id_tessery && ",
-        "if [ -n \"$KNOWN_B64\" ]; then echo \"$KNOWN_B64\" | base64 -d > ~/.ssh/known_hosts; c=yes; else c=accept-new; fi && ",
-        "printf 'Host *\\n  IdentityFile ~/.ssh/id_tessery\\n  IdentitiesOnly yes\\n  StrictHostKeyChecking %s\\n  ConnectTimeout 15\\n' $c > ~/.ssh/config && ",
-        "export DOCKER_HOST=\"$REMOTE_DOCKER_HOST\" && exec docker \"$@\""
-    );
+    ensure_runner().await?;
     let mut full: Vec<String> = ["run", "--rm", "-i", "-e", "SSH_KEY_B64", "-e", "KNOWN_B64", "-e", "REMOTE_DOCKER_HOST"].map(str::to_owned).to_vec();
     full.push(tessery_core::runner::image());
-    full.extend(["sh", "-c", script, "docker"].map(str::to_owned));
+    full.extend(["sh".to_owned(), "-c".to_owned(), format!("{SSH_SETUP}{script}"), "remote".to_owned()]);
     full.extend(args.iter().cloned());
-    exec(&docker_bin(), &full, &[("SSH_KEY_B64", &key), ("KNOWN_B64", &known), ("REMOTE_DOCKER_HOST", &url)], stdin, Duration::from_secs(45)).await
+    exec(&docker_bin(), &full, &[("SSH_KEY_B64", &key), ("KNOWN_B64", &known), ("REMOTE_DOCKER_HOST", &url)], stdin, timeout).await
+}
+
+pub async fn docker(host: &Engine, args: &[String], stdin: Option<&[u8]>) -> ApiResult<Output> {
+    if host.ssh_key.is_none() {
+        let envs: Vec<(&str, &str)> = host.url.as_deref().map(|h| vec![("DOCKER_HOST", h)]).unwrap_or_default();
+        return exec(&docker_bin(), args, &envs, stdin, Duration::from_secs(30)).await;
+    }
+    remote_script(host, "exec docker \"$@\"", args, stdin, Duration::from_secs(45)).await
 }
 
 pub async fn kubectl(kubeconfig: &str, args: &[String], stdin: Option<&[u8]>) -> ApiResult<Output> {

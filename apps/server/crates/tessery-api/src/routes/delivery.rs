@@ -259,7 +259,11 @@ pub(crate) async fn teardown_job(state: &AppState, project: Uuid, env: &str, des
         return Ok(None);
     }
     let connection = db::secrets(&state.db, project, env).await?.into_iter().filter(|s| tessery_core::runner::is_connection_secret(&s.name)).map(|s| (s.name, s.cipher)).collect();
-    Ok(Some(Job::Teardown { project_id: project, env: env.to_owned(), plan, kubeconfig: None, connection, destroy }))
+    let server = match plan.pointer("/target/server").and_then(Value::as_str).and_then(|s| s.parse::<Uuid>().ok()) {
+        Some(id) => Some(crate::routes::servers::connection_for(state, project, id).await?),
+        None => None,
+    };
+    Ok(Some(Job::Teardown { project_id: project, env: env.to_owned(), plan, kubeconfig: None, connection, server, destroy }))
 }
 
 /// Stops everything an environment runs. Data volumes are kept; the next release starts it again.

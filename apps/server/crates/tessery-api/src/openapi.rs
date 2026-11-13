@@ -1,4 +1,4 @@
-use crate::routes::{access, admin, audit_log, auth, delivery, dto, orgs, projects, runtime, sso, system, teams, telemetry, tokens};
+use crate::routes::{access, admin, audit_log, auth, delivery, dto, orgs, projects, runtime, servers, sso, system, teams, telemetry, tokens};
 use axum::Json;
 use utoipa::OpenApi;
 
@@ -11,6 +11,7 @@ use utoipa::OpenApi;
         access::catalog, access::list_roles, access::create_role, access::update_role, access::delete_role,
         access::list_bindings, access::create_binding, access::delete_binding,
         orgs::list, orgs::create, orgs::get, orgs::update, orgs::delete, orgs::list_members, orgs::add_member, orgs::remove_member,
+        servers::list, servers::create, servers::update, servers::delete, servers::check,
         teams::list, teams::create, teams::get, teams::update, teams::delete, teams::add_member, teams::remove_member,
         projects::list, projects::create, projects::get, projects::save, projects::move_to_team, projects::delete, projects::versions, projects::version, projects::generated,
         delivery::list_checkpoints, delivery::create_checkpoint, delivery::checkpoint_doc, delivery::checkpoint_diff,
@@ -24,7 +25,7 @@ use utoipa::OpenApi;
     ),
     components(schemas(crate::error::ErrorBody, dto::UserDto, dto::OrgDto, dto::Ok)),
     tags(
-        (name = "system"), (name = "auth"), (name = "orgs"), (name = "members"), (name = "teams"),
+        (name = "system"), (name = "auth"), (name = "orgs"), (name = "members"), (name = "teams"), (name = "servers", description = "Machines with Docker that environments deploy to over SSH"),
         (name = "access", description = "Roles, permissions and access grants"), (name = "projects"),
         (name = "delivery", description = "Checkpoints, environment pipeline and git remotes"), (name = "audit"),
         (name = "admin", description = "Instance administration"),

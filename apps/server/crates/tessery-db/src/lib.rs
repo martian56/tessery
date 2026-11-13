@@ -5,6 +5,7 @@ pub mod error;
 pub mod orgs;
 pub mod projects;
 pub mod roles;
+pub mod servers;
 pub mod settings;
 pub mod teams;
 pub mod telemetry;

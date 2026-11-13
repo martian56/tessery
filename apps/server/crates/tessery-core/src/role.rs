@@ -48,6 +48,7 @@ impl BuiltinRole {
             P::RoleRead,
             P::ProjectRead,
             P::DeploymentRead,
+            P::ServerRead,
         ];
         let set: Vec<P> = match self.key {
             "owner" => P::ALL.to_vec(),

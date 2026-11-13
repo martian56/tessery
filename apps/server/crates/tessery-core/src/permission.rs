@@ -49,6 +49,8 @@ permissions! {
     SecretWrite      = "secret:write",      "Secrets",      "Create and change secrets";
     AuditRead        = "audit:read",        "Audit",        "View and export the audit log";
     TokenManage      = "token:manage",      "Access",       "Create and revoke API tokens for agents and CI";
+    ServerRead       = "server:read",       "Servers",      "See servers and pick them for environments";
+    ServerManage     = "server:manage",     "Servers",      "Add, check, change and remove servers";
 }
 
 impl fmt::Display for Permission {

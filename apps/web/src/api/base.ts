@@ -28,6 +28,6 @@ const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> =
 export const baseApi = createApi({
   reducerPath: 'tesseryApi',
   baseQuery,
-  tagTypes: ['Me', 'Setup', 'Orgs', 'Members', 'Teams', 'Team', 'Roles', 'Bindings', 'Permissions', 'Projects', 'Project', 'Versions', 'Audit', 'AdminUsers', 'AdminSettings', 'Checkpoints', 'Pipeline', 'Releases', 'Remote', 'Secrets'],
+  tagTypes: ['Me', 'Setup', 'Orgs', 'Members', 'Teams', 'Team', 'Roles', 'Bindings', 'Permissions', 'Projects', 'Project', 'Versions', 'Audit', 'AdminUsers', 'AdminSettings', 'Checkpoints', 'Pipeline', 'Releases', 'Remote', 'Secrets', 'Servers'],
   endpoints: () => ({}),
 })

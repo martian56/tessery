@@ -17,6 +17,7 @@ export interface Problem {
 export function analyze(doc: ProjectDoc, env: Environment | undefined, sim: SimResult | null): Problem[] {
   const out: Problem[] = []
   const add = (p: Omit<Problem, 'id'>) => out.push({ ...p, id: `${p.area}:${p.nodeId ?? ''}:${out.length}` })
+  if (env?.target?.kind === 'docker' && env.target.server && !env.target.host) add({ severity: 'error', area: 'deploy', message: `${env.name} runs on a saved server whose address is missing. Pick the server again under Deploys to.` })
   for (const n of doc.nodes) {
     const t = TECH_BY_ID[n.techId]
     const pc = checkPlacement(n, env)
