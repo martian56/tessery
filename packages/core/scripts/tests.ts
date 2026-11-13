@@ -166,6 +166,34 @@ test('the local stack publishes stable uncommon ports that local configs agree o
   assert.match(config, new RegExp(`localhost:${dbPort}/`), 'the service falls back to the published database port')
 })
 
+test('docker targets with a domain route public nodes through the shared HTTPS proxy', () => {
+  const doc = tasksTemplate()
+  const base = doc.environments[0]
+  const publicNames = workloads(doc, base).filter((w) => w.public && w.port && !w.schedule).map((w) => w.name)
+  assert.ok(publicNames.length >= 1)
+  const [first] = publicNames
+  const env = { ...base, target: { kind: 'docker' as const, domain: 'apps.example.com', hosts: { [first]: 'tasks.example.com' } } }
+  const compose = envCompose(doc, env)
+  assert.match(compose, /caddy: tasks\.example\.com/)
+  assert.match(compose, /name: tessery-proxy\n\s+external: true/)
+  assert.doesNotMatch(compose, /^\s+- "\d+:\d+"$/m, 'no host ports are published')
+  const urls = plan(doc, env).endpoints.map((e) => e.url)
+  assert.ok(urls.includes('https://tasks.example.com'))
+  assert.ok(urls.every((u) => u.startsWith('https://')))
+  const plain = plan(doc, { ...base, target: { kind: 'docker' as const } })
+  assert.ok(plain.endpoints.every((e) => e.url.startsWith('http://localhost:')))
+  assert.doesNotMatch(envCompose(doc, { ...base, target: { kind: 'docker' as const } }), /tessery-proxy/)
+})
+
+test('docker domains accept only plain host names', () => {
+  const doc = tasksTemplate()
+  const base = doc.environments[0]
+  const at = (target: Record<string, unknown>) => plan(doc, { ...base, target: { kind: 'docker' as const, ...target } }).endpoints.map((e) => e.url)
+  assert.ok(at({ domain: 'https://apps.example.com' }).every((u) => u.startsWith('http://localhost:')), 'a URL is not a domain')
+  assert.ok(at({ domain: 'apps.example.com', hosts: { web: 'https://shop.example.com/x' } }).includes('https://web.apps.example.com'), 'a bad override falls back')
+  assert.ok(at({ hosts: { web: 'shop.example.com' } }).every((u) => u.startsWith('http://localhost:')), 'overrides need a domain')
+})
+
 test('design changes become numbered migrations that keep data', () => {
   const { doc, db, table } = shop()
   const first = planMigrations(doc)
