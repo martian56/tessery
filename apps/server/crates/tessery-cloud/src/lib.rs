@@ -74,7 +74,7 @@ pub const PROVIDERS: &[ProviderSpec] = &[
     ProviderSpec {
         id: "cloudflare",
         name: "Cloudflare",
-        help: "In the Cloudflare dashboard, open Manage Account, Account API Tokens, and create a token with DNS edit on your zones. Add Tunnel, R2 and Access edit to use those features. The R2 keys are optional and come from R2, Manage API tokens.",
+        help: "In the Cloudflare dashboard, open Manage Account, Account API Tokens, and create a token with Zone Read and DNS Edit on your zones. Add Tunnel, R2 and Access edit to use those features. The R2 keys are optional and come from R2, Manage API tokens.",
         fields: &[
             field("accountId", "Account ID", false, "49a99400cf3d841e0c19e70c629ef483"),
             field("token", "API token", true, ""),
@@ -227,8 +227,10 @@ pub async fn verify(provider: &str, f: &Map<String, Value>, apis: &Endpoints) ->
                 n => format!("{n} zone{}: {}", if n == 1 { "" } else { "s" }, zones.iter().map(|z| z.name.as_str()).collect::<Vec<_>>().join(", ")),
             };
             if !s("r2AccessKeyId").is_empty() {
-                r2_list_buckets(f, apis).await?;
-                out.push_str(", R2 ready");
+                match r2_list_buckets(f, apis).await {
+                    Ok(_) => out.push_str(", R2 ready"),
+                    Err(_) => out.push_str(", R2 keys saved (they cannot list buckets, which is fine for keys limited to one bucket)"),
+                }
             }
             Ok(out)
         }
@@ -255,14 +257,16 @@ pub async fn cloudflare_zones(f: &Map<String, Value>, apis: &Endpoints) -> Resul
     if send("Cloudflare", http.get(format!("{base}/accounts/{account}/tokens/verify")).bearer_auth(s("token"))).await.is_err() {
         send("Cloudflare", http.get(format!("{base}/user/tokens/verify")).bearer_auth(s("token"))).await?;
     }
-    let body = send("Cloudflare", http.get(format!("{base}/zones?account.id={account}&per_page=50")).bearer_auth(s("token"))).await?;
-    let v: Value = serde_json::from_str(&body).unwrap_or_default();
-    Ok(v["result"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|z| Some(Zone { id: z["id"].as_str()?.to_owned(), name: z["name"].as_str()?.to_owned() }))
-        .collect())
+    let mut zones = Vec::new();
+    for page in 1..=100 {
+        let body = send("Cloudflare", http.get(format!("{base}/zones?account.id={account}&per_page=50&page={page}")).bearer_auth(s("token"))).await?;
+        let v: Value = serde_json::from_str(&body).unwrap_or_default();
+        zones.extend(v["result"].as_array().into_iter().flatten().filter_map(|z| Some(Zone { id: z["id"].as_str()?.to_owned(), name: z["name"].as_str()?.to_owned() })));
+        if page >= v.pointer("/result_info/total_pages").and_then(Value::as_u64).unwrap_or(1) {
+            break;
+        }
+    }
+    Ok(zones)
 }
 
 pub fn zone_for<'a>(zones: &'a [Zone], domain: &str) -> Option<&'a Zone> {
