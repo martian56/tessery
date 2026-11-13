@@ -655,6 +655,18 @@ pub async fn create_release(
     match status {
         ReleaseStatus::Released => after_change(&state, project).await,
         ReleaseStatus::Queued => enqueue_deploy(&state, id).await?,
+        ReleaseStatus::Pending => {
+            let job = Job::Notify {
+                project_id: project,
+                env: stage.key.clone(),
+                event: "approval.requested".into(),
+                title: format!("Checkpoint {} waits for approval to go to {}", checkpoint.seq, stage.name),
+                detail: format!("{} asked{}", p.user.name, if req.note.trim().is_empty() { ".".to_owned() } else { format!(": {}", req.note.trim()) }),
+            };
+            if let Err(e) = state.mq.publish(job).await {
+                tracing::warn!(error = %e, "could not queue the approval notification");
+            }
+        }
         _ => {}
     }
     Ok((StatusCode::CREATED, Json(row.into())))

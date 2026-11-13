@@ -49,7 +49,9 @@ pub async fn put_settings(State(state): State<AppState>, p: Principal, Json(req)
         if !["starttls", "tls", "none"].contains(&s.security.as_str()) {
             return Err(ApiError::invalid("security", "use starttls, tls or none"));
         }
-        s.from.parse::<lettre::message::Mailbox>().map_err(|_| ApiError::invalid("from", "use an address like Tessery <tessery@example.com>"))?;
+        if !tessery_notify::valid_sender(&s.from) {
+            return Err(ApiError::invalid("from", "use an address like Tessery <tessery@example.com>"));
+        }
     }
     let cipher = match &req.password {
         Some(pw) if !pw.is_empty() => Some(state.config.secret_key.as_ref().ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY to store the SMTP password".into()))?.encrypt(pw.as_bytes())),

@@ -3580,7 +3580,6 @@ dependencies = [
  "base64 0.22.1",
  "dotenvy",
  "hex",
- "lettre",
  "prost",
  "rand 0.10.3",
  "redis",
@@ -3596,6 +3595,7 @@ dependencies = [
  "tessery-engine",
  "tessery-git",
  "tessery-mq",
+ "tessery-notify",
  "thiserror",
  "time",
  "tokio",
@@ -3691,6 +3691,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tessery-notify"
+version = "0.1.0"
+dependencies = [
+ "lettre",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "utoipa",
+]
+
+[[package]]
 name = "tessery-worker"
 version = "0.1.0"
 dependencies = [
@@ -3707,6 +3719,7 @@ dependencies = [
  "tessery-db",
  "tessery-git",
  "tessery-mq",
+ "tessery-notify",
  "time",
  "tokio",
  "tracing",

@@ -4,6 +4,7 @@ pub mod bindings;
 pub mod delivery;
 pub mod error;
 pub mod integrations;
+pub mod notifications;
 pub mod orgs;
 pub mod projects;
 pub mod roles;

@@ -14,6 +14,7 @@ path = "src/main.rs"
 [dependencies]
 tessery-core.workspace = true
 tessery-cloud.workspace = true
+tessery-notify.workspace = true
 tessery-db.workspace = true
 tessery-mq.workspace = true
 tessery-git.workspace = true
@@ -29,7 +30,6 @@ axum.workspace = true
 axum-extra.workspace = true
 rand.workspace = true
 ssh-key.workspace = true
-lettre.workspace = true
 redis.workspace = true
 serde.workspace = true
 serde_json.workspace = true

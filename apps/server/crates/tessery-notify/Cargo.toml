@@ -1,0 +1,21 @@
+[package]
+name = "tessery-notify"
+description = "Sends Tessery notifications: email over SMTP, Slack, Discord, Telegram and plain webhooks."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lettre.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+utoipa.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true

@@ -25,6 +25,7 @@ pub async fn run(ctx: &Ctx, job: Job) -> Result<()> {
         Job::ProvisionServer { server_id } => crate::provision::provision(ctx, server_id).await,
         Job::Backup { backup_id } => crate::backups::backup(ctx, backup_id).await,
         Job::RestoreBackup { backup_id } => crate::backups::restore(ctx, backup_id).await,
+        Job::Notify { project_id, env, event, title, detail } => crate::notify::send(ctx, project_id, &env, &event, &title, &detail).await,
         Job::Teardown { project_id, env, plan, kubeconfig, mut connection, server, org_id, destroy } => {
             if let Some(k) = kubeconfig {
                 connection.push(("KUBECONFIG".into(), k));

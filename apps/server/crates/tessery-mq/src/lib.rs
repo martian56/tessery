@@ -29,6 +29,7 @@ pub enum Job {
     ProvisionServer { server_id: Uuid },
     Backup { backup_id: Uuid },
     RestoreBackup { backup_id: Uuid },
+    Notify { project_id: Uuid, env: String, event: String, title: String, detail: String },
     Teardown {
         project_id: Uuid,
         env: String,
@@ -53,6 +54,7 @@ impl Job {
             Job::Deploy { release_id } => format!("deploy release {release_id}"),
             Job::ProvisionServer { server_id } => format!("create server {server_id}"),
             Job::Backup { backup_id } => format!("backup {backup_id}"),
+            Job::Notify { project_id, event, .. } => format!("notify {event} for {project_id}"),
             Job::RestoreBackup { backup_id } => format!("restore backup {backup_id}"),
             Job::Teardown { project_id, env, destroy, .. } => format!("{} {env} of {project_id}", if *destroy { "destroy" } else { "stop" }),
         }
