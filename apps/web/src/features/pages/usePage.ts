@@ -5,8 +5,7 @@ export function useCurrentPage() {
   const cur = useUi((u) => u.pages)
   const apps = doc.nodes.filter((n) => n.techId === 'web-app' || n.techId === 'mobile-app' || n.techId === 'desktop-app')
   const page = doc.pages.find((p) => p.id === cur.pageId) ?? doc.pages[0]
-  const block = page?.blocks.find((b) => b.id === cur.blockId)
-  return { apps, page, block, device: cur.device }
+  return { apps, page, device: cur.device }
 }
 
 export function useBindableOps() {

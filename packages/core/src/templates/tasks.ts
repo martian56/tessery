@@ -33,14 +33,14 @@ export function tasksTemplate(name = 'tasks'): ProjectDoc {
 
   const home = runOp(doc, 'addPage', { appNodeId: web, name: 'Projects', route: '/' }) as string
   runOp(doc, 'updatePage', { pageId: home, patch: { access: 'user', title: 'Your projects' } })
-  for (const b of doc.pages.find((p) => p.id === home)!.blocks.slice()) runOp(doc, 'removeBlock', { pageId: home, blockId: b.id })
+  doc.pages.find((p) => p.id === home)!.root.children = []
   runOp(doc, 'addBlock', { pageId: home, type: 'navbar', props: { brand: name, links: '', cta: 'Sign out' } })
   runOp(doc, 'addBlock', { pageId: home, type: 'form', props: { title: 'New project', fields: 'Name, Description', submit: 'Create', action: `${api}:createProject` } })
   runOp(doc, 'addBlock', { pageId: home, type: 'table', props: { title: 'Projects', columns: 'Name, Description, Created at', source: `${api}:listProjects`, link: '/projects/{id}' } })
 
   const detail = runOp(doc, 'addPage', { appNodeId: web, name: 'Project', route: '/projects/[projectId]' }) as string
   runOp(doc, 'updatePage', { pageId: detail, patch: { access: 'user', title: 'Project' } })
-  for (const b of doc.pages.find((p) => p.id === detail)!.blocks.slice()) runOp(doc, 'removeBlock', { pageId: detail, blockId: b.id })
+  doc.pages.find((p) => p.id === detail)!.root.children = []
   runOp(doc, 'addBlock', { pageId: detail, type: 'navbar', props: { brand: name, links: '', cta: 'Sign out' } })
   runOp(doc, 'addBlock', { pageId: detail, type: 'form', props: { title: 'New task', fields: 'Title', submit: 'Add task', action: `${api}:createProjectTask` } })
   runOp(doc, 'addBlock', { pageId: detail, type: 'table', props: { title: 'Tasks', columns: 'Title, Done, Created at', source: `${api}:listProjectTasks` } })

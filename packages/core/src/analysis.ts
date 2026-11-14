@@ -1,4 +1,5 @@
 import type { ProjectDoc, Environment } from './domain/types'
+import { blocksOf } from './domain/tree'
 import { TECH_BY_ID } from './catalog/technologies'
 import { checkPlacement } from './catalog/placement'
 import { builtInAuth } from './codegen/deploy/runtime'
@@ -46,9 +47,9 @@ export function analyze(doc: ProjectDoc, env: Environment | undefined, sim: SimR
     }
     if (['postgres', 'mysql', 'mongodb'].includes(t.id)) { const users = doc.edges.filter((e) => e.target === n.id).length; if (users > 3) add({ severity: 'info', area: 'design', nodeId: n.id, message: `${n.name}: shared by ${users} services, consider database-per-service` }) }
   }
-  for (const p of doc.pages) for (const b of p.blocks) for (const k of ['source', 'action']) {
+  for (const p of doc.pages) for (const b of blocksOf(p.root)) for (const k of ['source', 'action']) {
     const v = b.props[k]
-    if (typeof v === 'string' && v) { const [nid, opName] = v.split(':'); if (!doc.apis[nid]?.operations.some((o) => o.name === opName)) add({ severity: 'error', area: 'pages', message: `${p.name}: ${b.type}.${k} bound to a missing operation`, target: { pageId: p.id, blockId: b.id } }) }
+    if (typeof v === 'string' && v) { const [nid, opName] = v.split(':'); if (!doc.apis[nid]?.operations.some((o) => o.name === opName)) add({ severity: 'error', area: 'pages', message: `${p.name}: ${String(b.props.block)}.${k} bound to a missing operation`, target: { pageId: p.id, blockId: b.id } }) }
   }
   if (sim) for (const n of doc.nodes) {
     const r = sim.nodes[n.id]; if (!r) continue

@@ -260,9 +260,75 @@ test('generated web apps render pages with the same blocks and styles as the edi
   assert.match(files[`${app}/Dockerfile`], /COPY --from=build \/app\/public \.\/public/, 'uploaded images in public/ ship with the app')
   assert.ok(files[`${app}/public/robots.txt`], 'public/ always exists, so the copy cannot fail')
 
-  const page = doc.pages.find((p) => p.blocks.some((b) => b.type === 'navbar'))!
-  const nav = page.blocks.find((b) => b.type === 'navbar')!
-  delete nav.props.links
-  const source = generateAll(doc)[`${app}/app/${page.route === '/' ? '' : page.route.slice(1) + '/'}page.tsx`]
-  assert.match(source, /<Navbar[^>]* links="Product, Pricing, Docs"/, 'defaults the editor shows are passed to the deployed page')
+  const TREE_SOURCE = (await import('../src/render/tree.source.txt')).default
+  assert.equal(TREE_SOURCE, readFileSync(new URL('../src/render/tree.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n'), 'src/render/tree.source.txt is stale; run npm run embed')
+  assert.equal(files[`${app}/components/tree.tsx`], TREE_SOURCE)
+  const home = doc.pages.find((p) => p.route === '/')!
+  const source = files[`${app}/app/page.tsx`]
+  assert.match(source, /<Tree root=\{root\} theme=\{theme\} blocks=\{BLOCKS\} defaults=\{BLOCK_DEFAULTS\}/)
+  assert.ok(source.includes(JSON.stringify(home.root)), 'the page ships its element tree as designed')
+  assert.match(files[`${app}/components/index.tsx`], /"navbar": B\.Navbar/)
+  assert.match(files[`${app}/components/index.tsx`], /"links": "Product, Pricing, Docs"/, 'block defaults the editor shows ship with the app')
+})
+
+test('pages saved as block lists become element trees with the same ids', () => {
+  const raw = { id: 'p', name: 'old', nodes: [], pages: [{ id: 'pg1', appNodeId: 'web', name: 'Home', route: '/', render: 'ssr', access: 'public', title: 'Home', blocks: [{ id: 'b1', type: 'hero', props: { headline: 'Hi' } }] }] }
+  const doc = normalizeDoc(raw)
+  const root = doc.pages[0].root
+  assert.equal(root.type, 'frame')
+  assert.deepEqual(root.children, [{ id: 'b1', type: 'block', props: { block: 'hero', headline: 'Hi' } }])
+  assert.deepEqual(doc.pages[0].blocks, [])
+  assert.deepEqual(normalizeDoc(doc).pages[0].root, root, 'normalizing twice changes nothing')
+})
+
+test('element operations build, restyle, move and group the tree', async () => {
+  const { find } = await import('../src/domain/tree')
+  const doc = tasksTemplate()
+  const page = doc.pages[0]
+  const hero = runOp(doc, 'addElement', { pageId: page.id, element: { type: 'frame', name: 'Hero', style: { display: 'grid', gap: 24 }, children: [{ type: 'text', props: { tag: 'h1', text: 'Ship faster' } }, { type: 'button', props: { text: 'Start', href: '/signup' } }] } }) as string
+  const heroEl = find(page.root, hero)!.el
+  assert.equal(heroEl.children!.length, 2)
+  assert.notEqual(heroEl.children![0].id, heroEl.children![1].id)
+  const title = heroEl.children![0].id
+  runOp(doc, 'updateElement', { pageId: page.id, elementId: title, patch: { style: { fontSize: 64, color: 'var(--c-primary)' }, mobile: { fontSize: 36 }, props: { text: 'Ship today' } } })
+  runOp(doc, 'updateElement', { pageId: page.id, elementId: title, patch: { style: { color: null } } })
+  const t = find(page.root, title)!.el
+  assert.deepEqual(t.style, { fontSize: 64 }, 'null removes a declaration')
+  assert.deepEqual(t.mobile, { fontSize: 36 })
+  assert.equal(t.props.text, 'Ship today')
+  assert.throws(() => runOp(doc, 'moveElement', { pageId: page.id, elementId: hero, parentId: hero, index: 0 }), /inside itself/)
+  assert.throws(() => runOp(doc, 'addElement', { pageId: page.id, parentId: title, element: { type: 'text' } }), /inside a frame/)
+  assert.throws(() => runOp(doc, 'addElement', { pageId: page.id, element: { type: 'marquee' as never } }), /unknown element type/)
+  const button = heroEl.children![1].id
+  runOp(doc, 'moveElement', { pageId: page.id, elementId: button, parentId: page.root.id, index: 0 })
+  assert.equal(page.root.children![0].id, button)
+  const copy = runOp(doc, 'duplicateElement', { pageId: page.id, elementId: hero }) as string
+  assert.notEqual(find(page.root, copy)!.el.children![0].id, title, 'copies get new ids all the way down')
+  const group = runOp(doc, 'groupElements', { pageId: page.id, elementIds: [hero, copy] }) as string
+  assert.deepEqual(find(page.root, group)!.el.children!.map((c) => c.id), [hero, copy])
+  runOp(doc, 'removeElement', { pageId: page.id, elementId: group })
+  assert.equal(find(page.root, hero), null)
+  const block = runOp(doc, 'addBlock', { pageId: page.id, type: 'faq', props: {} }) as string
+  assert.equal(find(page.root, block)!.el.type, 'block', 'addBlock still works for agents and templates')
+  runOp(doc, 'setTheme', { appNodeId: page.appNodeId, colors: { primary: '#2563eb' }, fonts: { heading: 'Fraunces' } })
+  assert.equal(doc.themes[page.appNodeId].colors.primary, '#2563eb')
+  assert.equal(doc.themes[page.appNodeId].fonts.body, 'system-ui')
+})
+
+test('page CSS covers breakpoints, hover and fonts and refuses injected rules', async () => {
+  const { treeCss } = await import('../src/render/tree')
+  const { DEFAULT_THEME } = await import('../src/domain/tree')
+  const root: import('../src/render/tree').El = { id: 'r', type: 'frame', props: {}, style: { display: 'flex', gap: 16 }, children: [
+    { id: 'a', type: 'text', props: {}, style: { fontSize: 48, color: 'red;}</style><script>alert(1)</script>' }, tablet: { fontSize: 36 }, mobile: { fontSize: 28 }, hover: { opacity: 0.8 } },
+    { id: 'b', type: 'shape', props: {}, style: { backgroundImage: 'asset:0193f3a4-0000-7000-8000-000000000001/bg.png', background: 'url(javascript:alert(1))', position: 'absolute', left: 0 } },
+  ] }
+  const css = treeCss(root, { ...DEFAULT_THEME, fonts: { heading: 'Fraunces', body: 'Inter' } }, '/assets/')
+  assert.match(css, /\.n-r\{display:flex;gap:16px\}/)
+  assert.match(css, /\.n-a:hover\{opacity:0\.8\}/)
+  assert.match(css, /@container \(max-width: 900px\)\{\.n-a\{font-size:36px\}\}/)
+  assert.match(css, /@container \(max-width: 600px\)\{\.n-a\{font-size:28px\}\}/)
+  assert.match(css, /background-image:url\("\/assets\/0193f3a4-0000-7000-8000-000000000001\/bg\.png"\)/)
+  assert.match(css, /family=Fraunces/)
+  assert.match(css, /--font-body:"Inter"/)
+  assert.ok(!css.includes('</style>') && !css.includes('javascript:') && !css.includes('alert'), css)
 })

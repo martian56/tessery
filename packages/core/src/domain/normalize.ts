@@ -1,4 +1,5 @@
-import type { SystemNode, Environment, ObservabilityConfig, ProjectDoc } from './types'
+import type { SystemNode, Environment, ObservabilityConfig, Page, ProjectDoc } from './types'
+import { migratePage } from './tree'
 
 const OBSERVABILITY: ObservabilityConfig = { metrics: 'Prometheus', logs: 'Loki', traces: 'Tempo', sampling: 1, slos: [], alerts: [] }
 
@@ -46,7 +47,8 @@ export function normalizeDoc(raw: unknown): ProjectDoc {
     groups: list(d.groups),
     apis: record(d.apis),
     databases: record(d.databases),
-    pages: list(d.pages),
+    pages: list<Page>(d.pages).map((p) => migratePage(p)),
+    themes: record(d.themes),
     environments: list<Environment>(d.environments).map((e) => environment(e)),
     observability: { ...OBSERVABILITY, ...record(d.observability) },
   }

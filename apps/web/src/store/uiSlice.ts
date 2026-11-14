@@ -1,6 +1,7 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
 export type Workspace = 'design' | 'api' | 'database' | 'pages' | 'deploy' | 'observe'
+export type PageTool = 'select' | 'frame' | 'text' | 'button' | 'image' | 'video' | 'rect' | 'ellipse' | 'pen' | 'pencil' | 'embed'
 export type DockTab = 'code' | 'terminal' | 'problems' | 'output'
 export type Selection =
   | { kind: 'none' }
@@ -16,7 +17,17 @@ export interface UiState {
   envId: string
     api: { nodeId: string | null; opId: string | null; typeId: string | null; tab: 'operations' | 'types' | 'schema' }
   database: { nodeId: string | null; tableId: string | null; view: 'diagram' | 'data' | 'sql' | 'migrations' }
-  pages: { pageId: string | null; blockId: string | null; device: 'desktop' | 'tablet' | 'mobile' }
+  pages: {
+    pageId: string | null
+    /** The selected element (the last one picked when several are). */
+    blockId: string | null
+    /** Every selected element, for grouping and deleting several at once. */
+    selection: string[]
+    device: 'desktop' | 'tablet' | 'mobile'
+    tool: PageTool
+    /** Edit the hover state instead of the resting style. */
+    hover: boolean
+  }
   observe: { tab: 'overview' | 'metrics' | 'logs' | 'traces' | 'slos' | 'alerts'; range: string; nodeId: string | null }
   live: { on: boolean; load: number; down: string[] }
   layer: 'all' | 'runtime' | 'data'
@@ -33,7 +44,7 @@ const initialState: UiState = {
   envId: 'prod',
   api: { nodeId: null, opId: null, typeId: null, tab: 'operations' },
   database: { nodeId: null, tableId: null, view: 'diagram' },
-  pages: { pageId: null, blockId: null, device: 'desktop' },
+  pages: { pageId: null, blockId: null, selection: [], device: 'desktop', tool: 'select', hover: false },
   observe: { tab: 'overview', range: '1h', nodeId: null },
   live: { on: false, load: 1, down: [] },
   layer: 'all',
@@ -54,7 +65,10 @@ const slice = createSlice({
     setEnv(s, a: PayloadAction<string>) { s.envId = a.payload },
     setApi(s, a: PayloadAction<Partial<UiState['api']>>) { Object.assign(s.api, a.payload) },
     setDatabase(s, a: PayloadAction<Partial<UiState['database']>>) { Object.assign(s.database, a.payload) },
-    setPages(s, a: PayloadAction<Partial<UiState['pages']>>) { Object.assign(s.pages, a.payload) },
+    setPages(s, a: PayloadAction<Partial<UiState['pages']>>) {
+      Object.assign(s.pages, a.payload)
+      if ('blockId' in a.payload && !('selection' in a.payload)) s.pages.selection = a.payload.blockId ? [a.payload.blockId] : []
+    },
     setObserve(s, a: PayloadAction<Partial<UiState['observe']>>) { Object.assign(s.observe, a.payload) },
     setLive(s, a: PayloadAction<Partial<UiState['live']>>) { Object.assign(s.live, a.payload) },
     toggleDown(s, a: PayloadAction<string>) { s.live.down = s.live.down.includes(a.payload) ? s.live.down.filter((x) => x !== a.payload) : [...s.live.down, a.payload]; s.live.on = true },

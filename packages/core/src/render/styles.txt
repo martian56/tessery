@@ -108,3 +108,15 @@
   .tsp-grid { grid-template-columns: repeat(var(--tsp-cols-sm, 2), minmax(0, 1fr)); }
   .tsp-cols-auto { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
 }
+
+/* Elements of the page tree. Their own styles come from the generated per-page rules. */
+.tsp-tree { min-height: 100%; }
+.tsp-el { min-width: 0; }
+.tsp-el-frame { position: relative; }
+.tsp-el-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tsp-el-image, .tsp-el-video { display: block; max-width: 100%; object-fit: cover; }
+.tsp-el-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.tsp-el-path { display: block; overflow: visible; fill: none; stroke: currentColor; stroke-width: 2; }
+.tsp-el-path path { fill: inherit; stroke: inherit; }
+.tsp-el-embed { display: block; border: 0; width: 100%; }
+a.tsp-el-frame { color: inherit; text-decoration: none; }

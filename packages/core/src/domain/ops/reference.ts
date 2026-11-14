@@ -31,9 +31,33 @@ Database schemas (for postgres and other SQL nodes)
   removeTable { nodeId, tableId }
 
 Web app pages (for web-app nodes)
+  A page is a tree of elements under page.root, a frame. Read it with get_design before editing.
   addPage { appNodeId, name, route }  -> page id
-  addBlock { pageId, type, props }  -> block id. Data blocks read with props.source = "<serviceNodeId>:<operationName>"; forms write with props.action the same way.
-      Block types: navbar, hero, text, features, stats, table (columns: "Title, Done"), grid, detail, kanban, form (fields: "Title, Body", submit), footer.
+  addElement { pageId, parentId?, index?, element }  -> element id. parentId defaults to the page root and must be a frame.
+      element: { type, name?, props?, style?, tablet?, mobile?, hover?, children? } where children are elements (frames only).
+      type and its props:
+        frame   { tag?: div|section|header|footer|nav|main|article|aside, href? }  lays out children with style.display flex or grid
+        text    { text, tag?: h1|h2|h3|h4|p|span|small|strong|blockquote|label|code }
+        button  { text, href }
+        image   { src, alt }  src is an https URL or an uploaded asset "asset:<id>/<name>"
+        video   { src, poster?, autoplay?, loop?, muted?, controls? }
+        shape   { }  a rectangle or, with style.borderRadius "50%", an ellipse
+        path    { d, viewBox }  an SVG path in viewBox units; style.stroke, style.strokeWidth and style.fill draw it
+        embed   { src, title }  an https iframe such as a video or a map
+        block   { block, ...props }  one of the blocks below, with props.source / props.action for data
+      style is CSS in camelCase; numbers are pixels for lengths (fontSize: 64, gap: 24). Use theme tokens for color and type:
+        var(--c-primary) var(--c-onPrimary) var(--c-text) var(--c-muted) var(--c-bg) var(--c-surface) var(--c-border),
+        var(--font-heading) var(--font-body) var(--radius). tablet (900px and below), mobile (600px and below) and hover
+        override style; e.g. { style: { gridTemplateColumns: "repeat(3, 1fr)" }, mobile: { gridTemplateColumns: "1fr" } }.
+        position "absolute" with left/top places an element freely inside its parent frame.
+  updateElement { pageId, elementId, patch: { props?, style?, tablet?, mobile?, hover?, name?, hidden? } }  merges; a null value removes a key.
+  moveElement { pageId, elementId, parentId, index }
+  duplicateElement { pageId, elementId }  -> new element id
+  groupElements { pageId, elementIds, frame?: { name?, style? } }  -> frame id. The elements must share a parent.
+  removeElement { pageId, elementId }
+  setTheme { appNodeId, colors?: { name: "#hex" }, fonts?: { heading?, body? }, radius? }  fonts are Google Fonts names, e.g. "Fraunces", "Inter".
+  addBlock { pageId, type, props }  -> element id. Adds a block at the end of the page. Data blocks read with props.source = "<serviceNodeId>:<operationName>"; forms write with props.action the same way.
+      Block types: navbar, banner, hero, text, features, stats, table (columns: "Title, Done"), grid, detail, kanban, cart, form (fields: "Title, Body", submit), upload, chat, pricing, testimonial, faq, footer.
   updateBlock { pageId, blockId, key, value }
   removeBlock { pageId, blockId }
 
