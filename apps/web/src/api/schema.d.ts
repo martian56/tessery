@@ -116,6 +116,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/login/two-factor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finishes a sign-in for an account with two-factor on. */
+        post: operations["login_second_step"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/logout": {
         parameters: {
             query?: never;
@@ -258,6 +275,87 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["revoke"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/two-factor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/two-factor/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["disable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/two-factor/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["enable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/two-factor/recovery-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["new_codes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/two-factor/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Starts setting up an authenticator app. Nothing changes until `enable` confirms a code. */
+        post: operations["setup"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -574,6 +672,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/orgs/{org}/members/{user}/two-factor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Turns off a member's second factor so they can set it up again, for example after losing their phone. */
+        delete: operations["reset_member"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/orgs/{org}/projects": {
         parameters: {
             query?: never;
@@ -620,6 +735,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["update_role"];
+        trace?: never;
+    };
+    "/api/orgs/{org}/security": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["org_security"];
+        put: operations["put_org_security"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/orgs/{org}/servers": {
@@ -1498,6 +1629,9 @@ export interface components {
              */
             version: number;
         };
+        CodeInput: {
+            code: string;
+        };
         CreateBinding: {
             /**
              * Format: date-time
@@ -1795,6 +1929,14 @@ export interface components {
         OrgListItem: components["schemas"]["OrgDto"] & {
             member: boolean;
         };
+        OrgSecurity: {
+            /** @description Members who have not turned two-factor on. Filled in responses only. */
+            membersWithout?: string[];
+            requireTwoFactor: boolean;
+        };
+        PasswordInput: {
+            password: string;
+        };
         PermissionInfo: {
             description: string;
             group: string;
@@ -1885,6 +2027,10 @@ export interface components {
         };
         PutSecret: {
             value: string;
+        };
+        RecoveryCodes: {
+            /** @description Shown once. Each works one time in place of an app code. */
+            recoveryCodes: string[];
         };
         Region: {
             id: string;
@@ -1998,6 +2144,11 @@ export interface components {
             /** Format: uuid */
             id?: string | null;
             type: components["schemas"]["ScopeKind"];
+        };
+        SecondStep: {
+            /** @description A six digit code from the authenticator app, or one of the recovery codes. */
+            code: string;
+            ticket: string;
         };
         SecretDto: {
             /** @description Created by Tessery on the first deploy, like a database password. */
@@ -2237,6 +2388,22 @@ export interface components {
             startedAt: string;
             traceId: string;
         };
+        TwoFactorChallenge: {
+            /** @description Send this with the code to `/api/auth/login/two-factor` within five minutes. */
+            twoFactorTicket: string;
+        };
+        TwoFactorSetup: {
+            otpauthUrl: string;
+            /** @description An SVG image of the QR code. */
+            qrSvg: string;
+            /** @description The secret in base32, for apps that cannot scan the code. */
+            secret: string;
+        };
+        TwoFactorStatus: {
+            enabled: boolean;
+            /** Format: int64 */
+            recoveryCodesLeft: number;
+        };
         UpdateChannelInput: {
             enabled: boolean;
             envs?: string[];
@@ -2265,6 +2432,7 @@ export interface components {
             /** Format: date-time */
             lastLoginAt?: string | null;
             name: string;
+            twoFactor: boolean;
         };
         VersionDoc: {
             doc: Record<string, never>;
@@ -2479,7 +2647,51 @@ export interface operations {
                     "application/json": components["schemas"]["UserDto"];
                 };
             };
+            /** @description Two-factor is on; finish with /api/auth/login/two-factor */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TwoFactorChallenge"];
+                };
+            };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    login_second_step: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecondStep"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserDto"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2741,6 +2953,137 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Ok"];
                 };
+            };
+        };
+    };
+    status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TwoFactorStatus"];
+                };
+            };
+        };
+    };
+    disable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    enable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodes"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    new_codes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodes"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    setup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TwoFactorSetup"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -3348,6 +3691,34 @@ export interface operations {
             };
         };
     };
+    reset_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org: string;
+                user: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list: {
         parameters: {
             query?: never;
@@ -3485,6 +3856,58 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RoleDto"];
                 };
+            };
+        };
+    };
+    org_security: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgSecurity"];
+                };
+            };
+        };
+    };
+    put_org_security: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgSecurity"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgSecurity"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -15,6 +15,7 @@ pub struct UserDto {
     pub created_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339::option")]
     pub last_login_at: Option<OffsetDateTime>,
+    pub two_factor: bool,
 }
 
 impl From<tessery_db::users::User> for UserDto {
@@ -26,6 +27,7 @@ impl From<tessery_db::users::User> for UserDto {
             instance_admin: u.is_instance_admin,
             disabled: u.disabled_at.is_some(),
             created_at: u.created_at,
+            two_factor: u.two_factor_enabled_at.is_some(),
             last_login_at: u.last_login_at,
         }
     }

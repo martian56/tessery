@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { KeyRound } from 'lucide-react'
 import { useLoginMutation, useSsoInfoQuery } from '@/api/endpoints/identity'
 import { useForgotPasswordMutation } from '@/api/endpoints/email'
+import { useLoginTwoFactorMutation } from '@/api/endpoints/twoFactor'
 import { errorMessage } from '@/api/types'
 import { API_URL } from '@/config/env'
 import { Button, Field, Input } from '@/ui'
@@ -16,9 +17,26 @@ export function LoginPage() {
   const [forgot, setForgot] = useState(false)
   const [sendReset, { isLoading: sending, error: forgotError, isSuccess: sent }] = useForgotPasswordMutation()
   const ssoError = new URLSearchParams(window.location.search).get('sso_error')
-  const submit = (e: React.FormEvent) => {
+  const [ticket, setTicket] = useState<string | null>(null)
+  const [code, setCode] = useState('')
+  const [second, { isLoading: checking, error: codeError }] = useLoginTwoFactorMutation()
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    login({ email, password })
+    const r = await login({ email, password })
+    if ('data' in r && r.data && 'twoFactorTicket' in r.data) setTicket(r.data.twoFactorTicket)
+  }
+  if (ticket) {
+    return (
+      <AuthLayout title="Two-factor sign-in">
+        <form className={s.form} onSubmit={(e) => { e.preventDefault(); second({ ticket, code }) }}>
+          <p className={s.hint}>Enter the six digit code from your authenticator app, or one of your recovery codes.</p>
+          <Field label="Code" wide><Input size="md" mono autoFocus value={code} onChange={setCode} placeholder="123456" /></Field>
+          <FormError message={codeError ? errorMessage(codeError) : null} />
+          <Button variant="primary" size="md" type="submit" disabled={checking || code.trim().length < 6}>{checking ? 'Checking…' : 'Sign in'}</Button>
+          <Button size="md" variant="ghost" onClick={() => { setTicket(null); setCode(''); setPassword('') }}>Start over</Button>
+        </form>
+      </AuthLayout>
+    )
   }
   if (forgot) {
     return (

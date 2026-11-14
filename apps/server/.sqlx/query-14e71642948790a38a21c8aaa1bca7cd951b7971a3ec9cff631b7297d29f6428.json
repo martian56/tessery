@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, email, name, password_hash, is_instance_admin, disabled_at, created_at, last_login_at FROM users WHERE email = $1",
+  "query": "INSERT INTO users (email, name, password_hash, is_instance_admin) VALUES ($1, $2, $3, $4)\n         RETURNING id, email, name, password_hash, is_instance_admin, disabled_at, created_at, last_login_at, two_factor_enabled_at",
   "describe": {
     "columns": [
       {
@@ -90,11 +90,25 @@
             "name": "last_login_at"
           }
         }
+      },
+      {
+        "ordinal": 8,
+        "name": "two_factor_enabled_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "two_factor_enabled_at"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Text",
+        "Text",
+        "Text",
+        "Bool"
       ]
     },
     "nullable": [
@@ -105,8 +119,9 @@
       false,
       true,
       false,
+      true,
       true
     ]
   },
-  "hash": "ce2dd4f68f27fee02532c82de7ac1d68e6549ecb3d05917e7429a1f255de6393"
+  "hash": "14e71642948790a38a21c8aaa1bca7cd951b7971a3ec9cff631b7297d29f6428"
 }

@@ -15,6 +15,7 @@ pub mod teams;
 pub mod telemetry;
 pub mod tokens;
 pub mod tokens_password;
+pub mod two_factor;
 pub mod types;
 pub mod users;
 
