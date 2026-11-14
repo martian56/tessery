@@ -4,6 +4,7 @@ import { TECH_BY_ID } from './catalog/technologies'
 import { checkPlacement } from './catalog/placement'
 import { builtInAuth } from './codegen/deploy/runtime'
 import { SQL_STORES } from './codegen/services/crud'
+import { readsOnly } from './codegen/services/model'
 import type { SimResult } from './domain/simulate'
 
 export interface Problem {
@@ -49,7 +50,12 @@ export function analyze(doc: ProjectDoc, env: Environment | undefined, sim: SimR
   }
   for (const p of doc.pages) for (const b of blocksOf(p.root)) for (const k of ['source', 'action']) {
     const v = b.props[k]
-    if (typeof v === 'string' && v) { const [nid, opName] = v.split(':'); if (!doc.apis[nid]?.operations.some((o) => o.name === opName)) add({ severity: 'error', area: 'pages', message: `${p.name}: ${String(b.props.block)}.${k} bound to a missing operation`, target: { pageId: p.id, blockId: b.id } }) }
+    if (typeof v !== 'string' || !v) continue
+    const [nid, opName] = v.split(':')
+    const what = b.type === 'block' ? String(b.props.block) : b.name ?? 'frame'
+    const op = doc.apis[nid]?.operations.find((o) => o.name === opName)
+    if (!op) add({ severity: 'error', area: 'pages', message: `${p.name}: ${what}.${k} bound to a missing operation`, target: { pageId: p.id, blockId: b.id } })
+    else if (k === 'source' && !readsOnly(doc.apis[nid].style, op)) add({ severity: 'error', area: 'pages', message: `${p.name}: ${what} reads from ${opName}, which changes data; pages only load from read operations`, target: { pageId: p.id, blockId: b.id } })
   }
   if (sim) for (const n of doc.nodes) {
     const r = sim.nodes[n.id]; if (!r) continue

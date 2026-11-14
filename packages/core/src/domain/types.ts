@@ -166,12 +166,18 @@ export interface Block { id: string; type: string; props: Record<string, ConfigV
 /** CSS declarations in camelCase. Numbers are pixels for lengths. Values may use theme tokens such as var(--c-primary). */
 export type StyleMap = Record<string, string | number>
 
-export type ElementType = 'frame' | 'text' | 'image' | 'video' | 'button' | 'shape' | 'path' | 'embed' | 'block'
+export type ElementType = 'frame' | 'text' | 'image' | 'video' | 'button' | 'icon' | 'input' | 'select' | 'shape' | 'path' | 'embed' | 'block'
+
+/** Style maps an element can carry: the base style, breakpoint overrides and interaction states. */
+export const STYLE_KEYS = ['style', 'tablet', 'mobile', 'hover', 'focus', 'active', 'current'] as const
+export type StyleKey = (typeof STYLE_KEYS)[number]
 
 /**
  * One element of a page. Frames hold children and lay them out with flex or grid; any element can be positioned
- * absolutely inside its parent. `tablet`, `mobile` and `hover` override `style` at those breakpoints and on hover.
- * A `block` element renders one of the data and section blocks, named by props.block.
+ * absolutely inside its parent. `tablet` and `mobile` override `style` at those breakpoints; `hover`, `focus` (keyboard
+ * focus), `active` (pressed) and `current` (a link to the page being shown) override it in those states.
+ * A `block` element renders one of the data and section blocks, named by props.block. A frame with props.source
+ * repeats its children once per record, filling `{field}` placeholders in their text, links and images.
  */
 export interface UIElement {
   id: string
@@ -182,6 +188,9 @@ export interface UIElement {
   tablet?: StyleMap
   mobile?: StyleMap
   hover?: StyleMap
+  focus?: StyleMap
+  active?: StyleMap
+  current?: StyleMap
   hidden?: boolean
   children?: UIElement[]
 }
@@ -190,9 +199,11 @@ export interface Theme {
   /** Exposed as var(--c-<name>). */
   colors: Record<string, string>
   /** Google Fonts family names or CSS font stacks, exposed as var(--font-heading) and var(--font-body). */
-  fonts: { heading: string; body: string }
+  fonts: { heading: string; body: string; mono?: string }
   /** Default corner radius in pixels, exposed as var(--radius). */
   radius: number
+  /** Colors that replace `colors` when the visitor's system is in dark mode. */
+  dark?: Record<string, string>
 }
 
 export interface Page {

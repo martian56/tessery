@@ -1,6 +1,7 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
 export type Workspace = 'design' | 'api' | 'database' | 'pages' | 'deploy' | 'observe'
+export type ElementState = 'none' | 'hover' | 'focus' | 'active' | 'current'
 export type PageTool = 'select' | 'frame' | 'text' | 'button' | 'image' | 'video' | 'rect' | 'ellipse' | 'pen' | 'pencil' | 'embed'
 export type DockTab = 'code' | 'terminal' | 'problems' | 'output'
 export type Selection =
@@ -25,8 +26,8 @@ export interface UiState {
     selection: string[]
     device: 'desktop' | 'tablet' | 'mobile'
     tool: PageTool
-    /** Edit the hover state instead of the resting style. */
-    hover: boolean
+    /** Which interaction state the inspector edits and the canvas previews; none edits the resting style. */
+    state: ElementState
   }
   observe: { tab: 'overview' | 'metrics' | 'logs' | 'traces' | 'slos' | 'alerts'; range: string; nodeId: string | null }
   live: { on: boolean; load: number; down: string[] }
@@ -44,7 +45,7 @@ const initialState: UiState = {
   envId: 'prod',
   api: { nodeId: null, opId: null, typeId: null, tab: 'operations' },
   database: { nodeId: null, tableId: null, view: 'diagram' },
-  pages: { pageId: null, blockId: null, selection: [], device: 'desktop', tool: 'select', hover: false },
+  pages: { pageId: null, blockId: null, selection: [], device: 'desktop', tool: 'select', state: 'none' },
   observe: { tab: 'overview', range: '1h', nodeId: null },
   live: { on: false, load: 1, down: [] },
   layer: 'all',

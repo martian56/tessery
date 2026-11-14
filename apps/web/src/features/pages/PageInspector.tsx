@@ -1,17 +1,20 @@
 import { useState } from 'react'
 import { AlignCenter, AlignLeft, AlignRight, ArrowDown, ArrowRight, Copy, Group, ImagePlus, Trash2 } from 'lucide-react'
 import type { ConfigValue, Page, StyleMap, UIElement } from '@tessery/core/domain/types'
-import { find, themeOf } from '@tessery/core/domain/tree'
+import { find, themeOf, walk } from '@tessery/core/domain/tree'
 import { BLOCK_META } from '@tessery/core/render/catalog'
 import { primaryKey, tableForOperation } from '@tessery/core/codegen/services/crud'
 import { useAppDispatch, useDoc, useEdit, useUi } from '@/store'
-import { ui } from '@/store/uiSlice'
+import { ui, type ElementState } from '@/store/uiSlice'
 import { Button, Empty, Field, Input, NumberInput, Section, Select, Switch, Textarea } from '@/ui'
 import { AssetPicker } from '@/features/assets/AssetPicker'
 import ins from '@/features/design/Inspector.module.css'
 import { elementLabel } from './Layers'
 import { Choice, Color, Prop, type StyleCtx } from './StyleFields'
 import { useBindableOps, useCurrentPage } from './usePage'
+import { effective } from './canvas/geometry'
+import { STATE_LABEL } from './canvas/tools'
+import { ICON_NAMES } from './canvas/EditorIcon'
 import f from './StyleFields.module.css'
 
 const FONTS = ['system-ui', 'Inter', 'Geist', 'Manrope', 'DM Sans', 'Instrument Sans', 'Space Grotesk', 'Bricolage Grotesque', 'Sora', 'Archivo', 'IBM Plex Sans', 'Fraunces', 'Instrument Serif', 'Newsreader', 'Playfair Display', 'EB Garamond', 'JetBrains Mono', 'IBM Plex Mono']
@@ -20,28 +23,28 @@ const SHADOWS: Record<string, string> = { none: 'none', soft: '0 1px 2px rgb(0 0
 
 export function PageInspector() {
   const { page, device } = useCurrentPage()
-  const { blockId, hover } = useUi((u) => u.pages)
+  const { blockId, state } = useUi((u) => u.pages)
   if (!page) return <Empty title="No page selected" />
   const el = blockId ? find(page.root, blockId)?.el : null
-  return el && el.id !== page.root.id ? <ElementInspector page={page} el={el} device={device} hover={hover} /> : <PageSettings page={page} />
+  return el && el.id !== page.root.id ? <ElementInspector page={page} el={el} device={device} state={state} /> : <PageSettings page={page} />
 }
 
-function ElementInspector({ page, el, device, hover }: { page: Page; el: UIElement; device: 'desktop' | 'tablet' | 'mobile'; hover: boolean }) {
+function ElementInspector({ page, el, device, state }: { page: Page; el: UIElement; device: 'desktop' | 'tablet' | 'mobile'; state: ElementState }) {
   const dispatch = useAppDispatch()
   const edit = useEdit()
   const doc = useDoc()
   const theme = themeOf(doc, page.appNodeId)
   const [picking, setPicking] = useState<null | 'src' | 'poster' | 'bg'>(null)
-  const key = hover ? 'hover' : device === 'desktop' ? 'style' : device
-  const inherited: StyleMap = hover ? { ...el.style } : device === 'desktop' ? {} : device === 'tablet' ? { ...el.style } : { ...el.style, ...el.tablet }
+  const key = state !== 'none' ? state : device === 'desktop' ? 'style' : device
+  const inherited: StyleMap = state !== 'none' ? effective(el, device) : device === 'desktop' ? {} : device === 'tablet' ? { ...el.style } : { ...el.style, ...el.tablet }
   const own: StyleMap = (el[key] ?? {}) as StyleMap
   const c: StyleCtx = { own, inherited, set: (k, v) => edit('updateElement', { pageId: page.id, elementId: el.id, patch: { [key]: { [k]: v } } }, { coalesce: `${el.id}:${key}:${k}` }) }
   const v = (k: string) => own[k] ?? inherited[k]
   const prop = (k: string, value: ConfigValue | null, coalesce = true) => edit('updateElement', { pageId: page.id, elementId: el.id, patch: { props: { [k]: value } } }, coalesce ? { coalesce: `${el.id}:props:${k}` } : {})
   const isFrame = el.type === 'frame'
   const display = String(v('display') ?? (isFrame ? 'block' : ''))
-  const typed = el.type === 'text' || el.type === 'button' || isFrame
-  const where = hover ? 'the hover state' : device === 'desktop' ? 'all screens' : device === 'tablet' ? 'tablets and phones' : 'phones'
+  const typed = ['text', 'button', 'icon', 'input', 'select', 'frame'].includes(el.type)
+  const where = state !== 'none' ? `the ${STATE_LABEL[state].toLowerCase()} state` : device === 'desktop' ? 'all screens' : device === 'tablet' ? 'tablets and phones' : 'phones'
 
   return (
     <div className={ins.wrap}>
@@ -137,6 +140,10 @@ function ElementInspector({ page, el, device, hover }: { page: Page; el: UIEleme
           <Prop label="Overflow" k="overflow" c={c}><Choice k="overflow" c={c} options={['visible', 'hidden', 'auto'].map((x) => ({ value: x, label: x }))} /></Prop>
         </div>
       </Section>
+      <Section title="Accessibility" defaultOpen={false}>
+        <Field label="Label" hint="Read out by screen readers; needed on icon-only buttons."><Input value={String(el.props.label ?? '')} onChange={(x) => prop('label', x)} /></Field>
+        <Field label="Tooltip"><Input value={String(el.props.tooltip ?? '')} onChange={(x) => prop('tooltip', x)} /></Field>
+      </Section>
       <div className={ins.actions}>
         <Button size="sm" icon={<Copy />} onClick={() => { const id = edit('duplicateElement', { pageId: page.id, elementId: el.id }); if (id) dispatch(ui.setPages({ blockId: id })) }}>Duplicate</Button>
         <Button size="sm" icon={<Group />} onClick={() => { const id = edit('groupElements', { pageId: page.id, elementIds: [el.id] }); if (id) dispatch(ui.setPages({ blockId: id })) }}>Wrap in frame</Button>
@@ -156,10 +163,36 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
   const str = (k: string) => String(p[k] ?? '')
   switch (el.type) {
     case 'text':
-      return <Section title="Text"><Field label="Text"><Textarea value={str('text')} onChange={(x) => prop('text', x)} /></Field>
-        <Field label="Tag"><Select value={str('tag') || 'p'} onChange={(x) => prop('tag', x, false)} aria-label="Tag" options={['h1', 'h2', 'h3', 'h4', 'p', 'span', 'small', 'strong', 'blockquote', 'label', 'code'].map((x) => ({ value: x, label: x }))} /></Field></Section>
+      return <Section title="Text"><Field label="Text" hint="Inside a record frame, {field} shows that field."><Textarea value={str('text')} onChange={(x) => prop('text', x)} /></Field>
+        <Field label="Link"><Input mono value={str('href')} onChange={(x) => prop('href', x)} placeholder="none" /></Field>
+        <Field label="Tag"><Select value={str('tag') || 'p'} onChange={(x) => prop('tag', x, false)} aria-label="Tag" options={['h1', 'h2', 'h3', 'h4', 'p', 'span', 'small', 'strong', 'em', 'blockquote', 'label', 'li', 'code', 'pre', 'kbd', 'time', 'mark', 'del'].map((x) => ({ value: x, label: x }))} /></Field></Section>
     case 'button':
-      return <Section title="Button"><Field label="Label"><Input value={str('text')} onChange={(x) => prop('text', x)} /></Field><Field label="Link"><Input mono value={str('href')} onChange={(x) => prop('href', x)} placeholder="/pricing or https://…" /></Field></Section>
+      return (
+        <Section title="Button">
+          <Field label="Label"><Input value={str('text')} onChange={(x) => prop('text', x)} /></Field>
+          <Field label="Icon"><Input mono list="tsp-icons" value={str('icon')} onChange={(x) => prop('icon', x)} placeholder="none" /></Field>
+          <Field label="Link"><Input mono value={str('href')} onChange={(x) => prop('href', x)} placeholder="/pricing or https://…" /></Field>
+          <Field label="Opens" hint="A popover frame this button shows, such as a menu."><Select value={str('opens')} onChange={(x) => prop('opens', x || null, false)} aria-label="Opens" options={[{ value: '', label: 'Nothing' }, ...popovers(page).map((x) => ({ value: x.id, label: elementLabel(x) }))]} /></Field>
+          <Field label="Submits form"><Switch checked={!!p.submit} onChange={(x) => prop('submit', x || null, false)} /></Field>
+          <Field label="Disabled"><Switch checked={!!p.disabled} onChange={(x) => prop('disabled', x || null, false)} /></Field>
+          <IconList />
+        </Section>
+      )
+    case 'icon':
+      return <Section title="Icon"><Field label="Name" hint="Any Lucide icon, such as git-branch or shopping-cart."><Input mono list="tsp-icons" value={str('name')} onChange={(x) => prop('name', x)} /></Field><IconList /></Section>
+    case 'input':
+      return (
+        <Section title="Input">
+          <Field label="Kind"><Select value={str('kind') || 'text'} onChange={(x) => prop('kind', x, false)} aria-label="Kind" options={['text', 'search', 'email', 'tel', 'url', 'number', 'password', 'date', 'checkbox', 'radio', 'range', 'textarea'].map((x) => ({ value: x, label: x }))} /></Field>
+          <Field label="Name" hint="The query or form field it sends."><Input mono value={str('name')} onChange={(x) => prop('name', x)} /></Field>
+          <Field label="Placeholder"><Input value={str('placeholder')} onChange={(x) => prop('placeholder', x)} /></Field>
+          <Field label="Value"><Input value={str('value')} onChange={(x) => prop('value', x)} /></Field>
+          <Field label="Required"><Switch checked={!!p.required} onChange={(x) => prop('required', x || null, false)} /></Field>
+          <Field label="Disabled"><Switch checked={!!p.disabled} onChange={(x) => prop('disabled', x || null, false)} /></Field>
+        </Section>
+      )
+    case 'select':
+      return <Section title="Select"><Field label="Options"><Textarea value={str('options')} onChange={(x) => prop('options', x)} /></Field><Field label="Name"><Input mono value={str('name')} onChange={(x) => prop('name', x)} /></Field><Field label="Selected"><Input value={str('value')} onChange={(x) => prop('value', x)} /></Field></Section>
     case 'image':
     case 'video':
       return (
@@ -175,7 +208,23 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
     case 'embed':
       return <Section title="Embed"><Field label="URL"><Input mono value={str('src')} onCommit={(x) => prop('src', x, false)} placeholder="https://www.youtube.com/embed/…" /></Field><Field label="Title"><Input value={str('title')} onChange={(x) => prop('title', x)} /></Field></Section>
     case 'frame':
-      return <Section title="Frame" defaultOpen={false}><Field label="Tag"><Select value={str('tag') || 'div'} onChange={(x) => prop('tag', x, false)} aria-label="Tag" options={['div', 'section', 'header', 'footer', 'nav', 'main', 'article', 'aside', 'figure'].map((x) => ({ value: x, label: x }))} /></Field><Field label="Link" hint="Makes the whole frame a link, for cards."><Input mono value={str('href')} onChange={(x) => prop('href', x)} placeholder="none" /></Field></Section>
+      return (
+        <>
+          <Section title="Frame" defaultOpen={false}>
+            <Field label="Tag" hint="form sends its inputs to the link; details and summary make a disclosure."><Select value={str('tag') || 'div'} onChange={(x) => prop('tag', x, false)} aria-label="Tag" options={['div', 'section', 'header', 'footer', 'nav', 'main', 'article', 'aside', 'ul', 'ol', 'li', 'figure', 'label', 'form', 'search', 'details', 'summary'].map((x) => ({ value: x, label: x }))} /></Field>
+            <Field label="Link" hint="Makes the whole frame a link, for cards and rows."><Input mono value={str('href')} onChange={(x) => prop('href', x)} placeholder="none" /></Field>
+            <Field label="Popover" hint="Hidden until a button opens it: menus, dialogs."><Switch checked={!!p.popover} onChange={(x) => prop('popover', x || null, false)} /></Field>
+          </Section>
+          <Section title="Records" defaultOpen={!!p.source}>
+            <Field label="Repeat for" hint="Repeats this frame's children once per record; use {field} inside."><Select value={str('source')} onChange={(x) => prop('source', x || null, false)} aria-label="Repeat for" options={[{ value: '', label: 'Not repeated' }, ...ops.filter((o) => o.reads).map((o) => ({ value: o.key, label: o.label, group: o.style.toUpperCase() }))]} /></Field>
+            {!!p.source && <>
+              <Field label="Limit"><NumberInput value={Number(p.limit) || 50} min={1} max={500} onCommit={(x) => prop('limit', x, false)} /></Field>
+              <Field label="When empty"><Input value={str('empty')} onChange={(x) => prop('empty', x)} placeholder="Nothing here yet." /></Field>
+              <Field label="Preview rows"><NumberInput value={Number(p.preview) || 3} min={1} max={12} onCommit={(x) => prop('preview', x, false)} /></Field>
+            </>}
+          </Section>
+        </>
+      )
     case 'block': {
       const meta = BLOCK_META[str('block')]
       const props = { ...meta?.defaults, ...p }
@@ -203,7 +252,7 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
               {meta.dataKeys.map((k) => (
                 <Field key={k} label={k === 'source' ? 'Reads from' : 'Submits to'}>
                   <Select value={String(p[k] ?? '')} onChange={(x) => { edit('updateElement', { pageId: page.id, elementId: el.id, patch: { props: { [k]: x || null } } }); if (x) fill(k, x) }} aria-label={k === 'source' ? 'Reads from' : 'Submits to'}
-                    options={[{ value: '', label: 'Not bound' }, ...ops.map((o) => ({ value: o.key, label: o.label, group: o.style.toUpperCase() }))]} />
+                    options={[{ value: '', label: 'Not bound' }, ...ops.filter((o) => k === 'action' || o.reads).map((o) => ({ value: o.key, label: o.label, group: o.style.toUpperCase() }))]} />
                 </Field>
               ))}
             </Section>
@@ -252,4 +301,14 @@ function PageSettings({ page }: { page: Page }) {
       </Section>
     </div>
   )
+}
+
+const popovers = (page: Page) => {
+  const out: UIElement[] = []
+  walk(page.root, (e) => { if (e.type === 'frame' && e.props.popover) out.push(e) })
+  return out
+}
+
+function IconList() {
+  return <datalist id="tsp-icons">{ICON_NAMES.map((n) => <option key={n} value={n} />)}</datalist>
 }

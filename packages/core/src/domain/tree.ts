@@ -8,7 +8,7 @@ export const DEFAULT_THEME: Theme = {
 
 export const themeOf = (doc: Pick<ProjectDoc, 'themes'>, appNodeId: string): Theme => {
   const t = doc.themes?.[appNodeId]
-  return t ? { colors: { ...DEFAULT_THEME.colors, ...t.colors }, fonts: { ...DEFAULT_THEME.fonts, ...t.fonts }, radius: t.radius ?? DEFAULT_THEME.radius } : DEFAULT_THEME
+  return t ? { colors: { ...DEFAULT_THEME.colors, ...t.colors }, fonts: { ...DEFAULT_THEME.fonts, ...t.fonts }, radius: t.radius ?? DEFAULT_THEME.radius, ...(t.dark && Object.keys(t.dark).length ? { dark: { ...t.dark } } : {}) } : DEFAULT_THEME
 }
 
 export const blockElement = (b: Block): UIElement => ({ id: b.id, type: 'block', props: { block: b.type, ...b.props } })
@@ -42,10 +42,10 @@ export function find(root: UIElement, id: string): { el: UIElement; parent: UIEl
 
 export const contains = (ancestor: UIElement, id: string) => !!find(ancestor, id)
 
-/** Block elements in document order, which is the order generated pages load their data. */
+/** Elements that load or submit data, blocks and record-repeating frames, in document order, which is the order generated pages load their data. */
 export const blocksOf = (root: UIElement) => {
   const out: UIElement[] = []
-  walk(root, (e) => { if (e.type === 'block') out.push(e) })
+  walk(root, (e) => { if (e.type === 'block' || (e.type === 'frame' && e.props.source)) out.push(e) })
   return out
 }
 

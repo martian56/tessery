@@ -40,11 +40,11 @@ export function Section({ title, children, actions, defaultOpen = true, id }: { 
 
 export function Field({ label, children, hint, wide }: { label: ReactNode; children: ReactNode; hint?: ReactNode; wide?: boolean }) {
   return (
-    <div className={clsx(s.field, wide && s.fieldWide)}>
+    <label className={clsx(s.field, wide && s.fieldWide)}>
       <span className={s.fieldLabel} title={typeof label === 'string' ? label : undefined}>{label}</span>
       <div className={s.fieldControl}>{children}</div>
       {hint && <span className={s.fieldHint}>{hint}</span>}
-    </div>
+    </label>
   )
 }
 

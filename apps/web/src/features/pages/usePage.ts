@@ -1,3 +1,4 @@
+import { readsOnly } from '@tessery/core/codegen/services/model'
 import { useDoc, useUi } from '@/store'
 
 export function useCurrentPage() {
@@ -12,6 +13,6 @@ export function useBindableOps() {
   const doc = useDoc()
   return Object.values(doc.apis).flatMap((sp) => {
     const n = doc.nodes.find((x) => x.id === sp.nodeId)
-    return n ? sp.operations.map((o) => ({ key: `${sp.nodeId}:${o.name}`, label: `${n.name} · ${o.kind.startsWith('GET') || o.kind.startsWith('POST') ? o.kind : `${o.kind} ${o.name}`}`, style: sp.style, kind: o.kind })) : []
+    return n ? sp.operations.map((o) => ({ key: `${sp.nodeId}:${o.name}`, label: `${n.name} · ${o.kind.startsWith('GET') || o.kind.startsWith('POST') ? o.kind : `${o.kind} ${o.name}`}`, style: sp.style, kind: o.kind, reads: readsOnly(sp.style, o) })) : []
   })
 }

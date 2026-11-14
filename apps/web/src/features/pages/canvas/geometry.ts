@@ -3,7 +3,7 @@ import type { StyleMap, UIElement } from '@tessery/core/domain/types'
 export interface Pt { x: number; y: number }
 export interface Box { x: number; y: number; w: number; h: number }
 
-export type Breakpoint = 'style' | 'tablet' | 'mobile' | 'hover'
+export type Breakpoint = 'style' | 'tablet' | 'mobile' | 'hover' | 'focus' | 'active' | 'current'
 
 export const DEVICE_WIDTH = { desktop: 1280, tablet: 820, mobile: 390 } as const
 

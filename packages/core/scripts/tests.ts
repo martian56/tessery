@@ -324,11 +324,86 @@ test('page CSS covers breakpoints, hover and fonts and refuses injected rules', 
   ] }
   const css = treeCss(root, { ...DEFAULT_THEME, fonts: { heading: 'Fraunces', body: 'Inter' } }, '/assets/')
   assert.match(css, /\.n-r\{display:flex;gap:16px\}/)
-  assert.match(css, /\.n-a:hover\{opacity:0\.8\}/)
+  assert.match(css, /:is\(\.n-a:hover\)\{opacity:0\.8\}/)
   assert.match(css, /@container \(max-width: 900px\)\{\.n-a\{font-size:36px\}\}/)
   assert.match(css, /@container \(max-width: 600px\)\{\.n-a\{font-size:28px\}\}/)
   assert.match(css, /background-image:url\("\/assets\/0193f3a4-0000-7000-8000-000000000001\/bg\.png"\)/)
   assert.match(css, /family=Fraunces/)
   assert.match(css, /--font-body:"Inter"/)
   assert.ok(!css.includes('</style>') && !css.includes('javascript:') && !css.includes('alert'), css)
+})
+
+test('record frames, placeholders, states, dark colors and icons render the way apps need them', async () => {
+  const { treeCss, fill, records } = await import('../src/render/tree')
+  const { DEFAULT_THEME, blocksOf } = await import('../src/domain/tree')
+  assert.deepEqual(records({ items: [{ id: 1 }] }), [{ id: 1 }])
+  assert.deepEqual(records([{ id: 2 }]), [{ id: 2 }])
+  assert.deepEqual(records(null), [])
+  assert.deepEqual(records({ id: 3, name: 'one' }), [{ id: 3, name: 'one' }], 'a detail response is one record')
+  const row = { id: 'a b', title: 'Fix login', price: 1234.5, author: { name: 'Ada Lovelace' } }
+  assert.equal(fill('{title} by {author.name} ({author.name|initials})', row), 'Fix login by Ada Lovelace (AL)')
+  assert.equal(fill('{price|money}', row), '$1,234.50')
+  assert.equal(fill('/issues/{id}', row, true), '/issues/a%20b', 'values in links are encoded')
+  assert.equal(fill('{title}', undefined), '{title}', 'text outside a record frame stays as written')
+
+  const root: import('../src/render/tree').El = { id: 'r', type: 'frame', props: {}, children: [
+    { id: 'link', type: 'text', props: { text: 'Inbox', href: '/inbox' }, current: { fontWeight: 600 }, focus: { outline: '2px solid red' }, active: { scale: 0.98 } },
+    { id: 'bar', type: 'frame', props: { tag: 'form' }, focus: { borderColor: 'var(--c-primary)' } },
+  ] }
+  const css = treeCss(root, { ...DEFAULT_THEME, fonts: { heading: 'Inter', body: 'Inter', mono: 'JetBrains Mono' }, dark: { bg: '#101418', text: '#e8eaed' } })
+  assert.match(css, /:is\(\.n-link\[aria-current="page"\],[^)]*\)\{font-weight:600\}/)
+  assert.match(css, /:is\(\.n-link:focus-visible\)\{outline:2px solid red\}/)
+  assert.match(css, /:is\(\.n-link:active\)\{scale:0\.98\}/)
+  assert.match(css, /:is\(\.n-bar:focus-within\)\{border-color:var\(--c-primary\)\}/, 'a frame lights up while its input has focus')
+  assert.match(css, /@media \(prefers-color-scheme: dark\)\{\.tsp-tree\{--c-bg:#101418;--c-text:#e8eaed;color-scheme:dark\}\}/)
+  assert.match(css, /family=JetBrains\+Mono/)
+
+  const doc = tasksTemplate()
+  const home = doc.pages.find((p) => p.route === '/')!
+  const svc = doc.nodes.find((n) => n.techId === 'service' && doc.apis[n.id]?.operations.some((o) => o.name.startsWith('list')))!
+  const op = doc.apis[svc.id].operations.find((o) => o.name.startsWith('list'))!
+  const list = runOp(doc, 'addElement', { pageId: home.id, element: { type: 'frame', props: { source: `${svc.id}:${op.name}` }, children: [
+    { type: 'frame', props: { href: '/projects/{id}' }, children: [{ type: 'icon', props: { name: 'folder' } }, { type: 'text', props: { text: '{name}' } }] },
+  ] } }) as string
+  assert.ok(blocksOf(home.root).some((e) => e.id === list), 'record frames load data like blocks')
+  const files = generateAll(doc)
+  const app = Object.keys(files).find((f) => f.endsWith('/components/tree.tsx'))!.replace('/components/tree.tsx', '')
+  const page = files[`${app}/app/page.tsx`]
+  assert.ok(page.includes(`${JSON.stringify(list)}: data`), 'the page passes the loaded records to the frame')
+  assert.match(page, /icon=\{Icon\} path=\{"\/"\}/)
+  assert.match(files[`${app}/components/icon.tsx`], /from 'lucide-react'/)
+  assert.match(files[`${app}/components/icon.tsx`], /BY_NAME\.get\(squash\(name\)\)/, 'any spelling of an icon name resolves')
+  assert.ok(JSON.parse(files[`${app}/package.json`]).dependencies['lucide-react'])
+  const detail = Object.keys(files).find((f) => f.startsWith(`${app}/app/`) && f.includes('[') && f.endsWith('page.tsx'))
+  if (detail) assert.match(files[detail], /path=\{`\/[^`]*\$\{\w+\}`\}/, 'dynamic pages pass their real path')
+  assert.throws(() => runOp(doc, 'addElement', { pageId: home.id, element: { type: 'marquee' as never } }))
+})
+
+test('pages only load from read operations, and popover links survive copies', async () => {
+  const { readsOnly } = await import('../src/codegen/services/model')
+  const { analyze } = await import('../src/analysis')
+  assert.ok(readsOnly('rest', { kind: 'GET /items', name: 'listItems' }))
+  assert.ok(!readsOnly('rest', { kind: 'DELETE /items/{id}', name: 'deleteItem' }))
+  assert.ok(readsOnly('graphql', { kind: 'query', name: 'items' }) && !readsOnly('graphql', { kind: 'mutation', name: 'addItem' }))
+  assert.ok(readsOnly('grpc', { kind: 'unary', name: 'ListItems' }) && !readsOnly('grpc', { kind: 'unary', name: 'RemoveItem' }))
+
+  const doc = tasksTemplate()
+  const home = doc.pages.find((p) => p.route === '/')!
+  const svc = doc.nodes.find((n) => doc.apis[n.id]?.operations.some((o) => o.name === 'deleteTask'))!
+  const bad = runOp(doc, 'addElement', { pageId: home.id, element: { type: 'frame', name: 'Danger', props: { source: `${svc.id}:deleteTask` }, children: [{ type: 'text', props: { text: '{title}' } }] } }) as string
+  const page = Object.entries(generateAll(doc)).find(([f]) => f.endsWith('/app/page.tsx'))![1]
+  assert.ok(!page.includes('.deleteTask('), 'rendering a page never calls an operation that changes data')
+  assert.ok(analyze(doc, undefined, null).some((x) => x.target?.blockId === bad && /changes data/.test(x.message)), 'the design check names the problem')
+
+  const menu = runOp(doc, 'addElement', { pageId: home.id, element: { type: 'frame', name: 'Menu', children: [
+    { type: 'button', name: 'Open', props: { text: 'Options', opens: 'List' } },
+    { type: 'frame', name: 'List', props: { popover: true } },
+  ] } }) as string
+  const { find } = await import('../src/domain/tree')
+  const m = find(home.root, menu)!.el
+  assert.equal(m.children![0].props.opens, m.children![1].id, 'a button can name the popover it opens')
+  const copy = runOp(doc, 'duplicateElement', { pageId: home.id, elementId: menu }) as string
+  const c = find(home.root, copy)!.el
+  assert.equal(c.children![0].props.opens, c.children![1].id, 'a copied button opens the copied popover')
+  assert.notEqual(c.children![1].id, m.children![1].id)
 })

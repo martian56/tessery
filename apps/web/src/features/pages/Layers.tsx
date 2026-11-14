@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, ChevronDown, ChevronRight, Code2, Eye, EyeOff, Frame, ImageIcon, LayoutGrid, RectangleHorizontal, Spline, Square, Type, Video } from 'lucide-react'
+import { Box, ChevronDown, ChevronRight, ChevronsUpDown, Code2, Eye, EyeOff, Frame, ImageIcon, LayoutGrid, RectangleHorizontal, Repeat, Shapes, Spline, Square, TextCursorInput, Type, Video } from 'lucide-react'
 import clsx from 'clsx'
 import type { Page, UIElement } from '@tessery/core/domain/types'
 import { find } from '@tessery/core/domain/tree'
@@ -8,7 +8,7 @@ import { useAppDispatch, useEdit, useUi } from '@/store'
 import { ui } from '@/store/uiSlice'
 import s from './Layers.module.css'
 
-const ICON: Record<string, React.ReactNode> = { frame: <Frame />, text: <Type />, image: <ImageIcon />, video: <Video />, button: <RectangleHorizontal />, shape: <Square />, path: <Spline />, embed: <Code2 />, block: <LayoutGrid /> }
+const ICON: Record<string, React.ReactNode> = { frame: <Frame />, text: <Type />, image: <ImageIcon />, video: <Video />, button: <RectangleHorizontal />, shape: <Square />, path: <Spline />, embed: <Code2 />, block: <LayoutGrid />, icon: <Shapes />, input: <TextCursorInput />, select: <ChevronsUpDown /> }
 export const elementLabel = (e: UIElement) => e.name ?? (e.type === 'block' ? BLOCK_META[String(e.props.block)]?.label ?? 'Block' : e.type === 'text' ? String(e.props.text ?? 'Text').slice(0, 28) : e.type[0].toUpperCase() + e.type.slice(1))
 
 export function Layers({ page }: { page: Page }) {
@@ -55,7 +55,7 @@ export function Layers({ page }: { page: Page }) {
           onClick={(ev) => pick(e.id, ev.shiftKey)}
           onDoubleClick={() => e.id !== page.root.id && setRenaming(e.id)}>
           {kids.length ? <button className={s.twist} aria-label={open ? 'Collapse' : 'Expand'} onClick={(ev) => { ev.stopPropagation(); setClosed((c) => { const n = new Set(c); if (n.has(e.id)) n.delete(e.id); else n.add(e.id); return n }) }}>{open ? <ChevronDown /> : <ChevronRight />}</button> : <span className={s.twist} />}
-          <span className={s.icon}>{ICON[e.type] ?? <Box />}</span>
+          <span className={s.icon}>{e.type === 'frame' && e.props.source ? <Repeat /> : ICON[e.type] ?? <Box />}</span>
           {renaming === e.id
             ? <input className={s.name} autoFocus defaultValue={elementLabel(e)} onClick={(ev) => ev.stopPropagation()} onBlur={(ev) => { edit('updateElement', { pageId: page.id, elementId: e.id, patch: { name: ev.currentTarget.value.trim() } }); setRenaming(null) }} onKeyDown={(ev) => { if (ev.key === 'Enter') ev.currentTarget.blur(); if (ev.key === 'Escape') setRenaming(null) }} />
             : <span className={s.label}>{elementLabel(e)}</span>}

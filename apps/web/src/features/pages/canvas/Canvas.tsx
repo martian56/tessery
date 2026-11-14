@@ -9,7 +9,8 @@ import { useAppDispatch, useDoc, useEdit, useUi } from '@/store'
 import { ui, type PageTool } from '@/store/uiSlice'
 import { AssetPicker } from '@/features/assets/AssetPicker'
 import { DEVICE_WIDTH, boxFrom, effective, normalizePath, penPath, px, simplify, smoothPath, type Anchor, type Box, type Breakpoint, type Pt } from './geometry'
-import { BOX_TOOLS, SEEDS, TOOL_KEYS, type ElementSeed } from './tools'
+import { BOX_TOOLS, SEEDS, STATE_LABEL, TOOL_KEYS, type ElementSeed } from './tools'
+import { EditorIcon } from './EditorIcon'
 import s from './Canvas.module.css'
 
 const BLOCKS = Object.fromEntries(BLOCK_CATALOG.map((b) => [b.type, b.type === 'form' ? Shared.FormView : (Shared as unknown as Record<string, ComponentType<Record<string, unknown>>>)[b.component]])) as unknown as TreeProps['blocks']
@@ -36,10 +37,11 @@ export function Canvas({ page }: { page: Page }) {
   const dispatch = useAppDispatch()
   const edit = useEdit()
   const doc = useDoc()
-  const { device, tool, blockId: selected, selection, hover: hoverState } = useUi((u) => u.pages)
+  const { device, tool, blockId: selected, selection, state: previewState } = useUi((u) => u.pages)
   const theme = themeOf(doc, page.appNodeId)
   const width = DEVICE_WIDTH[device]
   const geoKey: Breakpoint = device === 'desktop' ? 'style' : device
+  const writeKey: Breakpoint = previewState !== 'none' ? previewState : geoKey
 
   const stageRef = useRef<HTMLDivElement>(null)
   const pageRef = useRef<HTMLDivElement>(null)
@@ -60,12 +62,13 @@ export function Canvas({ page }: { page: Page }) {
 
   const tree = useMemo(() => {
     const extra: Record<string, { key: Breakpoint; style: StyleMap }> = { ...over }
-    if (hoverState && selected) {
+    if (previewState !== 'none' && selected) {
       const e = find(page.root, selected)?.el
-      if (e?.hover) extra[selected] = { key: geoKey, style: { ...e.hover, ...(over[selected]?.style ?? {}) } }
+      const st = e?.[previewState]
+      if (st) extra[selected] = { key: geoKey, style: { ...st, ...(over[selected]?.style ?? {}) } }
     }
     return Object.keys(extra).length ? withOverrides(page.root, extra) : page.root
-  }, [page.root, over, hoverState, selected, geoKey])
+  }, [page.root, over, previewState, selected, geoKey])
 
   useLayoutEffect(() => {
     const el = stageRef.current
@@ -299,7 +302,7 @@ export function Canvas({ page }: { page: Page }) {
       case 'resize': {
         const o = over[d.id]
         setOver({})
-        if (o && (d.kind === 'resize' || d.moved)) edit('updateElement', { pageId: page.id, elementId: d.id, patch: { [geoKey]: o.style } })
+        if (o && (d.kind === 'resize' || d.moved)) edit('updateElement', { pageId: page.id, elementId: d.id, patch: { [writeKey]: o.style } })
         return
       }
       case 'move-flow': {
@@ -337,7 +340,7 @@ export function Canvas({ page }: { page: Page }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target
-      if (t instanceof Element && t.closest('input, textarea, select, [contenteditable], [role="dialog"], [role="menu"], [role="listbox"]')) return
+      if (t instanceof Element && t.closest('input, textarea, select, [contenteditable], [role="dialog"], [role="menu"], [role="listbox"], [role="combobox"], [aria-haspopup]')) return
       const stop = () => { e.preventDefault(); e.stopImmediatePropagation() }
       const k = e.key.toLowerCase()
       if (tool === 'pen' && anchors.length && (k === 'enter' || k === 'escape')) { stop(); return k === 'enter' ? finishPen(false) : (setAnchors([]), setCursor(null)) }
@@ -373,7 +376,7 @@ export function Canvas({ page }: { page: Page }) {
         const step = e.shiftKey ? 10 : 1
         const dx = k === 'arrowleft' ? -step : k === 'arrowright' ? step : 0
         const dy = k === 'arrowup' ? -step : k === 'arrowdown' ? step : 0
-        edit('updateElement', { pageId: page.id, elementId: id, patch: { [geoKey]: { left: (px(st.left) ?? 0) + dx, top: (px(st.top) ?? 0) + dy } } }, { coalesce: `nudge:${id}` })
+        edit('updateElement', { pageId: page.id, elementId: id, patch: { [writeKey]: { left: (px(st.left) ?? 0) + dx, top: (px(st.top) ?? 0) + dy } } }, { coalesce: `nudge:${id}` })
       }
     }
     window.addEventListener('keydown', onKey, true)
@@ -413,14 +416,14 @@ export function Canvas({ page }: { page: Page }) {
             onClickCapture={(e) => { if ((e.target as HTMLElement).closest('a, button, summary, label')) e.preventDefault() }}
             onSubmitCapture={(e) => e.preventDefault()}
             onDragOver={onDragOver} onDragLeave={(e) => { if (e.currentTarget === e.target) setDrop(null) }} onDrop={onDrop}>
-            <Tree root={tree} theme={theme} blocks={BLOCKS} defaults={DEFAULTS} assetBase="/api/assets/" />
+            <Tree root={tree} theme={theme} blocks={BLOCKS} defaults={DEFAULTS} assetBase="/api/assets/" icon={EditorIcon} path={page.route} editing />
           </div>
           <div className={s.overlay}>
             {hoverBox && <div className={s.hover} style={{ left: hoverBox.x, top: hoverBox.y, width: hoverBox.w, height: hoverBox.h }} />}
             {selection.filter((id) => id !== selected && rects[id]).map((id) => <div key={id} className={s.sel} style={{ left: rects[id].x, top: rects[id].y, width: rects[id].w, height: rects[id].h }} />)}
             {sel && tool === 'select' && !editing && (
               <div className={s.sel} style={{ left: sel.x, top: sel.y, width: sel.w, height: sel.h }}>
-                <span className={s.tag} style={{ transform: `scale(${1 / scale})` }}>{label?.name ?? label?.type}{hoverState ? ' · hover' : ''}</span>
+                <span className={s.tag} style={{ transform: `scale(${1 / scale})` }}>{label?.name ?? label?.type}{previewState !== 'none' ? ` (${STATE_LABEL[previewState]})` : ''}</span>
                 <span className={s.size} style={{ transform: `scale(${1 / scale})` }}>{Math.round(sel.w)} × {Math.round(sel.h)}</span>
                 {selected !== page.root.id && HANDLES.map((h) => <span key={h} data-handle={h} className={s.handle} data-pos={h} style={{ transform: `scale(${1 / scale})` }} />)}
               </div>

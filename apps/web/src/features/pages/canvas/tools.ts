@@ -1,7 +1,9 @@
 import type { ElementType, StyleMap, UIElement } from '@tessery/core/domain/types'
-import type { PageTool } from '@/store/uiSlice'
+import type { ElementState, PageTool } from '@/store/uiSlice'
 
-export interface ElementSeed { type: ElementType; name?: string; props?: UIElement['props']; style?: StyleMap; tablet?: StyleMap; mobile?: StyleMap; hover?: StyleMap; children?: ElementSeed[] }
+export const STATE_LABEL: Record<ElementState, string> = { none: 'Normal', hover: 'Hover', focus: 'Focus', active: 'Pressed', current: 'Current' }
+
+export interface ElementSeed { type: ElementType; name?: string; props?: UIElement['props']; style?: StyleMap; tablet?: StyleMap; mobile?: StyleMap; hover?: StyleMap; focus?: StyleMap; active?: StyleMap; current?: StyleMap; children?: ElementSeed[] }
 
 /** What a tool creates, styled with theme tokens so new elements match the site's theme. */
 export const SEEDS: Partial<Record<PageTool, (size?: { w: number; h: number }) => ElementSeed>> = {
