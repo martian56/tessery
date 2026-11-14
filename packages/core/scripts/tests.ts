@@ -658,3 +658,22 @@ test('C# services implement designed CRUD in SQL with sign-in and per-user rows'
   assert.ok(files['services/tasks-api/migrations/tasks-db/0001_init.sql'])
   assert.match(files['services/tasks-api/TasksApi.csproj'], /Include="Npgsql"/)
 })
+
+test('Rust services implement designed CRUD in SQL for Axum and Actix', () => {
+  for (const framework of ['Axum', 'Actix Web']) {
+    const doc = tasksTemplate()
+    const api = doc.nodes.find((n) => n.name === 'tasks-api')!
+    runOp(doc, 'setConfig', { id: api.id, key: 'language', value: 'Rust' })
+    runOp(doc, 'setConfig', { id: api.id, key: 'framework', value: framework })
+    const files = generateAll(doc)
+    const main = files['services/tasks-api/src/main.rs']
+    assert.match(main, /db::open\(&cfg\.dependencies\["TASKS_DB_URL"\], tables::MIGRATIONS\)\.await;/, framework)
+    assert.match(main, /tables::TASKS\.list\(.+, &\[\("project_id", .+\), \("user_id", session\.sub\.as_str\(\)\)\]\)\.await/, `${framework} filters nested routes by parent and user`)
+    assert.match(main, /let Some\(session\) = signed_in\(.+\) else \{ return reply\(401/)
+    assert.doesNotMatch(main, /not_implemented/, `${framework}: every designed CRUD route is implemented`)
+    assert.match(files['services/tasks-api/src/tables.rs'], /include_str!\("\.\.\/migrations\/tasks-db\/0001_init\.sql"\)/)
+    assert.match(files['services/tasks-api/src/tables.rs'], /pub const PROJECTS: Table = Table \{/)
+    assert.ok(files['services/tasks-api/src/db.rs'].includes('pg_advisory_lock') && files['services/tasks-api/src/session.rs'].includes('Hmac::<Sha256>'))
+    assert.match(files['services/tasks-api/Cargo.toml'], /tokio-postgres = /)
+  }
+})
