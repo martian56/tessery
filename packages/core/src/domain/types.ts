@@ -252,6 +252,8 @@ export interface Environment {
   overrides: Record<string, Partial<Placement>>
   secrets: string[]
   backups?: BackupPolicy
+  /** Days traces are kept, from 1 to 90. Unset keeps them for 3 days. */
+  traceRetentionDays?: number
 }
 
 export interface BackupPolicy {

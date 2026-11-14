@@ -193,6 +193,7 @@ function Traces() {
         <div className={s.traceBar}>
           <Switch checked={errors} onChange={setErrors} label="errors only" />
           <Spacer />
+          <Retention env={env} />
           <Button size="xs" variant="ghost" icon={live ? <Pause /> : <Play />} onClick={() => setLive((v) => !v)} aria-label={live ? 'Pause' : 'Follow new traces'} />
           <span className="muted mono" style={{ fontSize: 10 }}>{traces.length}{isFetching ? ' …' : ''}</span>
         </div>
@@ -211,6 +212,20 @@ function Traces() {
       </div>
       {selected ? <Waterfall pid={doc.id} env={env} trace={selected} colors={colors} /> : <Empty title="Pick a trace" />}
     </div>
+  )
+}
+
+/** How many days this environment keeps traces. Older spans are removed as new ones arrive. */
+function Retention({ env }: { env: string }) {
+  const doc = useDoc()
+  const edit = useEdit()
+  const days = doc.environments.find((e) => e.id === env)?.traceRetentionDays ?? 3
+  return (
+    <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }} title="Older traces are removed as new ones arrive">
+      Keep for
+      <NumberInput value={days} min={1} max={90} onCommit={(x) => edit('updateEnv', { envId: env, patch: { traceRetentionDays: Math.round(x) } })} aria-label="Days to keep traces" />
+      days
+    </label>
   )
 }
 
