@@ -407,3 +407,43 @@ test('pages only load from read operations, and popover links survive copies', a
   assert.equal(c.children![0].props.opens, c.children![1].id, 'a copied button opens the copied popover')
   assert.notEqual(c.children![1].id, m.children![1].id)
 })
+
+test('lists search, filter, sort and page, and pages pass their query along', async () => {
+  const { fill, sameQuery } = await import('../src/render/tree')
+  assert.equal(fill('Results for {?q}', undefined, false, { q: 'bean' }), 'Results for bean')
+  assert.equal(fill('/search?q={?q}', undefined, true, { q: 'a&b' }), '/search?q=a%26b')
+  assert.ok(sameQuery('?crop=Bean', { crop: 'Bean' }) && !sameQuery('?crop=Bean', { crop: 'Tomato' }))
+  assert.ok(sameQuery('?', {}) && sameQuery('?', { page: '2' }) && !sameQuery('?', { crop: 'Bean' }))
+
+  const doc = tasksTemplate()
+  const files = generateAll(doc)
+  const app = Object.keys(files).find((f) => f.endsWith('/lib/api.ts'))!.replace('/lib/api.ts', '')
+  assert.match(files[`${app}/lib/api.ts`], /withQuery\(`[^`]*`, opts\?\.query\)/, 'GET calls carry the query')
+  const home = files[`${app}/app/page.tsx`]
+  assert.match(home, /searchParams: Promise<Record<string, string \| string\[\] \| undefined>>/)
+  assert.match(home, /listProjects\(\{ token, query: search \}\)/)
+  assert.match(home, /query=\{search\}/)
+  const svc = Object.entries(files).find(([f, s]) => f.endsWith('.ts') && s.includes('= table("projects"'))![1]
+  assert.match(svc, /table\("projects", "id", \{[^}]*"name":"text"[^}]*\}, \[/, 'tables know their column types')
+  const runtime = Object.entries(files).find(([f, s]) => f.endsWith('db.ts') && s.includes('export function table('))![1]
+  for (const piece of ["RESERVED = new Set(['limit', 'offset', 'page', 'q', 'sort'])", 'ILIKE $', "sort.startsWith('-') ? 'DESC' : 'ASC'"]) assert.ok(runtime.includes(piece), piece)
+
+  const ssg = doc.pages.find((p) => p.route === '/')!
+  runOp(doc, 'updatePage', { pageId: ssg.id, patch: { render: 'ssg' } })
+  const again = generateAll(doc)[`${app}/app/page.tsx`]
+  assert.ok(!again.includes('searchParams'), 'static pages do not read the query')
+})
+
+test('query values stay literal and casts never truncate', async () => {
+  const { fill } = await import('../src/render/tree')
+  assert.equal(fill('{?q}', { name: 'Bean' }, false, { q: '{name}' }), '{name}', 'a query value is not read as a record placeholder')
+  assert.equal(fill('{?q} {name}', { name: 'Bean' }, false, { q: 'x' }), 'x Bean')
+  const { columnTypes } = await import('../src/codegen/services/crud')
+  const { sqlType } = await import('../src/codegen/backend')
+  const types = columnTypes({ id: 't', name: 'items', columns: [
+    { id: 'a', name: 'id', type: 'serial', nullable: false, pk: true },
+    { id: 'b', name: 'code', type: 'varchar', length: 3, nullable: false },
+    { id: 'c', name: 'price', type: 'numeric', nullable: false },
+  ], indexes: [] } as never, (c) => sqlType(c, 'pg'))
+  assert.deepEqual(types, { id: 'bigint', code: 'varchar', price: 'numeric' })
+})

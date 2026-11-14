@@ -43,6 +43,11 @@ Web app pages (for web-app nodes)
                 source "<serviceNodeId>:<operationName>" repeats the frame's children once per record the operation returns,
                 up to limit (default 50), showing empty when there are none. Inside, any text, href, image src, icon name or
                 label can use {field}, {author.name}, {price|money}, {count|number}, {created_at|date}, {name|initials}.
+                A server-rendered page passes its URL query to the read operations it loads. CRUD list operations read
+                q (search of text columns), any column name as an exact filter (?crop=Bean), sort (name or -created_at)
+                and page with limit. {?q} anywhere shows the current query value, e.g. an input value "{?q}" keeps a
+                search box filled; a link whose href starts with ? (?crop=Bean, or ? for no filter) gets the current
+                style when it matches the query shown, which makes filter chips and sort links.
                 popover true hides the frame until a button with opens = its id is pressed (menus, dialogs, sheets).
                 Place it with style.positionArea "bottom span-right" to open under the button, or position fixed for a dialog.
         text    { text, tag?, href? }  tag: h1|h2|h3|h4|p|span|small|strong|em|blockquote|label|li|code|pre|kbd|time|mark|del

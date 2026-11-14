@@ -27,7 +27,7 @@ function method(svc: string, style: string, basePath: string, o: Operation, pref
   const hasBody = WRITE.includes(m)
   const args = [...params.map((p) => `${p}: string`), ...(hasBody ? ['body: unknown'] : []), 'opts?: Opts'].join(', ')
   const url = '`' + path.replace(/\{(\w+)\}/g, '${encodeURIComponent($1)}') + '`'
-  return `    ${o.name}: (${args}) => call(${svc}, '${m}', ${url}, ${hasBody ? 'body' : 'undefined'}, opts?.token),`
+  return `    ${o.name}: (${args}) => call(${svc}, '${m}', ${m === 'GET' ? `withQuery(${url}, opts?.query)` : url}, ${hasBody ? 'body' : 'undefined'}, opts?.token),`
 }
 
 export function apiClient(doc: ProjectDoc): string {
@@ -49,8 +49,16 @@ export function serviceUrl(service: string): string {
   return process.env[key] ?? DEV_URLS[service] ?? 'http://localhost:8080'
 }
 
-/** \`token\` calls on behalf of a signed-in user from server code; in the browser the session cookie does it. */
-export interface Opts { token?: string }
+/** \`token\` calls on behalf of a signed-in user from server code; in the browser the session cookie does it.
+ * \`query\` is sent with GET requests: list operations read q, sort, page and column filters from it. */
+export interface Opts { token?: string; query?: Record<string, string | string[] | undefined> }
+
+function withQuery(path: string, query?: Opts['query']): string {
+  const out = new URLSearchParams()
+  for (const [k, v] of Object.entries(query ?? {})) for (const x of Array.isArray(v) ? v : [v]) if (x !== undefined && x !== '') out.append(k, x)
+  const q = out.toString()
+  return q ? \`\${path}\${path.includes('?') ? '&' : '?'}\${q}\` : path
+}
 
 async function call<T>(service: string, method: string, path: string, body?: unknown, token?: string): Promise<T> {
   const r = await fetch(serviceUrl(service) + path, {

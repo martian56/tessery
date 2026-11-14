@@ -3,7 +3,8 @@ import SESSION_RUNTIME from '../runtime/ts-session.txt'
 import AUTH_SERVICE from '../runtime/ts-auth-service.txt'
 import { builtInAuth } from '../deploy/runtime'
 import { type Files, type Route, type ServiceModel, camel, comment, envExample, readme, stepLines } from './model'
-import { type CrudRoute, type DataAccess, SQL_STORES, dataAccess, orderBy, primaryKey, writable } from './crud'
+import { type CrudRoute, type DataAccess, SQL_STORES, columnTypes, dataAccess, orderBy, primaryKey, writable } from './crud'
+import { sqlType } from '../backend'
 
 const DEPS: Record<string, string> = {
   fastify: '^5.12.0',
@@ -59,7 +60,7 @@ const tableVar = (name: string) => `${camel(name)}Table`
 function tables(da?: DataAccess): string {
   if (!da?.routes.length) return ''
   const used = [...new Map(da.routes.map((c) => [c.table.name, c.table])).values()]
-  return used.map((t) => `const ${tableVar(t.name)} = table(${JSON.stringify(t.name)}, ${JSON.stringify(primaryKey(t)!.name)}, ${JSON.stringify(writable(t))}, ${JSON.stringify(orderBy(t))})`).join('\n') + '\n'
+  return used.map((t) => `const ${tableVar(t.name)} = table(${JSON.stringify(t.name)}, ${JSON.stringify(primaryKey(t)!.name)}, ${JSON.stringify(columnTypes(t, (c) => sqlType(c, 'pg')))}, ${JSON.stringify(writable(t))}, ${JSON.stringify(orderBy(t))})`).join('\n') + '\n'
 }
 
 export const ownerColumn = (c: CrudRoute) => c.table.columns.find((x) => ['user_id', 'owner_id'].includes(x.name))?.name

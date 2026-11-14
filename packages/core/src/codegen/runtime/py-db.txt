@@ -84,6 +84,17 @@ def _rejected(e: Exception):
     raise e
 
 
+RESERVED = {"limit", "offset", "page", "q", "sort"}
+
+
+def _text_type(t: str) -> bool:
+    return t in ("text", "citext") or t.startswith("varchar") or t.startswith("character")
+
+
+def _like(s: str) -> str:
+    return "%" + s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
 class Table:
     def __init__(self, name: str, key: str, types: dict, writable: list, order: str):
         self.name, self.key, self.types, self.writable, self.order = name, key, types, writable, order
@@ -116,14 +127,29 @@ class Table:
         return status, row[0]
 
     def list(self, query, filters=None):
-        filters = filters or {}
+        # ?q= searches text columns, ?<column>= filters, ?sort=<column> or -<column> orders, ?page= or ?offset= pages.
         try:
             limit = min(max(int(query.get("limit", 50)), 1), 500)
-            offset = max(int(query.get("offset", 0)), 0)
+            if "offset" in query:
+                offset = max(int(query.get("offset", 0)), 0)
+            else:
+                offset = (max(int(query.get("page", 1)), 1) - 1) * limit
         except ValueError:
-            return 400, {"error": "invalid", "detail": "limit and offset must be numbers"}
-        where, params = self._where(filters)
-        sql = f"SELECT coalesce(json_agg(r), '[]'::json) FROM (SELECT * FROM {_q(self.name)}{' WHERE ' + where if where else ''} ORDER BY {self.order} LIMIT {limit} OFFSET {offset}) r"
+            return 400, {"error": "invalid", "detail": "limit, offset and page must be numbers"}
+        match = {k: v for k, v in query.items() if k in self.types and k not in RESERVED and v not in (None, "")}
+        match.update(filters or {})
+        where, params = self._where(match)
+        search = str(query.get("q") or "").strip()
+        cols = sorted(c for c, t in self.types.items() if _text_type(t))
+        if search and cols:
+            clause = "(" + " OR ".join(f"{_q(c)} ILIKE %s" for c in cols) + ")"
+            where = f"{where} AND {clause}" if where else clause
+            params = [*params, *([_like(search)] * len(cols))]
+        order = self.order
+        sort = str(query.get("sort") or "")
+        if sort.lstrip("-") in self.types:
+            order = f"{_q(sort.lstrip('-'))} {'DESC' if sort.startswith('-') else 'ASC'}, {self.order}"
+        sql = f"SELECT coalesce(json_agg(r), '[]'::json) FROM (SELECT * FROM {_q(self.name)}{' WHERE ' + where if where else ''} ORDER BY {order} LIMIT {limit} OFFSET {offset}) r"
         return self._one(sql, params, 200)
 
     def get(self, id, filters=None):
