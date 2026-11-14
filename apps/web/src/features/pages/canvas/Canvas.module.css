@@ -1,0 +1,28 @@
+.stage { flex: 1; min-height: 0; overflow: auto; padding: 32px; background: repeating-conic-gradient(#18181b 0 25%, #151517 0 50%) 0 0 / 16px 16px; display: flex; justify-content: center; align-items: flex-start; }
+.sizer { flex-shrink: 0; }
+.frame { position: relative; transform-origin: top left; background: #fff; box-shadow: 0 12px 48px #000b; border-radius: 4px; }
+.frame[data-tool="select"] .page { cursor: default; }
+.frame:not([data-tool="select"]) .page { cursor: crosshair; }
+.frame[data-tool="text"] .page { cursor: text; }
+.page { position: relative; min-height: 900px; user-select: none; }
+.page :global(.tsp-tree) { min-height: 900px; }
+.overlay { position: absolute; inset: 0; pointer-events: none; }
+.hover { position: absolute; outline: 1px solid #4f8cff; outline-offset: -1px; }
+.sel { position: absolute; outline: 1.5px solid #4f8cff; outline-offset: -1px; }
+.tag { position: absolute; left: -1px; top: -20px; transform-origin: bottom left; background: #4f8cff; color: #fff; font: 600 11px/1 var(--font-ui); padding: 4px 6px; border-radius: 3px 3px 3px 0; white-space: nowrap; }
+.size { position: absolute; left: 50%; bottom: -22px; transform-origin: top center; translate: -50% 0; background: #4f8cff; color: #fff; font: 600 10px/1 var(--font-mono); padding: 3px 5px; border-radius: 3px; white-space: nowrap; }
+.handle { position: absolute; width: 9px; height: 9px; background: #fff; border: 1.5px solid #4f8cff; border-radius: 2px; pointer-events: auto; margin: -5px 0 0 -5px; }
+.handle[data-pos="nw"] { left: 0; top: 0; cursor: nwse-resize; }
+.handle[data-pos="n"] { left: 50%; top: 0; cursor: ns-resize; }
+.handle[data-pos="ne"] { left: 100%; top: 0; cursor: nesw-resize; }
+.handle[data-pos="e"] { left: 100%; top: 50%; cursor: ew-resize; }
+.handle[data-pos="se"] { left: 100%; top: 100%; cursor: nwse-resize; }
+.handle[data-pos="s"] { left: 50%; top: 100%; cursor: ns-resize; }
+.handle[data-pos="sw"] { left: 0; top: 100%; cursor: nesw-resize; }
+.handle[data-pos="w"] { left: 0; top: 50%; cursor: ew-resize; }
+.drop { position: absolute; background: #4f8cff; border-radius: 2px; box-shadow: 0 0 0 2px #4f8cff40; }
+.draw { position: absolute; outline: 1.5px dashed #4f8cff; background: #4f8cff14; }
+.ink { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.ink path { fill: none; stroke: #4f8cff; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.ink circle { fill: #fff; stroke: #4f8cff; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.editor { position: absolute; pointer-events: auto; outline: 1.5px solid #4f8cff; white-space: pre-wrap; cursor: text; user-select: text; box-sizing: border-box; }

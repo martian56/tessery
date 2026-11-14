@@ -31,3 +31,13 @@
 .bad { color: #d9534f; }
 .dropLine { height: 3px; background: var(--acc); margin: -1px 0; border-radius: 2px; }
 .emptyPage { padding: 60px; text-align: center; color: #999; border: 2px dashed #ddd; margin: 20px; border-radius: 8px; }
+
+.tools { display: flex; gap: 2px; }
+.tool { width: 28px; height: 28px; display: grid; place-items: center; border-radius: var(--r-1); color: var(--tx-2); background: none; border: 0; }
+.tool svg { width: 15px; height: 15px; }
+.tool:hover { background: var(--bg-3); color: var(--tx-1); }
+.tool[data-on] { background: var(--acc-lo); color: var(--acc); }
+.palette { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 6px 10px 10px; }
+.paletteItem { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line-2); border-radius: var(--r-2); background: var(--bg-2); cursor: grab; font-size: var(--fs-11); color: var(--tx-2); }
+.paletteItem:hover { border-color: var(--acc); color: var(--tx-1); }
+.paletteThumb { height: 44px; border-radius: 4px; background: var(--bg-3); display: grid; place-items: center; color: var(--tx-3); }

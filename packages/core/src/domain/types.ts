@@ -162,7 +162,52 @@ export interface Table { id: string; name: string; columns: Column[]; indexes: I
 export interface DbSchema { nodeId: string; tables: Table[] }
 
 export interface Block { id: string; type: string; props: Record<string, ConfigValue> }
-export interface Page { id: string; appNodeId: string; name: string; route: string; render: 'ssr' | 'ssg' | 'isr' | 'csr'; access: 'public' | 'user' | 'admin'; title: string; blocks: Block[] }
+
+/** CSS declarations in camelCase. Numbers are pixels for lengths. Values may use theme tokens such as var(--c-primary). */
+export type StyleMap = Record<string, string | number>
+
+export type ElementType = 'frame' | 'text' | 'image' | 'video' | 'button' | 'shape' | 'path' | 'embed' | 'block'
+
+/**
+ * One element of a page. Frames hold children and lay them out with flex or grid; any element can be positioned
+ * absolutely inside its parent. `tablet`, `mobile` and `hover` override `style` at those breakpoints and on hover.
+ * A `block` element renders one of the data and section blocks, named by props.block.
+ */
+export interface UIElement {
+  id: string
+  type: ElementType
+  name?: string
+  props: Record<string, ConfigValue>
+  style?: StyleMap
+  tablet?: StyleMap
+  mobile?: StyleMap
+  hover?: StyleMap
+  hidden?: boolean
+  children?: UIElement[]
+}
+
+export interface Theme {
+  /** Exposed as var(--c-<name>). */
+  colors: Record<string, string>
+  /** Google Fonts family names or CSS font stacks, exposed as var(--font-heading) and var(--font-body). */
+  fonts: { heading: string; body: string }
+  /** Default corner radius in pixels, exposed as var(--radius). */
+  radius: number
+}
+
+export interface Page {
+  id: string
+  appNodeId: string
+  name: string
+  route: string
+  render: 'ssr' | 'ssg' | 'isr' | 'csr'
+  access: 'public' | 'user' | 'admin'
+  title: string
+  /** The page's element tree. Pages saved before the tree existed are migrated into it on load. */
+  root: UIElement
+  /** Kept empty; older documents listed blocks here before the element tree. */
+  blocks: Block[]
+}
 
 export type DeployTarget =
   | { kind: 'git' }
@@ -209,6 +254,8 @@ export interface ProjectDoc {
   apis: Record<string, ApiSpec>
   databases: Record<string, DbSchema>
   pages: Page[]
+  /** Theme per web app node id. */
+  themes: Record<string, Theme>
   environments: Environment[]
   observability: ObservabilityConfig
   updatedAt: number

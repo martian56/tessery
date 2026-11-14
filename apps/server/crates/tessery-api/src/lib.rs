@@ -70,7 +70,7 @@ pub async fn connect(config: config::Config) -> anyhow::Result<AppState> {
     })
 }
 
-const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; frame-src https:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 
 pub fn app(state: AppState) -> Router {
     let request_id = HeaderName::from_static("x-request-id");

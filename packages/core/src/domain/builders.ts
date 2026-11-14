@@ -1,6 +1,7 @@
 import type {
   ApiSpec, ApiStyle, SystemEdge, SystemNode, Block, Column, ColumnType, DbSchema, Environment, Index, ObservabilityConfig, Operation, Page, Placement, ProjectDoc, Table, TypeDef,
 } from './types'
+import { blockElement, pageRoot } from './tree'
 import { TECH_BY_ID, edgeProtocol } from '../catalog/technologies'
 import { defaultPlacement } from '../catalog/placement'
 
@@ -93,7 +94,8 @@ export function type(name: string, fields: string, kind: TypeDef['kind'] = 'obje
 
 export const block = (type: string, props: Block['props'] = {}): Block => ({ id: uid('b'), type, props })
 export function page(appNodeId: string, name: string, route: string, blocks: Block[], extra: Partial<Page> = {}): Page {
-  return { id: uid('pg'), appNodeId, name, route, render: 'ssr', access: 'public', title: name, blocks, ...extra }
+  const id = uid('pg')
+  return { id, appNodeId, name, route, render: 'ssr', access: 'public', title: name, root: pageRoot(`root_${id}`, blocks.map(blockElement)), blocks: [], ...extra }
 }
 
 export function env(id: string, name: string, provider: string, region: string, extra: Partial<Environment> = {}): Environment {
@@ -101,6 +103,6 @@ export function env(id: string, name: string, provider: string, region: string, 
 }
 export const defaultObservability = (): ObservabilityConfig => ({ metrics: 'Prometheus', logs: 'Loki', traces: 'Tempo', sampling: 0.1, slos: [], alerts: [] })
 
-export function project(p: Omit<ProjectDoc, 'updatedAt' | 'groups'> & { groups?: ProjectDoc['groups'] }): ProjectDoc {
-  return { groups: [], ...p, updatedAt: Date.now() }
+export function project(p: Omit<ProjectDoc, 'updatedAt' | 'groups' | 'themes'> & { groups?: ProjectDoc['groups']; themes?: ProjectDoc['themes'] }): ProjectDoc {
+  return { groups: [], themes: {}, ...p, updatedAt: Date.now() }
 }

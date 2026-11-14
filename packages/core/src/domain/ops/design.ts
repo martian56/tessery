@@ -1,4 +1,5 @@
-import type { ApiSpec, Block, Column, Environment, Index, Operation, Page, ProjectDoc, Table, TypeDef, AlertRule, SloDef, ObservabilityConfig, ConfigValue } from '../types'
+import type { ApiSpec, Block, Column, Environment, Index, Operation, Page, ProjectDoc, Table, TypeDef, AlertRule, SloDef, ObservabilityConfig, ConfigValue, ElementType, Theme, UIElement } from '../types'
+import { blockElement, find, pageRoot, themeOf } from '../tree'
 import { block as mkBlock, op as mkOp, table as mkTable, type as mkType, uid } from '../builders'
 
 const spec = (doc: ProjectDoc, nodeId: string) => doc.apis[nodeId]
@@ -120,39 +121,145 @@ export const dbOps = {
   },
 }
 
+type ElementInput = Partial<Omit<UIElement, 'children'>> & { type: ElementType; children?: ElementInput[] }
+type ElementPatch = { props?: Record<string, ConfigValue | null>; style?: Record<string, string | number | null>; tablet?: Record<string, string | number | null>; mobile?: Record<string, string | number | null>; hover?: Record<string, string | number | null>; name?: string; hidden?: boolean }
+
+const ELEMENT_TYPES = new Set<ElementType>(['frame', 'text', 'image', 'video', 'button', 'shape', 'path', 'embed', 'block'])
+
+/** Gives an element and its children fresh ids. */
+function build(e: ElementInput): UIElement {
+  if (!ELEMENT_TYPES.has(e.type)) throw new Error(`unknown element type ${e.type}; use ${[...ELEMENT_TYPES].join(', ')}`)
+  const out: UIElement = { id: uid('el'), type: e.type, props: { ...(e.props ?? {}) } }
+  if (e.name) out.name = e.name
+  for (const k of ['style', 'tablet', 'mobile', 'hover'] as const) if (e[k] && Object.keys(e[k]!).length) out[k] = { ...e[k] }
+  if (e.hidden) out.hidden = true
+  if (e.type === 'frame') out.children = (e.children ?? []).map(build)
+  return out
+}
+
+function reid(e: UIElement): UIElement {
+  return { ...structuredClone(e), id: uid('el'), children: e.children?.map(reid) }
+}
+
+const merge = (target: Record<string, unknown> | undefined, patch: Record<string, unknown>) => {
+  const out: Record<string, unknown> = { ...(target ?? {}) }
+  for (const [k, v] of Object.entries(patch)) { if (v === null || v === undefined || v === '') delete out[k]; else out[k] = v }
+  return out
+}
+
+const at = (doc: ProjectDoc, pageId: string, id?: string) => {
+  const p = pg(doc, pageId)
+  if (!p) throw new Error(`no page ${pageId}`)
+  const hit = find(p.root, id ?? p.root.id)
+  if (!hit) throw new Error(`no element ${id} on page ${p.name}`)
+  return { p, ...hit }
+}
+
 export const pageOps = {
   addPage(doc: ProjectDoc, a: { appNodeId: string; name: string; route: string }) {
-    const p: Page = { id: uid('pg'), appNodeId: a.appNodeId, name: a.name, route: a.route, render: 'ssr', access: 'public', title: a.name, blocks: [mkBlock('navbar', { brand: doc.name }), mkBlock('text', { heading: a.name, body: '' })] }
+    const id = uid('pg')
+    const p: Page = { id, appNodeId: a.appNodeId, name: a.name, route: a.route, render: 'ssr', access: 'public', title: a.name, blocks: [],
+      root: pageRoot(`root_${id}`, [blockElement(mkBlock('navbar', { brand: doc.name })), blockElement(mkBlock('text', { heading: a.name, body: '' }))]) }
     doc.pages.push(p); return p.id
   },
-  updatePage(doc: ProjectDoc, a: { pageId: string; patch: Partial<Omit<Page, 'id' | 'blocks'>> }) {
+  updatePage(doc: ProjectDoc, a: { pageId: string; patch: Partial<Omit<Page, 'id' | 'blocks' | 'root'>> }) {
     const p = pg(doc, a.pageId); if (p) Object.assign(p, a.patch)
   },
   duplicatePage(doc: ProjectDoc, a: { pageId: string }) {
     const p = pg(doc, a.pageId); if (!p) return
-    const c: Page = { ...structuredClone(p), id: uid('pg'), name: `${p.name} copy`, route: `${p.route === '/' ? '' : p.route}/copy` }
-    c.blocks.forEach((b) => (b.id = uid('b'))); doc.pages.push(c); return c.id
+    const c: Page = { ...structuredClone(p), id: uid('pg'), name: `${p.name} copy`, route: `${p.route === '/' ? '' : p.route}/copy`, root: reid(p.root) }
+    doc.pages.push(c); return c.id
   },
   removePage(doc: ProjectDoc, a: { pageId: string }) { doc.pages = doc.pages.filter((p) => p.id !== a.pageId) },
+
+  addElement(doc: ProjectDoc, a: { pageId: string; parentId?: string; index?: number; element: ElementInput }) {
+    const { el: parent } = at(doc, a.pageId, a.parentId)
+    if (parent.type !== 'frame') throw new Error('elements can only be added inside a frame')
+    const e = build(a.element)
+    const list = (parent.children ??= [])
+    list.splice(a.index === undefined || a.index < 0 || a.index > list.length ? list.length : a.index, 0, e)
+    return e.id
+  },
+  updateElement(doc: ProjectDoc, a: { pageId: string; elementId: string; patch: ElementPatch }) {
+    const { el } = at(doc, a.pageId, a.elementId)
+    if (a.patch.props) el.props = merge(el.props, a.patch.props) as UIElement['props']
+    for (const k of ['style', 'tablet', 'mobile', 'hover'] as const) {
+      if (!a.patch[k]) continue
+      const next = merge(el[k], a.patch[k]!) as Record<string, string | number>
+      if (Object.keys(next).length) el[k] = next; else delete el[k]
+    }
+    if (a.patch.name !== undefined) { if (a.patch.name) el.name = a.patch.name; else delete el.name }
+    if (a.patch.hidden !== undefined) { if (a.patch.hidden) el.hidden = true; else delete el.hidden }
+  },
+  moveElement(doc: ProjectDoc, a: { pageId: string; elementId: string; parentId: string; index: number }) {
+    const { p, el, parent } = at(doc, a.pageId, a.elementId)
+    if (!parent) throw new Error('the page frame cannot be moved')
+    const target = find(p.root, a.parentId)?.el
+    if (!target || target.type !== 'frame') throw new Error('elements can only move into a frame')
+    if (find(el, target.id)) throw new Error('an element cannot move inside itself')
+    const from = parent.children!.indexOf(el)
+    parent.children!.splice(from, 1)
+    const list = (target.children ??= [])
+    let to = Math.max(0, Math.min(a.index, list.length))
+    if (target === parent && to > from) to = Math.max(0, to - 1)
+    list.splice(to, 0, el)
+  },
+  duplicateElement(doc: ProjectDoc, a: { pageId: string; elementId: string }) {
+    const { el, parent } = at(doc, a.pageId, a.elementId)
+    if (!parent) throw new Error('the page frame cannot be duplicated')
+    const c = reid(el)
+    parent.children!.splice(parent.children!.indexOf(el) + 1, 0, c)
+    return c.id
+  },
+  removeElement(doc: ProjectDoc, a: { pageId: string; elementId: string }) {
+    const { el, parent } = at(doc, a.pageId, a.elementId)
+    if (!parent) throw new Error('the page frame cannot be removed')
+    parent.children = parent.children!.filter((c) => c !== el)
+  },
+  /** Wraps elements that share a parent in a new frame, in their current order. */
+  groupElements(doc: ProjectDoc, a: { pageId: string; elementIds: string[]; frame?: Omit<ElementInput, 'type' | 'children'> }) {
+    const p = pg(doc, a.pageId); if (!p || !a.elementIds.length) return
+    const first = find(p.root, a.elementIds[0])
+    if (!first?.parent) throw new Error('the page frame cannot be grouped')
+    const parent = first.parent
+    const picked = parent.children!.filter((c) => a.elementIds.includes(c.id))
+    if (picked.length !== a.elementIds.length) throw new Error('grouped elements must share a parent')
+    const frame = build({ ...a.frame, type: 'frame', style: { display: 'flex', flexDirection: 'column', gap: 12, ...(a.frame?.style ?? {}) } })
+    frame.children = picked
+    const index = parent.children!.indexOf(picked[0])
+    parent.children = parent.children!.filter((c) => !picked.includes(c))
+    parent.children.splice(index, 0, frame)
+    return frame.id
+  },
+  setTheme(doc: ProjectDoc, a: { appNodeId: string; colors?: Record<string, string | null>; fonts?: Partial<Theme['fonts']>; radius?: number }) {
+    const t = themeOf(doc, a.appNodeId)
+    const colors = merge(t.colors, a.colors ?? {}) as Record<string, string>
+    doc.themes = { ...(doc.themes ?? {}), [a.appNodeId]: { colors, fonts: { ...t.fonts, ...(a.fonts ?? {}) }, radius: a.radius ?? t.radius } }
+  },
+
   addBlock(doc: ProjectDoc, a: { pageId: string; type: string; props: Block['props']; after?: string }) {
     const p = pg(doc, a.pageId); if (!p) return
-    const b = mkBlock(a.type, a.props)
-    const i = a.after ? p.blocks.findIndex((x) => x.id === a.after) + 1 : p.blocks.length
-    p.blocks.splice(i, 0, b); return b.id
+    const e = blockElement(mkBlock(a.type, a.props))
+    const after = a.after ? find(p.root, a.after) : null
+    const parent = after?.parent ?? p.root
+    const list = (parent.children ??= [])
+    list.splice(after ? after.index + 1 : list.length, 0, e)
+    return e.id
   },
   updateBlock(doc: ProjectDoc, a: { pageId: string; blockId: string; key: string; value: ConfigValue }) {
-    const b = pg(doc, a.pageId)?.blocks.find((x) => x.id === a.blockId); if (b) b.props[a.key] = a.value
+    const p = pg(doc, a.pageId); const e = p && find(p.root, a.blockId)?.el
+    if (e) e.props[a.key] = a.value
   },
   moveBlock(doc: ProjectDoc, a: { pageId: string; blockId: string; to: number }) {
-    const p = pg(doc, a.pageId); if (!p) return
-    move(p.blocks, p.blocks.findIndex((b) => b.id === a.blockId), a.to)
+    const p = pg(doc, a.pageId); const hit = p && find(p.root, a.blockId)
+    if (hit?.parent) move(hit.parent.children!, hit.index, a.to)
   },
   duplicateBlock(doc: ProjectDoc, a: { pageId: string; blockId: string }) {
-    const p = pg(doc, a.pageId); const i = p?.blocks.findIndex((b) => b.id === a.blockId) ?? -1; if (!p || i < 0) return
-    const b = { ...structuredClone(p.blocks[i]), id: uid('b') }; p.blocks.splice(i + 1, 0, b); return b.id
+    return pageOps.duplicateElement(doc, { pageId: a.pageId, elementId: a.blockId })
   },
   removeBlock(doc: ProjectDoc, a: { pageId: string; blockId: string }) {
-    const p = pg(doc, a.pageId); if (p) p.blocks = p.blocks.filter((b) => b.id !== a.blockId)
+    const p = pg(doc, a.pageId); const hit = p && find(p.root, a.blockId)
+    if (hit?.parent) hit.parent.children = hit.parent.children!.filter((c) => c.id !== a.blockId)
   },
 }
 

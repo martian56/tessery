@@ -1,80 +1,57 @@
-import { useState } from 'react'
-import { LayoutTemplate, Monitor, Plus, Smartphone, Tablet } from 'lucide-react'
-import clsx from 'clsx'
-import { useAppDispatch, useDoc, useEdit } from '@/store'
-import { ui } from '@/store/uiSlice'
-import { Badge, DropdownMenu, Empty, Segmented, Spacer, Toolbar, Button } from '@/ui'
-import { BLOCKS, BLOCK_BY_TYPE, PreviewStyles, renderBlock } from './blocks'
+import { Circle, Code2, Frame, ImageIcon, LayoutTemplate, Monitor, MousePointer2, PenTool, Pencil, RectangleHorizontal, Smartphone, Square, Tablet, Type, Video } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { useAppDispatch, useDoc, useUi } from '@/store'
+import { ui, type PageTool } from '@/store/uiSlice'
+import { Badge, Empty, Segmented, Spacer, Switch, Toolbar, Tooltip } from '@/ui'
+import { Canvas } from './canvas/Canvas'
+import { TOOL_LABEL } from './canvas/tools'
 import { useCurrentPage } from './usePage'
 import s from './Pages.module.css'
 
+const TOOLS: { id: PageTool; icon: ReactNode }[] = [
+  { id: 'select', icon: <MousePointer2 /> },
+  { id: 'frame', icon: <Frame /> },
+  { id: 'text', icon: <Type /> },
+  { id: 'button', icon: <RectangleHorizontal /> },
+  { id: 'image', icon: <ImageIcon /> },
+  { id: 'video', icon: <Video /> },
+  { id: 'rect', icon: <Square /> },
+  { id: 'ellipse', icon: <Circle /> },
+  { id: 'pen', icon: <PenTool /> },
+  { id: 'pencil', icon: <Pencil /> },
+  { id: 'embed', icon: <Code2 /> },
+]
+
 export function PageBuilder() {
   const dispatch = useAppDispatch()
-  const edit = useEdit()
   const doc = useDoc()
-  const { page, block, device } = useCurrentPage()
-  const [dropAt, setDropAt] = useState<number | null>(null)
-  const [dragId, setDragId] = useState<string | null>(null)
+  const { page, device } = useCurrentPage()
+  const { tool, hover } = useUi((u) => u.pages)
   if (!page) {
     const hasApp = doc.nodes.some((n) => n.techId === 'web-app')
-    return <Empty icon={<LayoutTemplate />} title="No pages yet">{hasApp ? 'Create a page with New page in the left panel, then drag blocks onto it.' : 'Add a Web App on the Design canvas, then create pages for it from the left panel.'}</Empty>
+    return <Empty icon={<LayoutTemplate />} title="No pages yet">{hasApp ? 'Create a page with New page in the left panel.' : 'Add a Web App on the Design canvas, then create pages for it from the left panel.'}</Empty>
   }
   const app = doc.nodes.find((n) => n.id === page.appNodeId)
-  const opLabel = (key: unknown) => {
-    if (typeof key !== 'string' || !key) return null
-    const [nid, name] = key.split(':')
-    const n = doc.nodes.find((x) => x.id === nid)
-    const ok = !!doc.apis[nid]?.operations.some((o) => o.name === name)
-    return { text: `${n?.name ?? '?'}.${name}`, ok }
-  }
-  const onDrop = (e: React.DragEvent, index: number) => {
-    e.preventDefault()
-    const type = e.dataTransfer.getData('application/tessery-block')
-    if (type) { const id = edit('addBlock', { pageId: page.id, type, props: { ...BLOCK_BY_TYPE[type].defaults }, after: index > 0 ? page.blocks[index - 1]?.id : undefined }); if (index === 0 && id) edit('moveBlock', { pageId: page.id, blockId: id, to: 0 }); dispatch(ui.setPages({ blockId: id ?? null })) }
-    else if (dragId) { const from = page.blocks.findIndex((b) => b.id === dragId); edit('moveBlock', { pageId: page.id, blockId: dragId, to: from < index ? index - 1 : index }) }
-    setDropAt(null); setDragId(null)
-  }
-  const width = device === 'mobile' ? 390 : device === 'tablet' ? 720 : 960
   return (
     <div className={s.center}>
       <Toolbar>
+        <div className={s.tools} role="toolbar" aria-label="Tools">
+          {TOOLS.map((t) => (
+            <Tooltip key={t.id} content={TOOL_LABEL[t.id]}>
+              <button className={s.tool} data-on={tool === t.id || undefined} aria-label={TOOL_LABEL[t.id]} aria-pressed={tool === t.id} onClick={() => dispatch(ui.setPages({ tool: t.id }))}>{t.icon}</button>
+            </Tooltip>
+          ))}
+        </div>
+        <Spacer />
         <b>{page.name}</b>
         <span className="muted mono" style={{ fontSize: 11 }}>{page.route}</span>
-        <Badge>{page.render.toUpperCase()}</Badge>
         <Badge tone={page.access === 'public' ? 'neutral' : 'warn'}>{page.access}</Badge>
-        <span className="muted" style={{ fontSize: 11 }}>{app?.name} · {String(app?.config.framework ?? '')}</span>
+        <span className="muted" style={{ fontSize: 11 }}>{app?.name}</span>
         <Spacer />
-        <DropdownMenu trigger={<Button size="sm" icon={<Plus />}>Block</Button>} items={(['Layout', 'Content', 'Data', 'Forms', 'Marketing'] as const).map((g) => ({ kind: 'sub' as const, label: g, items: BLOCKS.filter((b) => b.group === g).map((b) => ({ label: b.label, onSelect: () => { const id = edit('addBlock', { pageId: page.id, type: b.type, props: { ...b.defaults }, after: block?.id }); dispatch(ui.setPages({ blockId: id ?? null })) } })) }))} />
-        <Segmented value={device} onChange={(v) => dispatch(ui.setPages({ device: v }))} options={[{ value: 'desktop', icon: <Monitor />, tooltip: 'Desktop' }, { value: 'tablet', icon: <Tablet />, tooltip: 'Tablet' }, { value: 'mobile', icon: <Smartphone />, tooltip: 'Mobile' }]} />
+        <Switch checked={hover} onChange={(v) => dispatch(ui.setPages({ hover: v }))} label="Hover" ariaLabel="Edit the hover state" />
+        <Segmented value={device} onChange={(v) => dispatch(ui.setPages({ device: v }))} options={[{ value: 'desktop', icon: <Monitor />, tooltip: 'Desktop, 1280' }, { value: 'tablet', icon: <Tablet />, tooltip: 'Tablet, 820 and below' }, { value: 'mobile', icon: <Smartphone />, tooltip: 'Mobile, 390 and below' }]} />
       </Toolbar>
-      <div className={s.stage} onClick={(e) => { if (e.target === e.currentTarget) dispatch(ui.setPages({ blockId: null })) }}>
-        <div className={s.frame} style={{ width }}>
-          <div className={s.chrome}><i /><i /><i /><span>{app?.name}.example.com{page.route.replace(/\[(\w+)\]/g, '$1-1')}</span></div>
-          <PreviewStyles />
-          <div className={clsx(s.page, 'tsp')} onClickCapture={(e) => { if ((e.target as HTMLElement).closest('a, button, summary, label')) e.preventDefault() }} onDragOver={(e) => { e.preventDefault(); if (!page.blocks.length) setDropAt(0) }} onDrop={(e) => onDrop(e, page.blocks.length)} onDragLeave={(e) => { if (e.currentTarget === e.target) setDropAt(null) }}>
-            {page.blocks.map((b, i) => {
-              const src = opLabel(b.props.source), act = opLabel(b.props.action)
-              return (
-                <div key={b.id}>
-                  {dropAt === i && <div className={s.dropLine} />}
-                  <div className={clsx(s.blk, block?.id === b.id && s.sel, dragId === b.id && s.dragging)} draggable
-                    onDragStart={(e) => { setDragId(b.id); e.dataTransfer.effectAllowed = 'move' }}
-                    onDragEnd={() => { setDragId(null); setDropAt(null) }}
-                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setDropAt(e.clientY < r.top + r.height / 2 ? i : i + 1) }}
-                    onDrop={(e) => { e.stopPropagation(); onDrop(e, dropAt ?? i) }}
-                    onClick={() => dispatch(ui.setPages({ blockId: b.id }))}>
-                    <span className={s.tag}>{BLOCK_BY_TYPE[b.type]?.label ?? b.type}</span>
-                    {renderBlock(b)}
-                    {(src || act) && <div className={s.binding}>{src && <span className={src.ok ? '' : s.bad}>↳ data: {src.text}{src.ok ? '' : ' (missing)'}</span>}{act && <span className={act.ok ? '' : s.bad}>↳ action: {act.text}{act.ok ? '' : ' (missing)'}</span>}</div>}
-                  </div>
-                </div>
-              )
-            })}
-            {dropAt === page.blocks.length && <div className={s.dropLine} />}
-            {!page.blocks.length && <div className={s.emptyPage}>Drag blocks here from the left panel</div>}
-          </div>
-        </div>
-      </div>
+      <Canvas key={page.id} page={page} />
     </div>
   )
 }
