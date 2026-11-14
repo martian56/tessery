@@ -10,6 +10,7 @@ async fn main() -> anyhow::Result<()> {
     init_tracing(config.log_json);
     let bind = config.bind;
     let state = tessery_api::connect(config).await?;
+    tokio::spawn(tessery_api::metrics::run(state.clone()));
     let listener = tokio::net::TcpListener::bind(bind)
         .await
         .with_context(|| format!("binding {bind}"))?;

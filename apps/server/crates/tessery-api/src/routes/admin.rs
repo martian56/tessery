@@ -89,6 +89,16 @@ pub async fn orgs(State(state): State<AppState>, p: Principal) -> ApiResult<Json
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub allow_org_creation: bool,
+    /// Days of container metrics to keep, 1 to 90.
+    pub metrics_retention_days: i32,
+}
+
+/// Fields left out keep their stored value.
+#[derive(Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsUpdate {
+    pub allow_org_creation: Option<bool>,
+    pub metrics_retention_days: Option<i32>,
 }
 
 #[utoipa::path(get, path = "/api/admin/settings", tag = "admin", responses((status = 200, body = Settings)))]
@@ -100,25 +110,34 @@ pub async fn get_settings(
     let s = tessery_db::settings::get(&state.db).await?;
     Ok(Json(Settings {
         allow_org_creation: s.allow_org_creation,
+        metrics_retention_days: tessery_db::metrics::retention_days(&state.db).await?,
     }))
 }
 
-#[utoipa::path(put, path = "/api/admin/settings", tag = "admin", request_body = Settings, responses((status = 200, body = Settings)))]
+#[utoipa::path(put, path = "/api/admin/settings", tag = "admin", request_body = SettingsUpdate, responses((status = 200, body = Settings)))]
 pub async fn put_settings(
     State(state): State<AppState>,
     p: Principal,
-    Json(req): Json<Settings>,
+    Json(req): Json<SettingsUpdate>,
 ) -> ApiResult<Json<Settings>> {
     p.require_instance_admin()?;
+    if req.metrics_retention_days.is_some_and(|d| !(1..=90).contains(&d)) {
+        return Err(ApiError::invalid("metricsRetentionDays", "use 1 to 90 days"));
+    }
     let mut tx = state.db.begin().await.map_err(tessery_db::DbError::from)?;
-    tessery_db::settings::set_allow_org_creation(&mut *tx, req.allow_org_creation).await?;
+    if let Some(allow) = req.allow_org_creation {
+        tessery_db::settings::set_allow_org_creation(&mut *tx, allow).await?;
+    }
+    if let Some(days) = req.metrics_retention_days {
+        tessery_db::metrics::set_retention_days(&mut *tx, days).await?;
+    }
     audit::record(
         &mut *tx,
         &p,
         Entry::new(None, "admin.settings_update", "instance", "instance")
-            .details(json!({ "allowOrgCreation": req.allow_org_creation })),
+            .details(json!({ "allowOrgCreation": req.allow_org_creation, "metricsRetentionDays": req.metrics_retention_days })),
     )
     .await?;
     tx.commit().await.map_err(tessery_db::DbError::from)?;
-    Ok(Json(req))
+    get_settings(State(state), p).await
 }

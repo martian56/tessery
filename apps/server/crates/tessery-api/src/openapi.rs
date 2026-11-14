@@ -1,4 +1,4 @@
-use crate::routes::{access, admin, audit_log, auth, backups, delivery, dto, email, notifications, integrations, orgs, projects, runtime, servers, sso, system, teams, telemetry, tokens};
+use crate::routes::{access, admin, audit_log, auth, backups, delivery, dto, email, metrics, notifications, integrations, orgs, projects, runtime, servers, sso, system, teams, telemetry, tokens};
 use axum::Json;
 use utoipa::OpenApi;
 
@@ -14,6 +14,7 @@ use utoipa::OpenApi;
         integrations::providers, integrations::list, integrations::create, integrations::update, integrations::check, integrations::delete,
         backups::list, backups::create, backups::restore,
         email::get_settings, email::put_settings, email::test, email::forgot, email::token_info, email::reset,
+        metrics::series, metrics::rules, metrics::add_rule, metrics::delete_rule,
         notifications::events, notifications::list, notifications::create, notifications::update, notifications::delete, notifications::test,
         servers::list, servers::create, servers::provision, integrations::catalog, servers::update, servers::delete, servers::check,
         teams::list, teams::create, teams::get, teams::update, teams::delete, teams::add_member, teams::remove_member,

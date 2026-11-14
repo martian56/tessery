@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO metric_samples (project_id, env_key, node, instance, at, state, healthy, cpu_percent, memory_bytes, memory_limit_bytes, restarts)\n           SELECT $1, $2, * FROM UNNEST($3::text[], $4::text[], $5::timestamptz[], $6::text[], $7::bool[], $8::float8[], $9::int8[], $10::int8[], $11::int8[])",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "TextArray",
+        "TextArray",
+        "TimestamptzArray",
+        "TextArray",
+        "BoolArray",
+        "Float8Array",
+        "Int8Array",
+        "Int8Array",
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "56c3d24c21fe993530fa25d7a54ded7be0134cde2bb5fbd45ee35354f7123e84"
+}

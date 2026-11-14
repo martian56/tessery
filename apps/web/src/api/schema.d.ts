@@ -786,6 +786,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project}/alerts/{rule}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete_rule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project}/checkpoints": {
         parameters: {
             query?: never;
@@ -829,6 +845,22 @@ export interface paths {
         get: operations["checkpoint_doc"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project}/environments/{env}/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["rules"];
+        put?: never;
+        post: operations["add_rule"];
         delete?: never;
         options?: never;
         head?: never;
@@ -908,6 +940,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["logs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project}/environments/{env}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["series"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1331,6 +1379,23 @@ export interface components {
             /** Format: uuid */
             userId: string;
         };
+        AlertRuleDto: {
+            /** Format: date-time */
+            firedAt?: string | null;
+            /** @description Nodes this rule is firing for right now. */
+            firing: string[];
+            /** Format: uuid */
+            id: string;
+            /** @description `cpu`, `memory`, `restarts` or `unhealthy`. */
+            metric: string;
+            /** Format: int32 */
+            minutes: number;
+            /** @description Empty means every node. */
+            node: string;
+            summary: string;
+            /** Format: double */
+            threshold: number;
+        };
         AuditEventDto: {
             action: string;
             actorEmail?: string | null;
@@ -1657,6 +1722,12 @@ export interface components {
             /** Format: uuid */
             userId: string;
         };
+        MetricsDto: {
+            nodes: components["schemas"]["NodeSeriesDto"][];
+            range: string;
+            /** Format: int64 */
+            stepSeconds: number;
+        };
         MigrationDto: {
             database: string;
             /** @description What can drop data or fail on existing rows. Empty when the migration only adds or renames. */
@@ -1687,11 +1758,23 @@ export interface components {
             name: string;
             provider: string;
         };
+        NewRuleInput: {
+            metric: string;
+            /** Format: int32 */
+            minutes: number;
+            node?: string;
+            /** Format: double */
+            threshold?: number;
+        };
         NewServerInput: {
             address: string;
             name: string;
             /** @description An unencrypted OpenSSH private key. Leave it out and Tessery generates one; add the returned public key to the server. */
             privateKey?: string | null;
+        };
+        NodeSeriesDto: {
+            name: string;
+            points: components["schemas"]["PointDto"][];
         };
         NodeStatusDto: {
             instances: components["schemas"]["InstanceDto"][];
@@ -1719,6 +1802,26 @@ export interface components {
         };
         PipelineDto: {
             stages: components["schemas"]["StageDto"][];
+        };
+        PointDto: {
+            /**
+             * Format: double
+             * @description Summed over the node's containers, so two busy replicas can pass 100.
+             */
+            cpu?: number | null;
+            /** Format: double */
+            memoryBytes?: number | null;
+            /** Format: double */
+            memoryLimitBytes?: number | null;
+            /** @description False when any container was unhealthy or not running in the bucket. */
+            ok?: boolean | null;
+            /** Format: int64 */
+            restarts?: number | null;
+            /**
+             * Format: int64
+             * @description Milliseconds since the epoch, the start of the bucket.
+             */
+            t: number;
         };
         ProjectDto: {
             /** @description The design document (nodes, edges, APIs, databases, pages, environments, observability). */
@@ -1952,6 +2055,17 @@ export interface components {
         };
         Settings: {
             allowOrgCreation: boolean;
+            /**
+             * Format: int32
+             * @description Days of container metrics to keep, 1 to 90.
+             */
+            metricsRetentionDays: number;
+        };
+        /** @description Fields left out keep their stored value. */
+        SettingsUpdate: {
+            allowOrgCreation?: boolean | null;
+            /** Format: int32 */
+            metricsRetentionDays?: number | null;
         };
         SetupRequest: {
             email: string;
@@ -2286,7 +2400,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Settings"];
+                "application/json": components["schemas"]["SettingsUpdate"];
             };
         };
         responses: {
@@ -3781,6 +3895,28 @@ export interface operations {
             };
         };
     };
+    delete_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+                rule: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+        };
+    };
     list_checkpoints: {
         parameters: {
             query?: never;
@@ -3876,6 +4012,54 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CheckpointDoc"];
+                };
+            };
+        };
+    };
+    rules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+                env: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRuleDto"][];
+                };
+            };
+        };
+    };
+    add_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+                env: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewRuleInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRuleDto"];
                 };
             };
         };
@@ -4037,6 +4221,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EnvLogLineDto"][];
+                };
+            };
+        };
+    };
+    series: {
+        parameters: {
+            query?: {
+                /** @description `1h`, `1d` or `1w`. */
+                range?: string;
+            };
+            header?: never;
+            path: {
+                project: string;
+                env: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricsDto"];
                 };
             };
         };

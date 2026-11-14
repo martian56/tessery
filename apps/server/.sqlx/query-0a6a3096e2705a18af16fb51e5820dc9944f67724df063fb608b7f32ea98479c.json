@@ -1,0 +1,73 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH per AS (\n               SELECT node, at, sum(cpu_percent) AS cpu, sum(memory_bytes)::float8 AS mem, sum(memory_limit_bytes)::float8 AS lim,\n                      sum(restarts)::int8 AS restarts, bool_and(coalesce(healthy, state = 'running')) AS ok\n               FROM metric_samples\n               WHERE project_id = $1 AND env_key = $2 AND at > now() - make_interval(secs => $3)\n               GROUP BY node, at)\n           SELECT node AS \"node!\", date_bin(make_interval(secs => $4), at, timestamptz '2000-01-01') AS \"t!\",\n                  avg(cpu) AS cpu, avg(mem) AS memory, max(lim) AS \"limit\", max(restarts)::int8 AS restarts, bool_and(ok) AS ok\n           FROM per GROUP BY 1, 2 ORDER BY 1, 2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "node!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "metric_samples",
+            "name": "node"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "t!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "cpu",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "memory",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "limit",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "restarts",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "ok",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "0a6a3096e2705a18af16fb51e5820dc9944f67724df063fb608b7f32ea98479c"
+}

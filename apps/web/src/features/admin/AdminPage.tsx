@@ -3,7 +3,7 @@ import { useAdminOrgsQuery, useAdminSettingsQuery, useAdminUpdateUserMutation, u
 import { errorMessage } from '@/api/types'
 import { setCurrentOrg } from '@/app/currentOrg'
 import { navigate } from '@/app/router'
-import { Badge, Button, Empty, Switch, toast, useDialogs } from '@/ui'
+import { Badge, Button, Empty, Field, NumberInput, Switch, toast, useDialogs } from '@/ui'
 import { Card, PageLayout, PageTitle, Table, mono, muted } from '@/features/chrome/PageLayout'
 import { timeAgo } from '@/lib/format'
 import { EmailView } from './EmailView'
@@ -79,17 +79,25 @@ function OrgsView() {
 
 function SettingsView() {
   const { data } = useAdminSettingsQuery()
-  const [put] = usePutAdminSettingsMutation()
+  const [put, { isLoading: saving }] = usePutAdminSettingsMutation()
   if (!data) return null
   return (
     <>
       <PageTitle title="Instance settings" />
       <Card>
-        <Switch checked={data.allowOrgCreation} label="Let any signed-in user create organizations" onChange={async (v) => {
-          const r = await put({ ...data, allowOrgCreation: v })
+        <Switch checked={data.allowOrgCreation} disabled={saving} label="Let any signed-in user create organizations" onChange={async (v) => {
+          const r = await put({ allowOrgCreation: v })
           toast('error' in r ? errorMessage(r.error) : 'Settings saved', 'error' in r ? 'err' : 'ok')
         }} />
         <p className={muted}>When this is off, only instance administrators can create organizations.</p>
+      </Card>
+      <Card title="Metrics history">
+        <Field label="Keep for" hint="Days of container CPU, memory, restart and health samples. Older samples are deleted.">
+          <NumberInput value={data.metricsRetentionDays} min={1} max={90} onCommit={async (v) => {
+            const r = await put({ metricsRetentionDays: v })
+            toast('error' in r ? errorMessage(r.error) : 'Settings saved', 'error' in r ? 'err' : 'ok')
+          }} />
+        </Field>
       </Card>
     </>
   )

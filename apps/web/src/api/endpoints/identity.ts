@@ -28,7 +28,7 @@ export const identityApi = baseApi.injectEndpoints({
     }),
     adminOrgs: b.query<Org[], void>({ query: () => '/admin/orgs', providesTags: ['Orgs'] }),
     adminSettings: b.query<InstanceSettings, void>({ query: () => '/admin/settings', providesTags: ['AdminSettings'] }),
-    putAdminSettings: b.mutation<InstanceSettings, InstanceSettings>({ query: (body) => ({ url: '/admin/settings', method: 'PUT', body }), invalidatesTags: ['AdminSettings'] }),
+    putAdminSettings: b.mutation<InstanceSettings, Partial<InstanceSettings>>({ query: (body) => ({ url: '/admin/settings', method: 'PUT', body }), invalidatesTags: ['AdminSettings'] }),
   }),
 })
 

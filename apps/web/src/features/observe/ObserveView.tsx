@@ -3,10 +3,10 @@ import { Activity, Pause, Play, Plus, Search, Server, Trash2 } from 'lucide-reac
 import clsx from 'clsx'
 import { useAppDispatch, useDoc, useEdit, useUi } from '@/store'
 import { ui } from '@/store/uiSlice'
-import { useEnvLogsQuery, useEnvTraceQuery, useEnvTracesQuery, type TraceSpan } from '@/api/endpoints/runtime'
+import { useAddLiveAlertMutation, useDeleteLiveAlertMutation, useEnvLogsQuery, useEnvMetricsQuery, useEnvTraceQuery, useEnvTracesQuery, useLiveAlertsQuery, type TraceSpan } from '@/api/endpoints/runtime'
 import { errorMessage } from '@/api/types'
 import type { AlertRule, SloDef } from '@tessery/core/domain/types'
-import { Badge, Button, Dot, Empty, Input, LineChart, Select, Spacer, Sparkline, Switch, TabStrip, Toolbar, NumberInput } from '@/ui'
+import { Badge, Button, Dot, Empty, Input, LineChart, Segmented, Select, Spacer, Sparkline, Switch, TabStrip, Toolbar, NumberInput, toast } from '@/ui'
 import { cpuOf, health, limitOf, memoryOf, useEnvStatus } from './useObserve'
 import s from './Observe.module.css'
 
@@ -79,18 +79,53 @@ function Overview() {
   )
 }
 
+const RANGES = [{ value: 'live', label: 'Live' }, { value: '1h', label: '1 hour' }, { value: '1d', label: '1 day' }, { value: '1w', label: '1 week' }]
+
 function Resources() {
   const nodeId = useUi((u) => u.observe.nodeId)
+  const doc = useDoc()
+  const envId = useUi((u) => u.envId)
+  const [range, setRange] = useState('live')
   const { data, error, services, byNode, samples } = useEnvStatus()
-  if (error) return <NotRunning error={error} />
-  if (data?.target === 'kubernetes') return <Empty icon={<Activity />} title="Resource use needs metrics-server">Kubernetes reports CPU and memory through metrics-server. Status and logs work without it.</Empty>
-  const shown = (nodeId ? services.filter((n) => n.id === nodeId) : services.filter((n) => byNode.has(n.id))).slice(0, 10)
-  const mk = (key: 'cpu' | 'memory') => shown.map((n, i) => ({ name: n.name, color: PALETTE[i % PALETTE.length], points: samples(n.id)[key] })).filter((x) => x.points.length)
+  const stored = useEnvMetricsQuery({ pid: doc.id, env: envId, range }, { skip: range === 'live', pollingInterval: 30_000 })
+  const picker = <div style={{ gridColumn: '1 / -1' }}><Segmented value={range} onChange={setRange} options={RANGES} /></div>
+  if (range === 'live' && error) return <div className={s.charts}>{picker}<div style={{ gridColumn: '1 / -1' }}><NotRunning error={error} /></div></div>
+  if (range === 'live' && data?.target === 'kubernetes') return <div className={s.charts}>{picker}<div style={{ gridColumn: '1 / -1' }}><Empty icon={<Activity />} title="Live resource use needs metrics-server">Kubernetes reports CPU and memory through metrics-server. Stored history, status and logs work without it.</Empty></div></div>
+  if (range !== 'live' && stored.isError) return <div className={s.charts}>{picker}<div style={{ gridColumn: '1 / -1' }}><Empty title="History could not be loaded" action={<Button onClick={() => stored.refetch()}>Retry</Button>}>{errorMessage(stored.error)}</Empty></div></div>
+  if (range !== 'live' && !stored.data) return <div className={s.charts}>{picker}<div className="muted" style={{ gridColumn: '1 / -1' }}>Loading history…</div></div>
+  const shown = (nodeId ? services.filter((n) => n.id === nodeId) : services.filter((n) => byNode.has(n.id) || range !== 'live')).slice(0, 10)
+  const color = (name: string) => PALETTE[Math.max(0, services.findIndex((n) => n.name === name)) % PALETTE.length]
+  const live = (key: 'cpu' | 'memory') => shown.map((n) => ({ name: n.name, color: color(n.name), points: samples(n.id)[key] })).filter((x) => x.points.length)
+  const names = new Set(shown.map((n) => n.name))
+  const history = (stored.data?.nodes ?? []).filter((n) => !nodeId || names.has(n.name))
+  const past = (key: 'cpu' | 'memory') => history.map((n) => ({
+    name: n.name,
+    color: color(n.name),
+    points: n.points.flatMap((p) => {
+      const v = key === 'cpu' ? p.cpu : p.memoryBytes == null ? null : p.memoryBytes / 1024 ** 2
+      return v == null ? [] : [{ t: p.t, v }]
+    }),
+  })).filter((x) => x.points.length)
+  const troubled = history.filter((n) => n.points.some((p) => p.ok === false)).map((n) => n.name)
+  const restarts = history.map((n) => ({ name: n.name, d: Math.max(0, (n.points[n.points.length - 1]?.restarts ?? 0) - (n.points[0]?.restarts ?? 0)) })).filter((x) => x.d > 0)
+  const cpu = range === 'live' ? live('cpu') : past('cpu')
+  const memory = range === 'live' ? live('memory') : past('memory')
   return (
     <div className={s.charts}>
-      <div className={s.chart}><div className={s.chartHead}>CPU</div><LineChart series={mk('cpu')} unit="%" /></div>
-      <div className={s.chart}><div className={s.chartHead}>Memory</div><LineChart series={mk('memory')} unit=" MB" /></div>
-      <div className="muted" style={{ fontSize: 11, gridColumn: '1 / -1' }}>Sampled every 5 seconds while this page is open. Request rates, latency and traces need telemetry, which generated services can export over OpenTelemetry.</div>
+      {picker}
+      <div className={s.chart}><div className={s.chartHead}>CPU</div><LineChart series={cpu} unit="%" /></div>
+      <div className={s.chart}><div className={s.chartHead}>Memory</div><LineChart series={memory} unit=" MB" /></div>
+      {cpu.length > 1 && (
+        <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12 }}>
+          {cpu.map((x) => <span key={x.name} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><i style={{ width: 10, height: 3, borderRadius: 2, background: x.color, display: 'inline-block' }} />{x.name}</span>)}
+        </div>
+      )}
+      <div className="muted" style={{ fontSize: 11, gridColumn: '1 / -1' }}>
+        {range === 'live'
+          ? 'Sampled every 5 seconds while this page is open.'
+          : `Stored every 30 seconds by the server, averaged per ${!stored.data ? '…' : stored.data.stepSeconds < 60 ? `${stored.data.stepSeconds} s` : `${stored.data.stepSeconds / 60} min`}.${troubled.length ? ` Not healthy at some point: ${troubled.join(', ')}.` : ''}${restarts.length ? ` Restarts: ${restarts.map((r) => `${r.name} ${r.d}`).join(', ')}.` : ''}`}
+        {' '}Request rates, latency and traces need telemetry, which generated services can export over OpenTelemetry.
+      </div>
     </div>
   )
 }
@@ -286,6 +321,7 @@ function Alerts() {
   const up = (a: AlertRule, patch: Partial<AlertRule>) => edit('updateAlert', { id: a.id, patch })
   return (
     <div className={s.pad}>
+      <LiveAlerts />
       <div className={s.rowHead}><b>Alert rules</b><span className="muted" style={{ fontSize: 11 }}>exported to prometheus/alerts.yml</span><Spacer /><Button size="sm" icon={<Plus />} onClick={() => edit('addAlert', { nodeId: services[0]?.id, name: 'High error rate', expr: 'error_rate > 2% for 5m', severity: 'critical', channel: '#oncall', enabled: true })}>New rule</Button></div>
       {!doc.observability.alerts.length && <Empty title="No alert rules" />}
       <table className={s.table}>
@@ -303,6 +339,69 @@ function Alerts() {
               <td><Button size="xs" variant="ghost" icon={<Trash2 />} aria-label="Delete rule" onClick={() => edit('removeAlert', { id: a.id })} /></td>
             </tr>
           ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+const METRICS = [
+  { value: 'restarts', label: 'Restarts', unit: 'times' },
+  { value: 'memory', label: 'Memory above', unit: '%' },
+  { value: 'cpu', label: 'CPU above', unit: '%' },
+  { value: 'unhealthy', label: 'Unhealthy', unit: '' },
+]
+
+function LiveAlerts() {
+  const doc = useDoc()
+  const envId = useUi((u) => u.envId)
+  const { services } = useEnvStatus()
+  const rulesQ = useLiveAlertsQuery({ pid: doc.id, env: envId }, { pollingInterval: 30_000 })
+  const rules = rulesQ.data
+  const [add, { isLoading }] = useAddLiveAlertMutation()
+  const [remove] = useDeleteLiveAlertMutation()
+  const [removing, setRemoving] = useState<string | null>(null)
+  const del = async (id: string) => {
+    setRemoving(id)
+    const r = await remove({ pid: doc.id, id })
+    setRemoving(null)
+    if ('error' in r) toast(errorMessage(r.error), 'err')
+  }
+  const [form, setForm] = useState({ node: '', metric: 'restarts', threshold: 3, minutes: 5 })
+  const unit = METRICS.find((m) => m.value === form.metric)?.unit ?? ''
+  const save = async () => {
+    const r = await add({ pid: doc.id, env: envId, body: { ...form, threshold: form.metric === 'unhealthy' ? 0 : form.threshold } })
+    toast('error' in r ? errorMessage(r.error) : 'Alert rule added', 'error' in r ? 'err' : 'ok')
+  }
+  return (
+    <div style={{ marginBottom: 'var(--sp-6)' }}>
+      <div className={s.rowHead}><b>Live alerts</b><span className="muted" style={{ fontSize: 11 }}>checked by Tessery every 30 seconds, sent through Deploy, Notifications</span></div>
+      <table className={s.table}>
+        <thead><tr><th>Rule</th><th>State</th><th /></tr></thead>
+        <tbody>
+          {rulesQ.isLoading && <tr><td colSpan={3} className="muted">Loading rules…</td></tr>}
+          {rulesQ.isError && <tr><td colSpan={3} style={{ color: 'var(--err)' }}>Rules could not be loaded: {errorMessage(rulesQ.error)} <Button size="xs" variant="ghost" onClick={() => rulesQ.refetch()}>Retry</Button></td></tr>}
+          {rules && !rules.length && <tr><td colSpan={3} className="muted">No live alert rules for this environment yet.</td></tr>}
+          {(rules ?? []).map((r) => (
+            <tr key={r.id}>
+              <td>{r.summary}</td>
+              <td>{r.firing.length ? <Badge tone="err">firing on {r.firing.join(', ')}</Badge> : <Badge tone="ok">ok</Badge>}</td>
+              <td><Button size="xs" variant="ghost" icon={<Trash2 />} aria-label={`Delete ${r.summary}`} disabled={removing === r.id} onClick={() => del(r.id)} /></td>
+            </tr>
+          ))}
+          <tr>
+            <td colSpan={3}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ width: 140 }}><Select value={form.node || '__any'} onChange={(v) => setForm({ ...form, node: v === '__any' ? '' : v })} aria-label="Node"
+                  options={[{ value: '__any', label: 'Any node' }, ...services.map((n) => ({ value: n.name, label: n.name }))]} /></div>
+                <div style={{ width: 140 }}><Select value={form.metric} onChange={(v) => setForm({ ...form, metric: v, threshold: v === 'restarts' ? 3 : 90 })} aria-label="Condition" options={METRICS.map(({ value, label }) => ({ value, label }))} /></div>
+                {form.metric !== 'unhealthy' && <><div style={{ width: 70 }}><NumberInput value={form.threshold} min={form.metric === 'restarts' ? 1 : 1} max={form.metric === 'cpu' ? 6400 : form.metric === 'memory' ? 99 : 1000} onCommit={(v) => setForm({ ...form, threshold: v })} /></div><span className="muted">{unit}</span></>}
+                <span className="muted">{form.metric === 'restarts' ? 'within' : 'for'}</span>
+                <div style={{ width: 70 }}><NumberInput value={form.minutes} min={1} max={1440} onCommit={(v) => setForm({ ...form, minutes: v })} /></div>
+                <span className="muted">min</span>
+                <Button size="sm" icon={<Plus />} disabled={isLoading} onClick={save}>Add</Button>
+              </div>
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>

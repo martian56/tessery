@@ -6,6 +6,7 @@ pub mod backups;
 pub mod delivery;
 pub mod dto;
 pub mod email;
+pub mod metrics;
 pub mod notifications;
 pub mod git;
 pub mod integrations;
@@ -56,6 +57,9 @@ pub fn api() -> Router<AppState> {
         .route("/integrations/providers", get(integrations::providers))
         .route("/admin/email", get(email::get_settings).put(email::put_settings))
         .route("/notifications/events", get(notifications::events))
+        .route("/projects/{project}/environments/{env}/metrics", get(metrics::series))
+        .route("/projects/{project}/environments/{env}/alerts", get(metrics::rules).post(metrics::add_rule))
+        .route("/projects/{project}/alerts/{rule}", delete(metrics::delete_rule))
         .route("/projects/{project}/notifications", get(notifications::list).post(notifications::create))
         .route("/projects/{project}/notifications/{channel}", put(notifications::update).delete(notifications::delete))
         .route("/projects/{project}/notifications/{channel}/test", post(notifications::test))
