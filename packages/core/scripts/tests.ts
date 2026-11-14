@@ -503,3 +503,9 @@ test('elements can show only when the query or the record says so', async () => 
   assert.ok(shows('author.name', { author: { name: 'Ada' } }, {}))
   assert.ok(shows('', undefined, {}))
 })
+
+test('an empty list says whether nothing exists or nothing matched', async () => {
+  const { filtered } = await import('../src/render/tree')
+  assert.ok(!filtered(undefined) && !filtered({}) && !filtered({ page: '2' }) && !filtered({ q: '' }))
+  assert.ok(filtered({ q: 'bean' }) && filtered({ crop: ['Bean'] }))
+})

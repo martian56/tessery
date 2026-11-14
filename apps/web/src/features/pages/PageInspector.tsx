@@ -222,6 +222,7 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
             {!!p.source && <>
               <Field label="Limit"><NumberInput value={Number(p.limit) || 50} min={1} max={500} onCommit={(x) => prop('limit', x, false)} /></Field>
               <Field label="When empty"><Input value={str('empty')} onChange={(x) => prop('empty', x)} placeholder="Nothing here yet." /></Field>
+              <Field label="When nothing matches" hint="Shown instead while the page has a search or filter."><Input value={str('emptyFiltered')} onChange={(x) => prop('emptyFiltered', x)} placeholder="Same as when empty" /></Field>
               <Field label="Preview rows"><NumberInput value={Number(p.preview) || 3} min={1} max={12} onCommit={(x) => prop('preview', x, false)} /></Field>
             </>}
           </Section>
