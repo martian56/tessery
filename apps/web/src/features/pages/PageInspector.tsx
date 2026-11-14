@@ -184,7 +184,7 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
     case 'input':
       return (
         <Section title="Input">
-          <Field label="Kind"><Select value={str('kind') || 'text'} onChange={(x) => prop('kind', x, false)} aria-label="Kind" options={['text', 'search', 'email', 'tel', 'url', 'number', 'password', 'date', 'checkbox', 'radio', 'range', 'textarea'].map((x) => ({ value: x, label: x }))} /></Field>
+          <Field label="Kind"><Select value={str('kind') || 'text'} onChange={(x) => prop('kind', x, false)} aria-label="Kind" options={['text', 'search', 'email', 'tel', 'url', 'number', 'password', 'date', 'checkbox', 'radio', 'range', 'textarea', 'hidden'].map((x) => ({ value: x, label: x }))} /></Field>
           <Field label="Name" hint="The query or form field it sends."><Input mono value={str('name')} onChange={(x) => prop('name', x)} /></Field>
           <Field label="Placeholder"><Input value={str('placeholder')} onChange={(x) => prop('placeholder', x)} /></Field>
           <Field label="Value"><Input value={str('value')} onChange={(x) => prop('value', x)} /></Field>
@@ -214,6 +214,7 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
           <Section title="Frame" defaultOpen={false}>
             <Field label="Tag" hint="form sends its inputs to the link; details and summary make a disclosure."><Select value={str('tag') || 'div'} onChange={(x) => prop('tag', x, false)} aria-label="Tag" options={['div', 'section', 'header', 'footer', 'nav', 'main', 'article', 'aside', 'ul', 'ol', 'li', 'figure', 'label', 'form', 'search', 'details', 'summary'].map((x) => ({ value: x, label: x }))} /></Field>
             <Field label="Link" hint="Makes the whole frame a link, for cards and rows."><Input mono list="tsp-pages" value={str('href')} onChange={(x) => prop('href', x)} placeholder="none" /></Field><PageList page={page} />
+            {str('tag') === 'form' && <Field label="Submits to" hint="Posts the inputs inside, by name, then returns to the page. Empty means a search form."><Select value={str('action')} onChange={(x) => prop('action', x || null, false)} aria-label="Submits to" options={[{ value: '', label: 'Search this page (GET)' }, ...ops.filter((o) => !o.reads).map((o) => ({ value: o.key, label: o.label, group: o.style.toUpperCase() }))]} /></Field>}
             <Field label="Popover" hint="Hidden until a button opens it: menus, dialogs."><Switch checked={!!p.popover} onChange={(x) => prop('popover', x || null, false)} /></Field>
           </Section>
           <Section title="Records" defaultOpen={!!p.source}>

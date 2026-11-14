@@ -48,7 +48,7 @@ const PX = new Set(['width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'max
 const ALLOWED = new Set([...PX, 'display', 'flexDirection', 'flexWrap', 'alignItems', 'alignContent', 'justifyContent', 'justifyItems', 'alignSelf', 'justifySelf', 'placeItems', 'placeContent', 'placeSelf', 'gridTemplateColumns', 'gridTemplateRows', 'gridTemplateAreas', 'gridArea', 'gridColumn', 'gridRow', 'gridAutoFlow', 'gridAutoRows', 'gridAutoColumns', 'position', 'zIndex', 'inset', 'aspectRatio', 'overflow', 'overflowX', 'overflowY', 'overscrollBehavior', 'scrollBehavior', 'scrollbarWidth', 'scrollbarColor', 'scrollbarGutter', 'background', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'backgroundRepeat', 'backgroundClip', 'backgroundAttachment', 'backgroundBlendMode', 'color', 'fontFamily', 'fontWeight', 'fontStyle', 'fontVariantNumeric', 'fontFeatureSettings', 'lineHeight', 'textAlign', 'textTransform', 'textDecoration', 'textDecorationColor', 'textDecorationThickness', 'textWrap', 'textOverflow', 'whiteSpace', 'wordBreak', 'hyphens', 'verticalAlign', 'WebkitLineClamp', 'WebkitBoxOrient', 'lineClamp', 'columnCount', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderColor', 'borderStyle', 'boxShadow', 'opacity', 'transform', 'transformOrigin', 'rotate', 'scale', 'translate', 'transition', 'animation', 'animationDelay', 'animationDuration', 'filter', 'backdropFilter', 'mixBlendMode', 'objectFit', 'objectPosition', 'cursor', 'flex', 'flexGrow', 'flexShrink', 'order', 'fill', 'stroke', 'outline', 'outlineColor', 'accentColor', 'caretColor', 'clipPath', 'maskImage', 'WebkitMaskImage', 'listStyle', 'pointerEvents', 'userSelect', 'touchAction', 'visibility', 'isolation', 'contain', 'containerType', 'WebkitTextFillColor', 'WebkitBackgroundClip', 'textShadow', 'scrollSnapType', 'scrollSnapAlign', 'boxSizing', 'positionArea', 'positionTryFallbacks', 'anchorName', 'positionAnchor'])
 const TEXT_TAGS = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'small', 'strong', 'em', 'blockquote', 'label', 'li', 'code', 'pre', 'kbd', 'time', 'mark', 'del', 's', 'figcaption'])
 const FRAME_TAGS = new Set(['div', 'section', 'header', 'footer', 'nav', 'main', 'article', 'aside', 'ul', 'ol', 'li', 'figure', 'form', 'details', 'summary', 'label', 'search'])
-const INPUT_KINDS = new Set(['text', 'search', 'email', 'tel', 'url', 'number', 'password', 'date', 'checkbox', 'radio', 'range', 'textarea'])
+const INPUT_KINDS = new Set(['text', 'search', 'email', 'tel', 'url', 'number', 'password', 'date', 'checkbox', 'radio', 'range', 'textarea', 'hidden'])
 const SYSTEM_FONTS = new Set(['system-ui', 'sans-serif', 'serif', 'monospace', 'ui-serif', 'ui-sans-serif', 'ui-monospace', 'Georgia', 'Arial', 'Helvetica', 'Times New Roman', 'Courier New'])
 /** Where each state's style applies. Frames take focus while anything inside them has it, so a search bar can light up. */
 const STATES: [keyof El, (c: string, frame: boolean) => string][] = [
@@ -148,6 +148,17 @@ function walkIds(e: El, out: Set<string>) {
   e.children?.forEach((c) => walkIds(c, out))
 }
 
+/** Fills an action path: each {name} from the record being drawn, else the page's route param of that name, else the one in its position. */
+export function actionPath(path: string, row: Row | undefined, params: Record<string, string> = {}): string {
+  const given = Object.values(params)
+  let i = 0
+  return path.replace(/\{(\w+)\}/g, (_m, k: string) => {
+    const at = i++
+    const v = row && row !== SAMPLE && row[k] !== undefined && row[k] !== null ? row[k] : params[k] ?? given[at]
+    return encodeURIComponent(String(v ?? ''))
+  })
+}
+
 /** Whether a `?a=b` link describes the query being shown; a bare `?` matches a page with no filters. */
 export function sameQuery(href: string, query: TreeProps['query']): boolean {
   const want = new URLSearchParams(href.slice(1))
@@ -206,8 +217,22 @@ export function fill(text: unknown, row: Row | undefined, encode = false, query?
 type Scope = { ids: Set<string>; key: string }
 const popId = (id: string, scope?: Scope) => cls(id) + (scope?.ids.has(id) ? `-${scope.key}` : '')
 
+/** Whether an element with props.when shows: "?key" when the query has it, "field" or "!field" on a record field, "field=value" or "field!=value" to compare. */
+export function shows(when: unknown, row: Row | undefined, query: TreeProps['query']): boolean {
+  const w = String(when ?? '').trim()
+  if (!w) return true
+  if (w.startsWith('?')) return one(query?.[w.slice(1)]) !== ''
+  const m = /^(!?)([A-Za-z_][\w.]*)(?:(!?=)(.*))?$/.exec(w)
+  if (!m) return true
+  const v = row ? lookup(row, m[2]) : undefined
+  if (m[3]) return (String(v ?? '') === m[4].trim()) === (m[3] === '=')
+  const truthy = v !== undefined && v !== null && v !== false && v !== '' && v !== 0 && v !== '0' && v !== 'false'
+  return m[1] ? !truthy : truthy
+}
+
 function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boolean; scope?: Scope }): any {
   if (e.hidden) return null
+  if (e.props?.when && !t.editing && !shows(e.props.when, row === SAMPLE ? undefined : row, t.query)) return null
   const p = e.props ?? {}
   const base: Record<string, unknown> = { className: `${cls(e.id)} tsp-el tsp-el-${e.type}` }
   if (!copy) base['data-node'] = e.id
@@ -241,6 +266,17 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
       if (p.popover && t.editing) base['data-popover'] = ''
       if (tag === 'details' && (t.editing || p.open)) base.open = true
       if (tag === 'form') {
+        const act = p.action ? (t.actions[e.id] as { service?: string; method?: string; path?: string; params?: Record<string, string> } | undefined) : undefined
+        if (act?.service && act.path && act.method) {
+          const back = (t.path ?? '/') + (Object.keys(t.query ?? {}).length ? `?${new URLSearchParams(Object.entries(t.query ?? {}).filter(([k, v]) => k !== 'error' && one(v) !== '').map(([k, v]) => [k, one(v)])).toString()}` : '')
+          return (
+            <form {...base} action={`/form-action/${act.service}${actionPath(act.path, row, act.params)}`} method="post">
+              <input type="hidden" name="_method" value={act.method} />
+              <input type="hidden" name="_back" value={back} />
+              {body}
+            </form>
+          )
+        }
         const action = link(p.href)
         return <form {...base} action={action} method="get" role={p.role === 'search' ? 'search' : undefined}>{body}</form>
       }

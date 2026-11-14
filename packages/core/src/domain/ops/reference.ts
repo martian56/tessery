@@ -35,7 +35,8 @@ Web app pages (for web-app nodes)
   addPage { appNodeId, name, route }  -> page id
   addElement { pageId, parentId?, index?, element }  -> element id. parentId defaults to the page root and must be a frame.
       element: { type, name?, props?, style?, tablet?, mobile?, hover?, children? } where children are elements (frames only).
-      type and its props (every element also takes label, an accessible name, and tooltip):
+      type and its props (every element also takes label, an accessible name, tooltip, and when, which shows it only if
+      "?error" is in the query, a record "field" is truthy or "!field" falsy, or "field=value" / "field!=value" holds):
         frame   { tag?, href?, source?, limit?, empty?, popover? }  lays out children with style.display flex or grid
                 tag: div|section|header|footer|nav|main|article|aside|ul|ol|li|figure|label|search, form (a GET form; href is
                 its action, e.g. a search bar posting to /search), details and summary (a disclosure: an accordion, a file
@@ -48,6 +49,11 @@ Web app pages (for web-app nodes)
                 and page with limit. {?q} anywhere shows the current query value, e.g. an input value "{?q}" keeps a
                 search box filled; a link whose href starts with ? (?crop=Bean, or ? for no filter) gets the current
                 style when it matches the query shown, which makes filter chips and sort links.
+                tag form with action "<serviceNodeId>:<operationName>" (an operation that changes data) posts its inputs,
+                by their name, to that operation and returns to the page, with ?error=<status> when it fails. Its path
+                fills {field} from the record it sits in, so a form inside a record frame acts on that record: a
+                "Mark done" button (a hidden-looking input name=status value=done plus a submit button) or a delete
+                button. Show failures with a text element reading {?error}.
                 popover true hides the frame until a button with opens = its id is pressed (menus, dialogs, sheets).
                 Place it with style.positionArea "bottom span-right" to open under the button, or position fixed for a dialog.
         text    { text, tag?, href? }  tag: h1|h2|h3|h4|p|span|small|strong|em|blockquote|label|li|code|pre|kbd|time|mark|del
@@ -56,7 +62,7 @@ Web app pages (for web-app nodes)
         icon    { name }  a Lucide icon by name (lucide.dev/icons): "search", "git-branch", "shopping-cart", "star", "inbox".
                 Size it with style width/height, color with style.color, stroke with style.strokeWidth.
         input   { kind?, name?, placeholder?, value?, checked?, required?, disabled?, min?, max?, step?, rows? }
-                kind: text|search|email|tel|url|number|password|date|checkbox|radio|range|textarea
+                kind: text|search|email|tel|url|number|password|date|checkbox|radio|range|textarea|hidden
         select  { options: "All, Books, Electronics", name?, value? }
         image   { src, alt }  src is an https URL or an uploaded asset "asset:<id>/<name>"
         video   { src, poster?, autoplay?, loop?, muted?, controls? }

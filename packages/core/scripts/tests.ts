@@ -472,3 +472,34 @@ test('themes start from presets and carry a logo and favicon into the app', asyn
   runOp(doc, 'setTheme', { appNodeId: web.id, logo: null })
   assert.equal(themeOf(doc, web.id).logo, undefined)
 })
+
+test('designed forms post to operations and act on the record they sit in', async () => {
+  const { actionPath } = await import('../src/render/tree')
+  assert.equal(actionPath('/v1/borrowings/{id}', { id: 'b 1' }, { id: 'v1' }), '/v1/borrowings/b%201', 'the record wins over a page param of the same name')
+  assert.equal(actionPath('/v1/varieties/{varietyId}/borrowings', { name: 'x' }, { id: 'v1' }), '/v1/varieties/v1/borrowings', 'a page param fills by position')
+  assert.equal(actionPath('/v1/items/{id}', undefined, {}), '/v1/items/')
+
+  const doc = tasksTemplate()
+  const home = doc.pages.find((p) => p.route === '/')!
+  const svc = doc.nodes.find((n) => doc.apis[n.id]?.operations.some((o) => o.name === 'updateTask'))!
+  const form = runOp(doc, 'addElement', { pageId: home.id, element: { type: 'frame', props: { tag: 'form', action: `${svc.id}:updateTask` }, children: [
+    { type: 'input', props: { kind: 'hidden', name: 'done', value: 'true' } }, { type: 'button', props: { text: 'Mark done', submit: true } },
+  ] } }) as string
+  const files = generateAll(doc)
+  const app = Object.keys(files).find((f) => f.endsWith('/lib/api.ts'))!.replace('/lib/api.ts', '')
+  const page = files[`${app}/app/page.tsx`]
+  assert.ok(page.includes(`${JSON.stringify(form)}: { service: ${JSON.stringify(svc.name)}, method: "PATCH", path: "`), 'the page knows where the form goes')
+  const route = files[`${app}/app/form-action/[service]/[...path]/route.ts`]
+  assert.match(route, /if \(!sameSite\(req\)\)/, 'cross-site posts are refused')
+  assert.match(route, /back\.startsWith\('\/'\) && !back\.startsWith\('\/\/'\)/, 'it only sends visitors back to this site')
+  assert.match(route, /status: 303/)
+})
+
+test('elements can show only when the query or the record says so', async () => {
+  const { shows } = await import('../src/render/tree')
+  assert.ok(shows('?error', undefined, { error: '409' }) && !shows('?error', undefined, {}))
+  assert.ok(shows('!packets', { packets: 0 }, {}) && !shows('packets', { packets: 0 }, {}))
+  assert.ok(shows('status=done', { status: 'done' }, {}) && shows('status!=done', { status: 'open' }, {}))
+  assert.ok(shows('author.name', { author: { name: 'Ada' } }, {}))
+  assert.ok(shows('', undefined, {}))
+})
