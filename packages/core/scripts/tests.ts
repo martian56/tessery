@@ -507,5 +507,6 @@ test('elements can show only when the query or the record says so', async () => 
 test('an empty list says whether nothing exists or nothing matched', async () => {
   const { filtered } = await import('../src/render/tree')
   assert.ok(!filtered(undefined) && !filtered({}) && !filtered({ page: '2' }) && !filtered({ q: '' }))
+  assert.ok(!filtered({ sort: 'name' }) && !filtered({ error: '400' }) && !filtered({ limit: '10', offset: '20' }), 'sorting, paging and errors are not filters')
   assert.ok(filtered({ q: 'bean' }) && filtered({ crop: ['Bean'] }))
 })

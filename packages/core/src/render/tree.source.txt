@@ -160,7 +160,8 @@ export function actionPath(path: string, row: Row | undefined, params: Record<st
 }
 
 /** Whether the page shows a search or filter, so an empty list means nothing matched rather than nothing exists. */
-export const filtered = (query: TreeProps['query']) => Object.entries(query ?? {}).some(([k, v]) => k !== 'page' && one(v) !== '')
+const NOT_FILTERS = new Set(['page', 'sort', 'limit', 'offset', 'error'])
+export const filtered = (query: TreeProps['query']) => Object.entries(query ?? {}).some(([k, v]) => !NOT_FILTERS.has(k) && one(v) !== '')
 
 /** Whether a `?a=b` link describes the query being shown; a bare `?` matches a page with no filters. */
 export function sameQuery(href: string, query: TreeProps['query']): boolean {
