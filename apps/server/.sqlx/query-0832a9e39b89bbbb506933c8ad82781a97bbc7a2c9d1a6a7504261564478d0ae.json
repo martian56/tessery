@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT project_id, github_repo AS \"repo!\", github_installation AS \"installation!\", linked_by FROM project_remotes WHERE project_id = $1 AND github_repo IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "project_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "repo!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "github_repo"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "installation!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "github_installation"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "linked_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "linked_by"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "0832a9e39b89bbbb506933c8ad82781a97bbc7a2c9d1a6a7504261564478d0ae"
+}

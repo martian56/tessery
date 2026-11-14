@@ -36,7 +36,8 @@ async fn csrf_guard(req: Request, next: Next) -> Response {
     let safe = matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS);
     let token = req.headers().contains_key(axum::http::header::AUTHORIZATION);
     let mcp = req.uri().path().ends_with("/mcp");
-    if safe || token || mcp || req.headers().contains_key(CSRF_HEADER) {
+    let signed_webhook = req.uri().path().ends_with("/github/webhook") && req.headers().contains_key("x-hub-signature-256");
+    if safe || token || mcp || signed_webhook || req.headers().contains_key(CSRF_HEADER) {
         next.run(req).await
     } else {
         ApiError::ForbiddenMsg(format!("missing {CSRF_HEADER} header")).into_response()

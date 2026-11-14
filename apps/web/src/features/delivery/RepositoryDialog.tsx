@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Download, Trash2, Upload } from 'lucide-react'
+import { Download, Github, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { useCheckpointsQuery, useDeleteRemoteMutation, usePushRemoteMutation, usePutRemoteMutation, useRemoteQuery } from '@/api/endpoints/delivery'
 import { errorMessage } from '@/api/types'
+import { useGithubReposQuery, useLinkGithubMutation } from '@/api/endpoints/github'
 import { useProjectPermissions } from '@/app/useProjectPermissions'
 import { API_URL } from '@/config/env'
 import { bus } from '@/lib/bus'
 import { timeAgo } from '@/lib/format'
 import { useAppSelector } from '@/store'
-import { Button, Dialog, Dot, Field, Input, Switch, toast, useDialogs } from '@/ui'
+import { useMeQuery } from '@/api/endpoints/identity'
+import { Button, Dialog, Dot, Field, Input, Select, Switch, toast, useDialogs } from '@/ui'
 import s from './Delivery.module.css'
 
 export function RepositoryDialog() {
@@ -59,7 +61,10 @@ function Repository({ onClose }: { onClose: () => void }) {
       </div>
 
       <h3 style={{ fontSize: 'var(--fs-13)', marginTop: 8 }}>Remote</h3>
-      {isLoading ? <p className={s.muted}>Loading…</p> : <>
+      {remote?.githubRepo ? <GithubLinked repo={remote.githubRepo} remote={remote} canConfigure={canConfigure} onSync={pushNow} syncing={pushing} onUnlink={disconnect} />
+        : canConfigure && <GithubLink pid={doc.id} />}
+      {!remote?.githubRepo && (isLoading ? <p className={s.muted}>Loading…</p> : <>
+        <p className={s.muted}>Or push to any git host with a URL and token:</p>
         {remote && (
           <div className={s.status}>
             <Dot color={remote.lastPushOk === false ? 'var(--err)' : remote.lastPushOk ? 'var(--ok)' : 'var(--tx-3)'} />
@@ -76,7 +81,60 @@ function Repository({ onClose }: { onClose: () => void }) {
           {remote && canConfigure && <Button variant="ghost" icon={<Trash2 />} onClick={disconnect}>Disconnect</Button>}
           {!canConfigure && <span className={s.meta}>Changing the remote needs secret:write.</span>}
         </div>
-      </>}
+      </>)}
     </Dialog>
+  )
+}
+
+type RemoteView = { lastPushAt?: string | null; lastPushOk?: boolean | null; lastPushError?: string | null; lastImportAt?: string | null; lastImportError?: string | null }
+
+function GithubLinked({ repo, remote, canConfigure, onSync, syncing, onUnlink }: { repo: string; remote: RemoteView; canConfigure: boolean; onSync: () => void; syncing: boolean; onUnlink: () => void }) {
+  const when = (iso?: string | null) => (iso ? timeAgo(new Date(iso).getTime()) : null)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className={s.status}><Github size={14} /> Linked to <a href={`https://github.com/${repo}`} target="_blank" rel="noopener noreferrer"><b>{repo}</b></a></div>
+      <p className={s.muted}>Pushes to main on GitHub become checkpoints. Checkpoints made here are pushed back, and releases show as commit statuses. History on either side is never overwritten.</p>
+      <div className={s.status}>
+        <Dot color={remote.lastImportError ? 'var(--err)' : remote.lastImportAt ? 'var(--ok)' : 'var(--tx-3)'} />
+        {remote.lastImportError ? `Import failed ${when(remote.lastImportAt)}: ${remote.lastImportError}` : remote.lastImportAt ? `Checked GitHub ${when(remote.lastImportAt)}` : 'Not synced yet'}
+      </div>
+      <div className={s.status}>
+        <Dot color={remote.lastPushOk === false ? 'var(--err)' : remote.lastPushOk ? 'var(--ok)' : 'var(--tx-3)'} />
+        {remote.lastPushAt ? (remote.lastPushOk ? `Pushed ${when(remote.lastPushAt)}` : `Push failed ${when(remote.lastPushAt)}: ${remote.lastPushError}`) : 'Not pushed yet'}
+      </div>
+      <div className={s.actions}>
+        <Button icon={<RefreshCw />} disabled={syncing} onClick={onSync}>Sync now</Button>
+        {canConfigure && <Button variant="ghost" icon={<Trash2 />} onClick={onUnlink}>Unlink</Button>}
+      </div>
+    </div>
+  )
+}
+
+function GithubLink({ pid }: { pid: string }) {
+  const { data: me } = useMeQuery()
+  const [show, setShow] = useState(false)
+  const { data: repos, error, isFetching } = useGithubReposQuery(pid, { skip: !show })
+  const [link, { isLoading }] = useLinkGithubMutation()
+  const [repo, setRepo] = useState('')
+  if (!me?.instanceAdmin) return <p className={s.muted}>An instance administrator can link this project to a GitHub repository through the instance's GitHub App.</p>
+  if (!show) return <div className={s.actions}><Button icon={<Github />} onClick={() => setShow(true)}>Link a GitHub repository</Button></div>
+  const save = async () => {
+    const r = await link({ pid, repo })
+    toast('error' in r ? errorMessage(r.error) : `Linked to ${repo}. The first sync is running.`, 'error' in r ? 'err' : 'ok')
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {isFetching && <p className={s.muted}>Asking GitHub which repositories the app can reach…</p>}
+      {error && <p className={s.muted} style={{ color: 'var(--err)' }}>{errorMessage(error)}</p>}
+      {repos && !repos.length && <p className={s.muted}>The GitHub App is not installed on any repository yet. An instance admin can install it from Instance admin, GitHub.</p>}
+      {repos && repos.length > 0 && (
+        <>
+          <Field label="Repository" wide hint="Use an empty repository, or one whose main already contains this project's history.">
+            <Select value={repo} onChange={setRepo} aria-label="GitHub repository" placeholder="Choose a repository" options={repos.map((r) => ({ value: r.fullName, label: `${r.fullName}${r.private ? ' (private)' : ''}` }))} />
+          </Field>
+          <div className={s.actions}><Button variant="primary" icon={<Github />} disabled={!repo || isLoading} onClick={save}>Link</Button></div>
+        </>
+      )}
+    </div>
   )
 }

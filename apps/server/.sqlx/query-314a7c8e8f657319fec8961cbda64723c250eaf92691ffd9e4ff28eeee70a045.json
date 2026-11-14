@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE instance_settings SET github_app = $1, github_app_key = $2, github_webhook_secret = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Jsonb",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "314a7c8e8f657319fec8961cbda64723c250eaf92691ffd9e4ff28eeee70a045"
+}

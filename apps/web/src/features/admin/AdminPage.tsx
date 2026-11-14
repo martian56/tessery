@@ -1,4 +1,4 @@
-import { Building2, Mail, SlidersHorizontal, Users } from 'lucide-react'
+import { Building2, Github, Mail, SlidersHorizontal, Users } from 'lucide-react'
 import { useAdminOrgsQuery, useAdminSettingsQuery, useAdminUpdateUserMutation, useAdminUsersQuery, useMeQuery, usePutAdminSettingsMutation } from '@/api/endpoints/identity'
 import { errorMessage } from '@/api/types'
 import { setCurrentOrg } from '@/app/currentOrg'
@@ -7,11 +7,13 @@ import { Badge, Button, Empty, Field, NumberInput, Switch, toast, useDialogs } f
 import { Card, PageLayout, PageTitle, Table, mono, muted } from '@/features/chrome/PageLayout'
 import { timeAgo } from '@/lib/format'
 import { EmailView } from './EmailView'
+import { GithubView } from './GithubView'
 
 const NAV = [
   { id: 'users', label: 'Users', icon: <Users /> },
   { id: 'orgs', label: 'Organizations', icon: <Building2 /> },
   { id: 'email', label: 'Email', icon: <Mail /> },
+  { id: 'github', label: 'GitHub', icon: <Github /> },
   { id: 'settings', label: 'Instance settings', icon: <SlidersHorizontal /> },
 ]
 
@@ -21,7 +23,7 @@ export function AdminPage({ section }: { section: string }) {
   return (
     <PageLayout title="Instance admin" nav={NAV} active={active} base="/admin">
       {!me?.instanceAdmin ? <Empty title="Only instance administrators can open this page" />
-        : active === 'orgs' ? <OrgsView /> : active === 'email' ? <EmailView /> : active === 'settings' ? <SettingsView /> : <UsersView meId={me.id} />}
+        : active === 'orgs' ? <OrgsView /> : active === 'email' ? <EmailView /> : active === 'github' ? <GithubView /> : active === 'settings' ? <SettingsView /> : <UsersView meId={me.id} />}
     </PageLayout>
   )
 }

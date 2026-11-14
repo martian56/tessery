@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE project_remotes SET last_import_at = now(), last_import_error = $2 WHERE project_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "efa02759d38927781b338ee8951506b89d1cb21ae1ada5329880c33b19aa8c85"
+}

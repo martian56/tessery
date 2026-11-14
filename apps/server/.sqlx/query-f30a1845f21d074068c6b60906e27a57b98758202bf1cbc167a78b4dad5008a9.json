@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO project_remotes (project_id, url, username, token_cipher, auto_push, updated_by)\n           VALUES ($1, $2, $3, $4, $5, $6)\n           ON CONFLICT (project_id) DO UPDATE SET url = $2, username = $3, github_repo = NULL, github_installation = NULL,\n               token_cipher = CASE WHEN $7 THEN project_remotes.token_cipher ELSE $4 END,\n               auto_push = $5, updated_by = $6, updated_at = now(),\n               last_push_at = NULL, last_push_ok = NULL, last_push_error = NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bool",
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f30a1845f21d074068c6b60906e27a57b98758202bf1cbc167a78b4dad5008a9"
+}

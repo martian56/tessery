@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT project_id, url, username, token_cipher, auto_push, last_push_at, last_push_ok, last_push_error, updated_at\n           FROM project_remotes WHERE project_id = $1",
+  "query": "SELECT project_id, url, username, token_cipher, auto_push, last_push_at, last_push_ok, last_push_error, updated_at,\n                  github_repo, github_installation, last_import_at, last_import_error\n           FROM project_remotes WHERE project_id = $1",
   "describe": {
     "columns": [
       {
@@ -101,6 +101,50 @@
             "name": "updated_at"
           }
         }
+      },
+      {
+        "ordinal": 9,
+        "name": "github_repo",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "github_repo"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "github_installation",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "github_installation"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "last_import_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "last_import_at"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "last_import_error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "project_remotes",
+            "name": "last_import_error"
+          }
+        }
       }
     ],
     "parameters": {
@@ -117,8 +161,12 @@
       true,
       true,
       true,
-      false
+      false,
+      true,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "5fd883b8ccd50a8117170ee3fb0f8f278eea03f17c33c700d6c7f62a7c10e4ec"
+  "hash": "ec71a49bd60a206bd3dd5a64d54d49751313f467cfe6acb005cea59c369cb755"
 }

@@ -1,6 +1,7 @@
 mod backups;
 mod deploy;
 mod dns;
+mod github;
 mod jobs;
 mod notify;
 mod provision;

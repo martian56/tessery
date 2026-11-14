@@ -26,6 +26,8 @@ pub enum GitError {
     Conflict(Vec<String>),
     #[error("`git {op}` failed: {stderr}")]
     Command { op: String, stderr: String },
+    #[error("the remote has commits that are not in Tessery, so nothing was overwritten")]
+    Diverged(String),
     #[error("`git {0}` timed out")]
     Timeout(String),
     #[error("git output was not valid UTF-8")]
@@ -223,7 +225,7 @@ impl Repo {
         Ok(self.run(&args, &env, Some(message.as_bytes())).await?.trim().to_owned())
     }
 
-    async fn is_ancestor(&self, a: &str, b: &str) -> Result<bool> {
+    pub async fn is_ancestor(&self, a: &str, b: &str) -> Result<bool> {
         match self.run(&["merge-base", "--is-ancestor", a, b], &[], None).await {
             Ok(_) => Ok(true),
             Err(GitError::Command { .. }) => Ok(false),
@@ -301,6 +303,29 @@ impl Repo {
             })
             .max_by_key(|(n, _)| *n)
             .map(|(_, sha)| sha))
+    }
+
+    async fn run_status_env(&self, args: &[&str], env: &[(&str, &std::ffi::OsStr)]) -> Result<(i32, String)> {
+        let op = args.first().copied().unwrap_or_default().to_owned();
+        let mut cmd = Command::new("git");
+        cmd.args(["-c", "core.autocrlf=false", "-c", "safe.directory=*", "-c", "core.hooksPath=/dev/null"])
+            .args(args)
+            .current_dir(&self.dir)
+            .env("GIT_DIR", &self.dir)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_GLOBAL", &self.global)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env_remove("GIT_ASKPASS")
+            .env_remove("SSH_ASKPASS")
+            .stdin(Stdio::null())
+            .kill_on_drop(true);
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
+        let out = tokio::time::timeout(COMMAND_TIMEOUT, cmd.output()).await.map_err(|_| GitError::Timeout(op))??;
+        let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+        text.push_str(&String::from_utf8_lossy(&out.stderr));
+        Ok((out.status.code().unwrap_or(-1), text))
     }
 
     async fn run_status(&self, args: &[&str]) -> Result<(i32, String)> {
@@ -388,20 +413,94 @@ impl Repo {
     }
 
     pub async fn push(&self, remote: &Remote) -> Result<()> {
-        let mut env: Vec<(String, String)> = Vec::new();
-        if let Some(token) = remote.token.as_deref().filter(|t| !t.is_empty()) {
-            let user = remote.username.as_deref().filter(|u| !u.is_empty()).unwrap_or("x-access-token");
-            let basic = base64::engine::general_purpose::STANDARD.encode(format!("{user}:{token}"));
-            env.extend([
-                ("GIT_CONFIG_COUNT".into(), "1".into()),
-                ("GIT_CONFIG_KEY_0".into(), "http.extraHeader".into()),
-                ("GIT_CONFIG_VALUE_0".into(), format!("Authorization: Basic {basic}")),
-            ]);
-        }
+        let env = auth_env(remote);
         let env_ref: Vec<(&str, &std::ffi::OsStr)> = env.iter().map(|(k, v)| (k.as_str(), std::ffi::OsStr::new(v))).collect();
         self.run(&["push", "--porcelain", &remote.url, "+refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"], &env_ref, None)
             .await
             .map(drop)
+    }
+
+    /// Pushes `main`, the generated branch and checkpoint tags without forcing, so history the remote has and
+    /// Tessery does not is never overwritten. Returns `Diverged` when the remote is ahead or has diverged.
+    pub async fn push_safe(&self, remote: &Remote) -> Result<()> {
+        let env = auth_env(remote);
+        let env_ref: Vec<(&str, &std::ffi::OsStr)> = env.iter().map(|(k, v)| (k.as_str(), std::ffi::OsStr::new(v))).collect();
+        let mut args = vec!["push", "--porcelain", remote.url.as_str()];
+        let main = format!("refs/heads/{MAIN}:refs/heads/{MAIN}");
+        let generated = format!("refs/heads/{GENERATED}:refs/heads/{GENERATED}");
+        if self.resolve(&format!("refs/heads/{MAIN}")).await?.is_some() {
+            args.push(&main);
+        }
+        if self.resolve(&format!("refs/heads/{GENERATED}")).await?.is_some() {
+            args.push(&generated);
+        }
+        args.push("refs/tags/checkpoint/*:refs/tags/checkpoint/*");
+        match self.run_status_env(&args, &env_ref).await? {
+            (0, _) => Ok(()),
+            (_, out) if out.contains("[rejected]") || out.contains("non-fast-forward") || out.contains("fetch first") => Err(GitError::Diverged(out)),
+            (_, out) => Err(GitError::Command { op: "push".into(), stderr: out }),
+        }
+    }
+
+    /// Fetches the remote's `main` into a private ref and returns its commit, or `None` when the remote has no main.
+    pub async fn fetch_main(&self, remote: &Remote) -> Result<Option<String>> {
+        let env = auth_env(remote);
+        let env_ref: Vec<(&str, &std::ffi::OsStr)> = env.iter().map(|(k, v)| (k.as_str(), std::ffi::OsStr::new(v))).collect();
+        let spec = format!("+refs/heads/{MAIN}:{INCOMING}");
+        match self.run_status_env(&["fetch", "--no-tags", "--quiet", remote.url.as_str(), &spec], &env_ref).await? {
+            (0, _) => self.resolve(INCOMING).await,
+            (_, out) if out.contains("couldn't find remote ref") => Ok(None),
+            (_, out) => Err(GitError::Command { op: "fetch".into(), stderr: out }),
+        }
+    }
+
+    /// Moves `main` forward to a commit fetched from the remote. Refuses when the histories diverged. Deploy files
+    /// are Tessery's to write, so when the commit changed them they are put back in a commit on top.
+    pub async fn adopt(&self, incoming: &str, author: &Author) -> Result<Adopted> {
+        let main_ref = format!("refs/heads/{MAIN}");
+        let main = self.resolve(&main_ref).await?;
+        if let Some(m) = &main {
+            if m == incoming || self.is_ancestor(incoming, m).await? {
+                return Ok(Adopted::UpToDate);
+            }
+            if !self.is_ancestor(m, incoming).await? {
+                return Err(GitError::Diverged(format!("main is at {m} in Tessery and the remote is at {incoming}")));
+            }
+        }
+        let generated = match self.resolve(&format!("refs/heads/{GENERATED}")).await? {
+            Some(g) => Some(g),
+            None => self.latest_checkpoint_tag().await?,
+        };
+        let dir_of = |commit: String| async move {
+            match self.run(&["rev-parse", "--verify", "--quiet", &format!("{commit}:{TESSERY_OWNED}")], &[], None).await {
+                Ok(out) => Ok(Some(out.trim().to_owned())),
+                Err(GitError::Command { .. }) => Ok(None),
+                Err(e) => Err(e),
+            }
+        };
+        let (commit, restored) = match &generated {
+            Some(g) if dir_of(incoming.to_owned()).await? != dir_of(g.clone()).await? => {
+                let tree = self.run(&["rev-parse", &format!("{incoming}^{{tree}}")], &[], None).await?.trim().to_owned();
+                let tree = self.with_generated_dir(&tree, g, TESSERY_OWNED).await?;
+                let message = format!("Keep {TESSERY_OWNED}/ as Tessery generated it\n\nChanges to {TESSERY_OWNED}/ come from the design, not from pushes.");
+                (self.commit_tree(&tree, &[incoming], &message, author).await?, true)
+            }
+            _ => (incoming.to_owned(), false),
+        };
+        let mut args = vec!["update-ref", main_ref.as_str(), commit.as_str()];
+        if let Some(m) = &main {
+            args.push(m);
+        }
+        self.run(&args, &[], None).await?;
+        Ok(Adopted::Moved { commit, restored_deploy: restored })
+    }
+
+    pub async fn subject(&self, commit: &str) -> Result<String> {
+        Ok(self.run(&["log", "-1", "--format=%s", commit], &[], None).await?.trim().to_owned())
+    }
+
+    pub async fn file_count(&self, commit: &str) -> Result<usize> {
+        Ok(self.run(&["ls-tree", "-r", "--name-only", commit], &[], None).await?.lines().count())
     }
 
     async fn run(&self, args: &[&str], env: &[(&str, &std::ffi::OsStr)], stdin: Option<&[u8]>) -> Result<String> {
@@ -442,6 +541,28 @@ impl Repo {
         }
         Ok(out.stdout)
     }
+}
+
+const INCOMING: &str = "refs/tessery/incoming/main";
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Adopted {
+    UpToDate,
+    Moved { commit: String, restored_deploy: bool },
+}
+
+fn auth_env(remote: &Remote) -> Vec<(String, String)> {
+    let mut env: Vec<(String, String)> = Vec::new();
+    if let Some(token) = remote.token.as_deref().filter(|t| !t.is_empty()) {
+        let user = remote.username.as_deref().filter(|u| !u.is_empty()).unwrap_or("x-access-token");
+        let basic = base64::engine::general_purpose::STANDARD.encode(format!("{user}:{token}"));
+        env.extend([
+            ("GIT_CONFIG_COUNT".into(), "1".into()),
+            ("GIT_CONFIG_KEY_0".into(), "http.extraHeader".into()),
+            ("GIT_CONFIG_VALUE_0".into(), format!("Authorization: Basic {basic}")),
+        ]);
+    }
+    env
 }
 
 pub fn validate_path(path: &str) -> Result<()> {
@@ -613,5 +734,47 @@ mod tests {
         developer_commit(&repo, "src/new.ts", "edited by hand\n").await;
         let err = repo.checkpoint(&files(&[("tessery.json", "{\"v\":3}\n"), ("src/routes.ts", routes), ("src/new.ts", "regenerated differently\n")]), "third", &author()).await.unwrap_err();
         assert!(matches!(&err, GitError::Conflict(f) if f == &vec!["src/new.ts".to_owned()]), "{err}");
+    }
+
+    #[tokio::test]
+    async fn mirrors_main_both_ways_without_overwriting() {
+        let data = tempfile::tempdir().unwrap();
+        let repos = Repos::new(data.path());
+        let repo = repos.ensure(Uuid::now_v7()).await.unwrap();
+        let c1 = repo.checkpoint(&files(&[("tessery.json", "{}\n"), ("src/app.ts", "v1\n"), ("deploy/dev/compose.yaml", "services: {}\n")]), "first", &author()).await.unwrap();
+        repo.tag("checkpoint/1", &c1).await.unwrap();
+
+        let hub_dir = data.path().join("hub.git");
+        assert!(Command::new("git").args(["init", "--bare", "--quiet", "--initial-branch", "main"]).arg(&hub_dir).status().await.unwrap().success());
+        let hub = Remote { url: hub_dir.to_string_lossy().replace('\\', "/"), username: None, token: None };
+        assert_eq!(repo.fetch_main(&hub).await.unwrap(), None, "an empty remote has no main");
+        repo.push_safe(&hub).await.unwrap();
+        assert_eq!(repo.fetch_main(&hub).await.unwrap().as_deref(), Some(c1.as_str()));
+        assert_eq!(repo.adopt(&c1, &author()).await.unwrap(), Adopted::UpToDate);
+
+        let pushed = developer_commit(&repo, "src/app.ts", "v2 from GitHub\n").await;
+        repo.run(&["update-ref", "refs/heads/main", &c1], &[], None).await.unwrap();
+        assert_eq!(repo.adopt(&pushed, &author()).await.unwrap(), Adopted::Moved { commit: pushed.clone(), restored_deploy: false });
+        assert_eq!(repo.resolve("refs/heads/main").await.unwrap().as_deref(), Some(pushed.as_str()));
+        repo.push_safe(&hub).await.unwrap();
+
+        let sneaky = developer_commit(&repo, "deploy/dev/compose.yaml", "services: { evil: { privileged: true } }\n").await;
+        repo.run(&["update-ref", "refs/heads/main", &pushed], &[], None).await.unwrap();
+        let Adopted::Moved { commit, restored_deploy } = repo.adopt(&sneaky, &author()).await.unwrap() else { panic!("expected a move") };
+        assert!(restored_deploy);
+        assert_ne!(commit, sneaky);
+        assert_eq!(repo.read_file(&commit, "deploy/dev/compose.yaml").await.unwrap(), b"services: {}\n", "deploy files come back from Tessery");
+        assert!(repo.is_ancestor(&sneaky, &commit).await.unwrap(), "the pushed commit stays in history");
+
+        let other = repos.ensure(Uuid::now_v7()).await.unwrap();
+        let unrelated = other.checkpoint(&files(&[("x.txt", "elsewhere\n")]), "other", &author()).await.unwrap();
+        let hub2_dir = data.path().join("hub2.git");
+        assert!(Command::new("git").args(["init", "--bare", "--quiet", "--initial-branch", "main"]).arg(&hub2_dir).status().await.unwrap().success());
+        let hub2 = Remote { url: hub2_dir.to_string_lossy().replace('\\', "/"), username: None, token: None };
+        other.push_safe(&hub2).await.unwrap();
+        assert!(matches!(repo.push_safe(&hub2).await, Err(GitError::Diverged(_))), "a remote with other history is not overwritten");
+        let theirs = repo.fetch_main(&hub2).await.unwrap().unwrap();
+        assert_eq!(theirs, unrelated);
+        assert!(matches!(repo.adopt(&theirs, &author()).await, Err(GitError::Diverged(_))), "diverged history is not imported");
     }
 }

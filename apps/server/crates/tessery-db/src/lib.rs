@@ -3,6 +3,7 @@ pub mod backups;
 pub mod bindings;
 pub mod delivery;
 pub mod error;
+pub mod github;
 pub mod integrations;
 pub mod metrics;
 pub mod notifications;

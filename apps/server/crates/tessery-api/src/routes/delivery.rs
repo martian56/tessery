@@ -769,6 +769,11 @@ pub struct RemoteDto {
     pub last_push_at: Option<OffsetDateTime>,
     pub last_push_ok: Option<bool>,
     pub last_push_error: Option<String>,
+    /// `owner/name` when the project is linked through the GitHub App.
+    pub github_repo: Option<String>,
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub last_import_at: Option<OffsetDateTime>,
+    pub last_import_error: Option<String>,
 }
 
 impl From<db::Remote> for RemoteDto {
@@ -780,6 +785,9 @@ impl From<db::Remote> for RemoteDto {
             auto_push: r.auto_push,
             last_push_at: r.last_push_at,
             last_push_ok: r.last_push_ok,
+            github_repo: r.github_repo,
+            last_import_at: r.last_import_at,
+            last_import_error: r.last_import_error,
             last_push_error: r.last_push_error,
         }
     }

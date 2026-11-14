@@ -84,6 +84,10 @@ pub struct Remote {
     pub last_push_ok: Option<bool>,
     pub last_push_error: Option<String>,
     pub updated_at: OffsetDateTime,
+    pub github_repo: Option<String>,
+    pub github_installation: Option<i64>,
+    pub last_import_at: Option<OffsetDateTime>,
+    pub last_import_error: Option<String>,
 }
 
 pub async fn lock_project(tx: &mut Transaction<'_, Postgres>, project_id: Uuid) -> DbResult<()> {
@@ -285,7 +289,8 @@ pub async fn ref_targets(ex: impl PgExecutor<'_> + Copy, project_id: Uuid) -> Db
 pub async fn get_remote(ex: impl PgExecutor<'_>, project_id: Uuid) -> DbResult<Option<Remote>> {
     Ok(sqlx::query_as!(
         Remote,
-        r#"SELECT project_id, url, username, token_cipher, auto_push, last_push_at, last_push_ok, last_push_error, updated_at
+        r#"SELECT project_id, url, username, token_cipher, auto_push, last_push_at, last_push_ok, last_push_error, updated_at,
+                  github_repo, github_installation, last_import_at, last_import_error
            FROM project_remotes WHERE project_id = $1"#,
         project_id
     )
@@ -308,7 +313,7 @@ pub async fn upsert_remote(ex: impl PgExecutor<'_>, r: RemoteUpdate<'_>) -> DbRe
     sqlx::query!(
         r#"INSERT INTO project_remotes (project_id, url, username, token_cipher, auto_push, updated_by)
            VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (project_id) DO UPDATE SET url = $2, username = $3,
+           ON CONFLICT (project_id) DO UPDATE SET url = $2, username = $3, github_repo = NULL, github_installation = NULL,
                token_cipher = CASE WHEN $7 THEN project_remotes.token_cipher ELSE $4 END,
                auto_push = $5, updated_by = $6, updated_at = now(),
                last_push_at = NULL, last_push_ok = NULL, last_push_error = NULL"#,
