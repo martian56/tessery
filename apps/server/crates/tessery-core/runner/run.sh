@@ -314,6 +314,12 @@ check_contract() {
     check=$(contract_check "$i")
     name=$(printf '%s' "$check" | jq -r .name)
     contract_send "$check"
+    # Values are saved before the response is judged: a create that answers unexpectedly may still have made a record,
+    # and its cleanup needs the id.
+    printf '%s' "$check" | jq -r '.save // {} | to_entries[] | "\(.key) \(.value)"' | while read -r key expr; do
+      value=$(jq -r "$expr // empty" "$contract_body" 2>/dev/null || true)
+      [ -z "$value" ] || { jq --arg k "$key" --arg v "$value" '.[$k] = $v' "$contract_vars" > "$contract_vars.next" && mv "$contract_vars.next" "$contract_vars"; }
+    done
     if ! printf '%s' "$check" | jq -e --argjson c "${code:-0}" 'any(.status[]; . == $c)' >/dev/null; then
       contract_fail "API check failed: $name. It answered $code, the design expects $(printf '%s' "$check" | jq -r '.status | map(tostring) | join(" or ")')." "$((i + 1))"
     fi
@@ -321,17 +327,8 @@ check_contract() {
     if [ -n "$shape" ] && ! jq -e "$shape" "$contract_body" >/dev/null 2>&1; then
       fields=$(printf '%s' "$check" | jq -c '.fields // []')
       missing=$(jq -r --argjson f "$fields" '(if type == "array" then ([.[] | select(type == "object")][0] // {}) else . end) as $o | if ($o | type) == "object" then [$f[] | select(. as $k | $o | has($k) | not)] | join(", ") else "" end' "$contract_body" 2>/dev/null || true)
-      # A create that answered with the wrong shape may still have made a record, so its own values are saved first.
-      printf '%s' "$check" | jq -r '.save // {} | to_entries[] | "\(.key) \(.value)"' | while read -r key expr; do
-        value=$(jq -r "$expr // empty" "$contract_body" 2>/dev/null || true)
-        [ -z "$value" ] || { jq --arg k "$key" --arg v "$value" '.[$k] = $v' "$contract_vars" > "$contract_vars.next" && mv "$contract_vars.next" "$contract_vars"; }
-      done
       contract_fail "API check failed: $name. The response does not have the fields the design gives it${missing:+ (missing: $missing)}." "$((i + 1))"
     fi
-    printf '%s' "$check" | jq -r '.save // {} | to_entries[] | "\(.key) \(.value)"' | while read -r key expr; do
-      value=$(jq -r "$expr" "$contract_body")
-      jq --arg k "$key" --arg v "$value" '.[$k] = $v' "$contract_vars" > "$contract_vars.next" && mv "$contract_vars.next" "$contract_vars"
-    done
     echo "passed: $name"
     i=$((i + 1))
   done

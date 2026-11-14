@@ -101,7 +101,7 @@ export function contract(doc: ProjectDoc, env: Environment): Contract | null {
       const required = fields.filter((c) => !c.nullable && !c.default)
       const body = Object.fromEntries(fields.filter((c) => !c.default).map((c) => [c.name, sample(c)]).filter(([, v]) => v !== undefined))
       if (mode !== 'full' || !create || !remove || !pk || required.some((c) => !(c.name in body))) continue
-      const idVar = `${t.name}_id`
+      const idVar = `${n.name}_${t.name}_id`.replace(/\W/g, '_')
       checks.push({ ...at, name: `${label(create)} creates a ${t.name} record`, method: create.route.method, path: full(create.route.path), body, status: [200, 201], shape: has(t), ...fieldsOf, save: { [idVar]: `.${JSON.stringify(pk.name)}` } })
       const one = (c: CrudRoute) => full(c.route.path).replace(`{${c.idParam}}`, `{{${idVar}}}`)
       const get = of('get')
