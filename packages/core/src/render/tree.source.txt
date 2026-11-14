@@ -18,7 +18,7 @@ export interface El {
   hidden?: boolean
   children?: El[]
 }
-export interface PageTheme { colors: Record<string, string>; fonts: { heading: string; body: string; mono?: string }; radius: number; dark?: Record<string, string> }
+export interface PageTheme { colors: Record<string, string>; fonts: { heading: string; body: string; mono?: string }; radius: number; dark?: Record<string, string>; logo?: string }
 export interface TreeProps {
   root: El
   theme: PageTheme
@@ -41,7 +41,7 @@ export interface TreeProps {
   /** The page's query string values, for {?name} placeholders and for marking ?filter links current. */
   query?: Record<string, string | string[] | undefined>
 }
-type Ctx = Required<Omit<TreeProps, 'root' | 'theme' | 'icon' | 'path' | 'query'>> & Pick<TreeProps, 'icon' | 'path' | 'query'>
+type Ctx = Required<Omit<TreeProps, 'root' | 'theme' | 'icon' | 'path' | 'query'>> & Pick<TreeProps, 'icon' | 'path' | 'query'> & { logo?: string }
 type Row = Record<string, unknown>
 
 const PX = new Set(['width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'gap', 'rowGap', 'columnGap', 'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'paddingInline', 'paddingBlock', 'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'marginInline', 'marginBlock', 'top', 'right', 'bottom', 'left', 'fontSize', 'borderRadius', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius', 'borderWidth', 'letterSpacing', 'strokeWidth', 'outlineOffset', 'outlineWidth', 'flexBasis', 'textIndent', 'textUnderlineOffset', 'scrollPaddingTop', 'scrollMarginTop'])
@@ -88,8 +88,8 @@ const fontStack = (f: string, fallback = 'system-ui, sans-serif') => (SYSTEM_FON
 const colorVars = (colors: Record<string, string>, base: string) =>
   Object.entries(colors).filter(([k, v]) => /^[A-Za-z0-9-]+$/.test(k) && cssValue('color', v, base) !== null).map(([k, v]) => `--c-${k}:${v}`)
 
-/** The stylesheet for a page: theme variables, then one rule per element, its states and its breakpoints. */
-export function treeCss(root: El, theme: PageTheme, base = '/assets/'): string {
+/** The theme as CSS: its font import and variables on `selector`, with the dark palette under prefers-color-scheme. */
+export function themeCss(theme: PageTheme, selector = '.tsp-tree', base = '/assets/'): string {
   const mono = theme.fonts.mono || 'ui-monospace'
   const fonts = [...new Set([theme.fonts.heading, theme.fonts.body, mono].map(fontName))].filter((f) => f && !SYSTEM_FONTS.has(f) && /^[A-Za-z0-9 ]+$/.test(f))
   const head = fonts.length ? `@import url("https://fonts.googleapis.com/css2?${fonts.map((f) => `family=${f.replace(/ /g, '+')}:wght@400;500;600;700`).join('&')}&display=swap");\n` : ''
@@ -100,12 +100,17 @@ export function treeCss(root: El, theme: PageTheme, base = '/assets/'): string {
     `--font-mono:${fontStack(mono, 'ui-monospace, monospace')}`,
     `--radius:${Number(theme.radius) || 0}px`,
   ].join(';')
-  const rules: string[] = [
-    `.tsp-tree{${vars};background:var(--c-bg);color:var(--c-text);font-family:var(--font-body)}`,
-    '.tsp-tree :is(h1,h2,h3,h4,h5,h6){font-family:var(--font-heading)}',
-    '.tsp-tree :is(code,pre,kbd){font-family:var(--font-mono)}',
-  ]
   const dark = theme.dark && Object.keys(theme.dark).length ? colorVars(theme.dark, base) : []
+  return head + [
+    `${selector}{${vars};background:var(--c-bg);color:var(--c-text);font-family:var(--font-body)}`,
+    `${selector} :is(h1,h2,h3,h4,h5,h6){font-family:var(--font-heading)}`,
+    `${selector} :is(code,pre,kbd){font-family:var(--font-mono)}`,
+  ].join('\n') + (dark.length ? `\n@media (prefers-color-scheme: dark){${selector}{${dark.join(';')};color-scheme:dark}}` : '')
+}
+
+/** The stylesheet for a page: theme variables, then one rule per element, its states and its breakpoints. */
+export function treeCss(root: El, theme: PageTheme, base = '/assets/'): string {
+  const rules: string[] = []
   const tablet: string[] = []
   const mobile: string[] = []
   const visit = (e: El) => {
@@ -123,8 +128,7 @@ export function treeCss(root: El, theme: PageTheme, base = '/assets/'): string {
     e.children?.forEach(visit)
   }
   visit(root)
-  return head + rules.join('\n')
-    + (dark.length ? `\n@media (prefers-color-scheme: dark){.tsp-tree{${dark.join(';')};color-scheme:dark}}` : '')
+  return themeCss(theme, '.tsp-tree', base) + '\n' + rules.join('\n')
     + (tablet.length ? `\n@container (max-width: 900px){${tablet.join('')}}` : '')
     + (mobile.length ? `\n@container (max-width: 600px){${mobile.join('')}}` : '')
 }
@@ -253,8 +257,10 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
       return <Tag {...base}>{text}</Tag>
     }
     case 'image': {
-      const src = asset(fill(p.src, row === SAMPLE ? undefined : row, false, t.query), t.assetBase)
+      const raw = fill(p.src, row === SAMPLE ? undefined : row, false, t.query)
+      const src = asset(raw === 'theme:logo' ? t.logo ?? '' : raw, t.assetBase)
       return src && !String(src).includes('{') ? <img {...base} src={String(src)} alt={f(p.alt)} loading={p.eager ? 'eager' : 'lazy'} /> : <div {...base} role="presentation" />
+
     }
     case 'video': {
       const src = asset(p.src, t.assetBase)
@@ -316,7 +322,7 @@ export function Tree({ root, theme, blocks, defaults = {}, data = {}, actions = 
   return (
     <div className="tsp tsp-tree">
       <style>{treeCss(root, theme, assetBase)}</style>
-      <Node e={root} t={{ blocks, defaults, data, actions, assetBase, icon, path, editing, query }} />
+      <Node e={root} t={{ blocks, defaults, data, actions, assetBase, icon, path, editing, query, logo: theme.logo }} />
     </div>
   )
 }

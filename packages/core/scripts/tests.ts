@@ -255,7 +255,7 @@ test('generated web apps render pages with the same blocks and styles as the edi
   const app = Object.keys(files).find((f) => f.endsWith('/components/blocks.tsx'))!.replace('/components/blocks.tsx', '')
   assert.equal(files[`${app}/components/blocks.tsx`], BLOCKS_SOURCE)
   assert.ok(files[`${app}/app/globals.css`].includes(STYLES))
-  assert.match(files[`${app}/app/layout.tsx`], /className="tsp"/)
+  assert.match(files[`${app}/app/layout.tsx`], /className="tsp tsp-app"/)
   assert.match(files[`${app}/components/form.tsx`], /<FormView /)
   assert.match(files[`${app}/Dockerfile`], /COPY --from=build \/app\/public \.\/public/, 'uploaded images in public/ ship with the app')
   assert.ok(files[`${app}/public/robots.txt`], 'public/ always exists, so the copy cannot fail')
@@ -446,4 +446,29 @@ test('query values stay literal and casts never truncate', async () => {
     { id: 'c', name: 'price', type: 'numeric', nullable: false },
   ], indexes: [] } as never, (c) => sqlType(c, 'pg'))
   assert.deepEqual(types, { id: 'bigint', code: 'varchar', price: 'numeric' })
+})
+
+test('themes start from presets and carry a logo and favicon into the app', async () => {
+  const { THEME_PRESETS } = await import('../src/domain/themes')
+  const { themeOf } = await import('../src/domain/tree')
+  const doc = tasksTemplate()
+  const web = doc.nodes.find((n) => n.techId === 'web-app')!
+  runOp(doc, 'setTheme', { appNodeId: web.id, preset: 'ledger', colors: { primary: '#225544' }, logo: 'asset:0193f3a4-0000-7000-8000-000000000001/logo.svg', favicon: 'asset:0193f3a4-0000-7000-8000-000000000001/icon.png' })
+  const t = themeOf(doc, web.id)
+  assert.equal(t.fonts.heading, THEME_PRESETS.ledger.theme.fonts.heading)
+  assert.equal(t.colors.primary, '#225544', 'fields given with a preset override it')
+  assert.equal(t.dark?.primary, THEME_PRESETS.ledger.theme.dark!.primary)
+  runOp(doc, 'setTheme', { appNodeId: web.id, colors: { stamp: '#B07A0E' } })
+  runOp(doc, 'setTheme', { appNodeId: web.id, preset: 'signal' })
+  assert.equal(themeOf(doc, web.id).colors.stamp, '#B07A0E', 'custom color tokens survive a preset')
+  assert.equal(themeOf(doc, web.id).logo, 'asset:0193f3a4-0000-7000-8000-000000000001/logo.svg', 'switching presets keeps the brand')
+  assert.throws(() => runOp(doc, 'setTheme', { appNodeId: web.id, preset: 'neon' }))
+
+  const files = generateAll(doc)
+  const app = `apps/${web.name}`
+  assert.match(files[`${app}/app/layout.tsx`], /"icons":\{"icon":"\/assets\/0193f3a4-0000-7000-8000-000000000001\/icon\.png"\}/)
+  assert.match(files[`${app}/app/globals.css`], /^@import url\("https:\/\/fonts\.googleapis\.com/, 'theme fonts load before any other rule')
+  assert.match(files[`${app}/app/globals.css`], /\.tsp-app\{--c-bg:#FFFFFF/, 'pages outside the tree, like sign-in, use the theme')
+  runOp(doc, 'setTheme', { appNodeId: web.id, logo: null })
+  assert.equal(themeOf(doc, web.id).logo, undefined)
 })

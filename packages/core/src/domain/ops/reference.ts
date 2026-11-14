@@ -81,7 +81,9 @@ Web app pages (for web-app nodes)
   duplicateElement { pageId, elementId }  -> new element id
   groupElements { pageId, elementIds, frame?: { name?, style? } }  -> frame id. The elements must share a parent.
   removeElement { pageId, elementId }
-  setTheme { appNodeId, colors?: { name: "#hex" }, dark?: { name: "#hex" }, fonts?: { heading?, body?, mono? }, radius? }
+  setTheme { appNodeId, preset?, colors?: { name: "#hex" }, dark?: { name: "#hex" }, fonts?: { heading?, body?, mono? }, radius?, logo?, favicon? }
+      preset starts from paper, ledger, signal, orchard or atelier before the other fields apply. logo and favicon are an
+      uploaded asset "asset:<id>/<name>" or an https URL; an image element with src "theme:logo" shows the logo.
       fonts are Google Fonts names, e.g. "Fraunces", "Inter", "JetBrains Mono". dark replaces colors for visitors in dark mode;
       give it its own palette (lighter, desaturated accents and raised surfaces), not an inversion.
 

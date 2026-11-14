@@ -21,7 +21,7 @@
   line-height: 1.5;
   min-height: 100%;
 }
-.tsp.tsp-tree {
+.tsp:is(.tsp-tree, .tsp-app) {
   --tsp-accent: var(--c-primary);
   --tsp-on-accent: var(--c-onPrimary);
   --tsp-ink: var(--c-text);

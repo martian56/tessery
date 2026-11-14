@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AlignCenter, AlignLeft, AlignRight, ArrowDown, ArrowRight, Copy, Group, ImagePlus, Trash2 } from 'lucide-react'
 import type { ConfigValue, Page, StyleMap, UIElement } from '@tessery/core/domain/types'
 import { find, themeOf, walk } from '@tessery/core/domain/tree'
+import { THEME_PRESETS } from '@tessery/core/domain/themes'
 import { BLOCK_META } from '@tessery/core/render/catalog'
 import { primaryKey, tableForOperation } from '@tessery/core/codegen/services/crud'
 import { useAppDispatch, useDoc, useEdit, useUi } from '@/store'
@@ -164,14 +165,14 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
   switch (el.type) {
     case 'text':
       return <Section title="Text"><Field label="Text" hint="Inside a record frame, {field} shows that field."><Textarea value={str('text')} onChange={(x) => prop('text', x)} /></Field>
-        <Field label="Link"><Input mono value={str('href')} onChange={(x) => prop('href', x)} placeholder="none" /></Field>
+        <Field label="Link"><Input mono list="tsp-pages" value={str('href')} onChange={(x) => prop('href', x)} placeholder="none" /></Field><PageList page={page} />
         <Field label="Tag"><Select value={str('tag') || 'p'} onChange={(x) => prop('tag', x, false)} aria-label="Tag" options={['h1', 'h2', 'h3', 'h4', 'p', 'span', 'small', 'strong', 'em', 'blockquote', 'label', 'li', 'code', 'pre', 'kbd', 'time', 'mark', 'del'].map((x) => ({ value: x, label: x }))} /></Field></Section>
     case 'button':
       return (
         <Section title="Button">
           <Field label="Label"><Input value={str('text')} onChange={(x) => prop('text', x)} /></Field>
           <Field label="Icon"><Input mono list="tsp-icons" value={str('icon')} onChange={(x) => prop('icon', x)} placeholder="none" /></Field>
-          <Field label="Link"><Input mono value={str('href')} onChange={(x) => prop('href', x)} placeholder="/pricing or https://…" /></Field>
+          <Field label="Link"><Input mono list="tsp-pages" value={str('href')} onChange={(x) => prop('href', x)} placeholder="/pricing or https://…" /></Field><PageList page={page} />
           <Field label="Opens" hint="A popover frame this button shows, such as a menu."><Select value={str('opens')} onChange={(x) => prop('opens', x || null, false)} aria-label="Opens" options={[{ value: '', label: 'Nothing' }, ...popovers(page).map((x) => ({ value: x.id, label: elementLabel(x) }))]} /></Field>
           <Field label="Submits form"><Switch checked={!!p.submit} onChange={(x) => prop('submit', x || null, false)} /></Field>
           <Field label="Disabled"><Switch checked={!!p.disabled} onChange={(x) => prop('disabled', x || null, false)} /></Field>
@@ -197,7 +198,7 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
     case 'video':
       return (
         <Section title={el.type === 'image' ? 'Image' : 'Video'}>
-          <Field label="Source"><div style={{ display: 'flex', gap: 4, width: '100%' }}><Input mono value={str('src')} onCommit={(x) => prop('src', x, false)} placeholder="asset or https://…" /><Button size="sm" icon={<ImagePlus />} aria-label="Choose from assets" onClick={() => pick('src')} /></div></Field>
+          <Field label="Source"><div style={{ display: 'flex', gap: 4, width: '100%' }}><Input mono value={str('src')} onCommit={(x) => prop('src', x, false)} placeholder="asset, https://… or theme:logo" /><Button size="sm" icon={<ImagePlus />} aria-label="Choose from assets" onClick={() => pick('src')} /></div></Field>
           {el.type === 'image' && <Field label="Alt text"><Input value={str('alt')} onChange={(x) => prop('alt', x)} placeholder="Describe the image" /></Field>}
           {el.type === 'video' && <>
             <Field label="Poster"><div style={{ display: 'flex', gap: 4, width: '100%' }}><Input mono value={str('poster')} onCommit={(x) => prop('poster', x, false)} /><Button size="sm" icon={<ImagePlus />} aria-label="Choose a poster" onClick={() => pick('poster')} /></div></Field>
@@ -212,7 +213,7 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
         <>
           <Section title="Frame" defaultOpen={false}>
             <Field label="Tag" hint="form sends its inputs to the link; details and summary make a disclosure."><Select value={str('tag') || 'div'} onChange={(x) => prop('tag', x, false)} aria-label="Tag" options={['div', 'section', 'header', 'footer', 'nav', 'main', 'article', 'aside', 'ul', 'ol', 'li', 'figure', 'label', 'form', 'search', 'details', 'summary'].map((x) => ({ value: x, label: x }))} /></Field>
-            <Field label="Link" hint="Makes the whole frame a link, for cards and rows."><Input mono value={str('href')} onChange={(x) => prop('href', x)} placeholder="none" /></Field>
+            <Field label="Link" hint="Makes the whole frame a link, for cards and rows."><Input mono list="tsp-pages" value={str('href')} onChange={(x) => prop('href', x)} placeholder="none" /></Field><PageList page={page} />
             <Field label="Popover" hint="Hidden until a button opens it: menus, dialogs."><Switch checked={!!p.popover} onChange={(x) => prop('popover', x || null, false)} /></Field>
           </Section>
           <Section title="Records" defaultOpen={!!p.source}>
@@ -272,6 +273,7 @@ function PageSettings({ page }: { page: Page }) {
   const up = (patch: Parameters<typeof edit<'updatePage'>>[1]['patch']) => edit('updatePage', { pageId: page.id, patch })
   const setColor = (name: string, value: string) => edit('setTheme', { appNodeId: page.appNodeId, colors: { [name]: value } }, { coalesce: `theme:${page.appNodeId}:${name}` })
   const app = doc.nodes.find((n) => n.id === page.appNodeId)
+  const [picking, setPicking] = useState<null | 'logo' | 'favicon'>(null)
   return (
     <div className={ins.wrap}>
       <div className={ins.title}><span className={ins.glyph}>pg</span><div><b>{page.name}</b><span>{page.route}</span></div></div>
@@ -284,7 +286,17 @@ function PageSettings({ page }: { page: Page }) {
       </Section>
       <Section title={`Theme · ${app?.name ?? ''}`}>
         <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>Every page of this app uses it. Elements refer to these as var(--c-name).</div>
+        <div className={f.presets} role="group" aria-label="Starting themes">
+          {Object.entries(THEME_PRESETS).map(([key, x]) => (
+            <button key={key} type="button" className={f.preset} title={x.note} onClick={() => edit('setTheme', { appNodeId: page.appNodeId, preset: key })}>
+              <span className={f.presetSwatches}>{['bg', 'surface', 'text', 'primary'].map((c) => <i key={c} style={{ background: x.theme.colors[c] }} />)}</span>
+              <span>{x.label}</span>
+            </button>
+          ))}
+        </div>
         <div className={f.stack}>
+          <Brand label="Logo" value={theme.logo} onPick={() => setPicking('logo')} onClear={() => edit('setTheme', { appNodeId: page.appNodeId, logo: null })} />
+          <Brand label="Favicon" value={theme.favicon} onPick={() => setPicking('favicon')} onClear={() => edit('setTheme', { appNodeId: page.appNodeId, favicon: null })} />
           {Object.entries(theme.colors).map(([name, value]) => (
             <label key={name} className={f.row}>
               <span className={f.label}>{name}</span>
@@ -296,11 +308,35 @@ function PageSettings({ page }: { page: Page }) {
           <label className={f.row}><span className={f.label}>Heading font</span><input className={f.input} list="tsp-theme-fonts" defaultValue={theme.fonts.heading} key={`h${theme.fonts.heading}`} onBlur={(e) => edit('setTheme', { appNodeId: page.appNodeId, fonts: { heading: e.target.value.trim() || 'system-ui' } })} /><span /></label>
           <label className={f.row}><span className={f.label}>Body font</span><input className={f.input} list="tsp-theme-fonts" defaultValue={theme.fonts.body} key={`b${theme.fonts.body}`} onBlur={(e) => edit('setTheme', { appNodeId: page.appNodeId, fonts: { body: e.target.value.trim() || 'system-ui' } })} /><span /></label>
           <datalist id="tsp-theme-fonts">{FONTS.map((x) => <option key={x} value={x} />)}</datalist>
+          <label className={f.row}><span className={f.label}>Code font</span><input className={f.input} list="tsp-theme-fonts" defaultValue={theme.fonts.mono ?? ''} placeholder="system mono" key={`m${theme.fonts.mono}`} onBlur={(e) => edit('setTheme', { appNodeId: page.appNodeId, fonts: { mono: e.target.value.trim() || undefined } })} /><span /></label>
           <label className={f.row}><span className={f.label}>Radius</span><input className={f.input} defaultValue={theme.radius} key={`r${theme.radius}`} onBlur={(e) => edit('setTheme', { appNodeId: page.appNodeId, radius: Math.max(0, Number(e.target.value) || 0) })} /><span /></label>
         </div>
       </Section>
+      <AssetPicker pid={doc.id} open={picking !== null} accept="image" onClose={() => setPicking(null)} onPick={(a) => { if (picking) edit('setTheme', { appNodeId: page.appNodeId, [picking]: a.reference }) }} />
     </div>
   )
+}
+
+function Brand({ label, value, onPick, onClear }: { label: string; value?: string; onPick: () => void; onClear: () => void }) {
+  const src = value?.startsWith('asset:') ? `/api/assets/${value.slice(6)}` : value
+  return (
+    <div className={f.row}>
+      <span className={f.label}>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        {src ? <img src={src} alt="" className={f.brandThumb} /> : <span className="muted" style={{ fontSize: 12 }}>None</span>}
+        <Button size="xs" onClick={onPick}>{value ? 'Replace' : 'Choose'}</Button>
+        {value && <Button size="xs" variant="ghost" onClick={onClear}>Remove</Button>}
+      </div>
+      <span />
+    </div>
+  )
+}
+
+/** Routes of the pages in the same app, for link fields. Dynamic segments are offered as {field} placeholders. */
+function PageList({ page }: { page: Page }) {
+  const doc = useDoc()
+  const routes = doc.pages.filter((p) => p.appNodeId === page.appNodeId).map((p) => p.route.replace(/\[(\w+)\]/g, '{$1}'))
+  return <datalist id="tsp-pages">{routes.map((r) => <option key={r} value={r} />)}</datalist>
 }
 
 const popovers = (page: Page) => {
