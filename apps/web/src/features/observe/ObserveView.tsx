@@ -182,7 +182,7 @@ function Traces() {
   if (error) return <NotRunning error={error} />
   if (data && !traces.length && !errors && !service) {
     return (
-      <Empty icon={<Activity />} title="No traces yet">
+      <Empty icon={<Activity />} title="No traces yet" action={<Retention env={env} />}>
         Services deployed by Tessery send traces here on their own. They show up once requests reach a service; checkpoints released before trace collection was added need one more release.
       </Empty>
     )

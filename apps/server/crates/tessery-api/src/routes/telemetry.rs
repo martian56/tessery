@@ -43,9 +43,13 @@ pub async fn ingest(State(state): State<AppState>, Path((project, env, signal)):
         tracing::warn!(error = %e, %project, env, "storing spans failed");
         return plain(StatusCode::SERVICE_UNAVAILABLE, "could not store spans");
     }
-    let days = tessery_db::telemetry::retention_days(&state.db, project, &env).await.unwrap_or(tessery_db::telemetry::DEFAULT_RETENTION_DAYS);
-    if let Err(e) = tessery_db::telemetry::prune(&state.db, project, &env, days).await {
-        tracing::warn!(error = %e, %project, env, "removing old spans failed");
+    match tessery_db::telemetry::retention_days(&state.db, project, &env).await {
+        Ok(days) => {
+            if let Err(e) = tessery_db::telemetry::prune(&state.db, project, &env, days).await {
+                tracing::warn!(error = %e, %project, env, "removing old spans failed");
+            }
+        }
+        Err(e) => tracing::warn!(error = %e, %project, env, "reading trace retention failed; old spans are removed on the next export"),
     }
     (StatusCode::OK, [(header::CONTENT_TYPE, "application/x-protobuf")]).into_response()
 }
