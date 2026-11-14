@@ -166,7 +166,7 @@ export interface Block { id: string; type: string; props: Record<string, ConfigV
 /** CSS declarations in camelCase. Numbers are pixels for lengths. Values may use theme tokens such as var(--c-primary). */
 export type StyleMap = Record<string, string | number>
 
-export type ElementType = 'frame' | 'text' | 'image' | 'video' | 'button' | 'icon' | 'input' | 'select' | 'shape' | 'path' | 'embed' | 'block'
+export type ElementType = 'frame' | 'text' | 'image' | 'video' | 'button' | 'icon' | 'input' | 'select' | 'shape' | 'path' | 'embed' | 'block' | 'custom'
 
 /** Style maps an element can carry: the base style, breakpoint overrides and interaction states. */
 export const STYLE_KEYS = ['style', 'tablet', 'mobile', 'hover', 'focus', 'active', 'current'] as const
@@ -193,6 +193,16 @@ export interface UIElement {
   current?: StyleMap
   hidden?: boolean
   children?: UIElement[]
+}
+
+/** A React component written in Tessery. It becomes components/custom/<name>.tsx in the web app, and custom elements render it. */
+export interface CustomComponent {
+  id: string
+  appNodeId: string
+  /** PascalCase, also the file name. */
+  name: string
+  /** TSX with a default export. It may import react and lucide-react. */
+  source: string
 }
 
 export interface Theme {
@@ -271,6 +281,8 @@ export interface ProjectDoc {
   pages: Page[]
   /** Theme per web app node id. */
   themes: Record<string, Theme>
+  /** React components written by hand for things the builder cannot draw, by id. */
+  components?: Record<string, CustomComponent>
   environments: Environment[]
   observability: ObservabilityConfig
   updatedAt: number

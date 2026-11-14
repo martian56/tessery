@@ -70,7 +70,10 @@ pub async fn connect(config: config::Config) -> anyhow::Result<AppState> {
     })
 }
 
-const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; frame-src https:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+/// For sandbox.html, the page builder's preview of hand-written components. Their code is evaluated there, so the page
+/// runs in an iframe sandboxed without same-origin access, and only Tessery may frame it.
+const SANDBOX_CSP: &str = "default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src https: data: blob:; connect-src https:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'";
+const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; media-src 'self' https:; font-src 'self' data: https://fonts.gstatic.com; frame-src 'self' https:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 
 pub fn app(state: AppState) -> Router {
     let request_id = HeaderName::from_static("x-request-id");
@@ -106,6 +109,14 @@ pub fn app(state: AppState) -> Router {
             let html = res.headers().get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).is_some_and(|v| v.starts_with("text/html"));
             html.then(|| HeaderValue::from_static("no-cache"))
         };
+        // The component preview runs code people write, in an iframe sandboxed without allow-same-origin. Its own policy
+        // allows evaluating that code and loading theme fonts, and lets only Tessery frame it.
+        let sandbox = ServiceBuilder::new()
+            .layer(SetResponseHeaderLayer::overriding(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static(SANDBOX_CSP)))
+            .layer(SetResponseHeaderLayer::overriding(header::X_FRAME_OPTIONS, HeaderValue::from_static("SAMEORIGIN")))
+            .layer(SetResponseHeaderLayer::overriding(header::CACHE_CONTROL, HeaderValue::from_static("no-cache")))
+            .service(ServeFile::new(dir.join("sandbox.html")));
+        router = router.route_service("/sandbox.html", sandbox);
         router = router.fallback_service(
             ServiceBuilder::new()
                 .layer(SetResponseHeaderLayer::overriding(header::CACHE_CONTROL, cache))

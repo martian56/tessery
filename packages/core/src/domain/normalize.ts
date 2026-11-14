@@ -49,6 +49,7 @@ export function normalizeDoc(raw: unknown): ProjectDoc {
     databases: record(d.databases),
     pages: list<Page>(d.pages).map((p) => migratePage(p)),
     themes: record(d.themes),
+    components: record(d.components),
     environments: list<Environment>(d.environments).map((e) => environment(e)),
     observability: { ...OBSERVABILITY, ...record(d.observability) },
   }

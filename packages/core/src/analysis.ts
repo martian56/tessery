@@ -1,5 +1,5 @@
 import type { ProjectDoc, Environment } from './domain/types'
-import { blocksOf } from './domain/tree'
+import { blocksOf, walk } from './domain/tree'
 import { TECH_BY_ID } from './catalog/technologies'
 import { checkPlacement } from './catalog/placement'
 import { builtInAuth } from './codegen/deploy/runtime'
@@ -57,6 +57,13 @@ export function analyze(doc: ProjectDoc, env: Environment | undefined, sim: SimR
     if (!op) add({ severity: 'error', area: 'pages', message: `${p.name}: ${what}.${k} bound to a missing operation`, target: { pageId: p.id, blockId: b.id } })
     else if (k === 'source' && !readsOnly(doc.apis[nid].style, op)) add({ severity: 'error', area: 'pages', message: `${p.name}: ${what} reads from ${opName}, which changes data; pages only load from read operations`, target: { pageId: p.id, blockId: b.id } })
   }
+  for (const p of doc.pages) walk(p.root, (e) => {
+    if (e.type !== 'custom') return
+    const c = doc.components?.[String(e.props.component ?? '')]
+    if (!c) add({ severity: 'error', area: 'pages', message: `${p.name}: ${e.name ?? 'a custom element'} uses a component that does not exist`, target: { pageId: p.id, blockId: e.id } })
+    else if (c.appNodeId !== p.appNodeId) add({ severity: 'error', area: 'pages', message: `${p.name}: ${c.name} belongs to another app`, target: { pageId: p.id, blockId: e.id } })
+  })
+  for (const c of Object.values(doc.components ?? {})) if (!/export\s+default\b/.test(c.source)) add({ severity: 'error', area: 'pages', message: `${c.name}: the component needs a default export` })
   if (sim) for (const n of doc.nodes) {
     const r = sim.nodes[n.id]; if (!r) continue
     if (r.down) add({ severity: 'error', area: 'runtime', nodeId: n.id, message: `${n.name}: DOWN (chaos), dependants are failing` })

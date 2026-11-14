@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, ChevronDown, ChevronRight, ChevronsUpDown, Code2, Eye, EyeOff, Frame, ImageIcon, LayoutGrid, RectangleHorizontal, Repeat, Shapes, Spline, Square, TextCursorInput, Type, Video } from 'lucide-react'
+import { Box, ChevronDown, ChevronRight, ChevronsUpDown, Code2, Eye, EyeOff, Frame, ImageIcon, LayoutGrid, Puzzle, RectangleHorizontal, Repeat, Shapes, Spline, Square, TextCursorInput, Type, Video } from 'lucide-react'
 import clsx from 'clsx'
 import type { Page, UIElement } from '@tessery/core/domain/types'
 import { find } from '@tessery/core/domain/tree'
@@ -8,7 +8,7 @@ import { useAppDispatch, useEdit, useUi } from '@/store'
 import { ui } from '@/store/uiSlice'
 import s from './Layers.module.css'
 
-const ICON: Record<string, React.ReactNode> = { frame: <Frame />, text: <Type />, image: <ImageIcon />, video: <Video />, button: <RectangleHorizontal />, shape: <Square />, path: <Spline />, embed: <Code2 />, block: <LayoutGrid />, icon: <Shapes />, input: <TextCursorInput />, select: <ChevronsUpDown /> }
+const ICON: Record<string, React.ReactNode> = { frame: <Frame />, text: <Type />, image: <ImageIcon />, video: <Video />, button: <RectangleHorizontal />, shape: <Square />, path: <Spline />, embed: <Code2 />, block: <LayoutGrid />, icon: <Shapes />, input: <TextCursorInput />, select: <ChevronsUpDown />, custom: <Puzzle /> }
 export const elementLabel = (e: UIElement) => e.name ?? (e.type === 'block' ? BLOCK_META[String(e.props.block)]?.label ?? 'Block' : e.type === 'text' ? String(e.props.text ?? 'Text').slice(0, 28) : e.type[0].toUpperCase() + e.type.slice(1))
 
 export function Layers({ page }: { page: Page }) {

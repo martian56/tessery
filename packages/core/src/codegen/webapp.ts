@@ -84,6 +84,7 @@ export function pageSource(doc: ProjectDoc, p: Page): string {
 ${mode}import { Tree, type El } from '@/components/tree'
 import { BLOCKS, BLOCK_DEFAULTS } from '@/components'
 import { Icon } from '@/components/icon'
+import { CUSTOM } from '@/components/custom'
 ${loads.length ? "import { api } from '@/lib/api'\n" : ''}${p.access !== 'public' || (auth && loads.length) ? `import { ${[p.access !== 'public' ? 'requireSession' : '', auth && loads.length ? 'sessionToken' : ''].filter(Boolean).join(', ')} } from '@/lib/auth'\n` : ''}
 export const metadata = { title: ${JSON.stringify(p.title || p.name)} }
 
@@ -91,7 +92,7 @@ const root: El = ${JSON.stringify(p.root)}
 const theme = ${JSON.stringify(themeOf(doc, p.appNodeId))}
 
 export default async function ${pascal(p.name) || 'Index'}Page(${props}) {
-${params.length ? `  const { ${params.join(', ')} } = await params\n` : ''}${live ? '  const search = await searchParams\n' : ''}${p.access !== 'public' ? `  await requireSession(${p.access === 'admin' ? "'admin'" : ''})\n` : ''}${auth && loads.length ? '  const token = await sessionToken()\n' : ''}${loads.map(([, l]) => l).join('\n')}${loads.length ? '\n' : ''}  return <Tree root={root} theme={theme} blocks={BLOCKS} defaults={BLOCK_DEFAULTS} icon={Icon} path={${current}}${live ? ' query={search}' : ''}${data.length ? ` data={{ ${data.join(', ')} }}` : ''}${actions.length ? ` actions={{ ${actions.join(', ')} }}` : ''} />
+${params.length ? `  const { ${params.join(', ')} } = await params\n` : ''}${live ? '  const search = await searchParams\n' : ''}${p.access !== 'public' ? `  await requireSession(${p.access === 'admin' ? "'admin'" : ''})\n` : ''}${auth && loads.length ? '  const token = await sessionToken()\n' : ''}${loads.map(([, l]) => l).join('\n')}${loads.length ? '\n' : ''}  return <Tree root={root} theme={theme} blocks={BLOCKS} defaults={BLOCK_DEFAULTS} icon={Icon} custom={CUSTOM} path={${current}}${live ? ' query={search}' : ''}${data.length ? ` data={{ ${data.join(', ')} }}` : ''}${actions.length ? ` actions={{ ${actions.join(', ')} }}` : ''} />
 }
 `
 }
@@ -241,6 +242,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   f[`${dir}/components/blocks.tsx`] = BLOCKS_SOURCE
   f[`${dir}/components/tree.tsx`] = TREE_SOURCE
   f[`${dir}/components/icon.tsx`] = ICON
+  const custom = Object.values(doc.components ?? {}).filter((c) => c.appNodeId === app.id).sort((a, b) => a.name.localeCompare(b.name))
+  for (const c of custom) f[`${dir}/components/custom/${c.name}.tsx`] = c.source.endsWith('\n') ? c.source : `${c.source}\n`
+  f[`${dir}/components/custom/index.ts`] = `// Hand-written components from Tessery, by id. Each file is yours to edit: changes pushed to git are kept unless the component is edited in Tessery again.\n${custom.map((c) => `import ${c.name} from './${c.name}'\n`).join('')}\nexport const CUSTOM: Record<string, (props: any) => any> = {${custom.map((c) => `\n  ${JSON.stringify(c.id)}: ${c.name},`).join('')}${custom.length ? '\n' : ''}}\n`
   f[`${dir}/components/form.tsx`] = FORM
   if (!auth) f[`${dir}/lib/auth.ts`] = AUTH
   f[`${dir}/Dockerfile`] = `FROM node:24-alpine AS build

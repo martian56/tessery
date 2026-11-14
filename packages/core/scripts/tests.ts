@@ -370,7 +370,7 @@ test('record frames, placeholders, states, dark colors and icons render the way 
   const app = Object.keys(files).find((f) => f.endsWith('/components/tree.tsx'))!.replace('/components/tree.tsx', '')
   const page = files[`${app}/app/page.tsx`]
   assert.ok(page.includes(`${JSON.stringify(list)}: data`), 'the page passes the loaded records to the frame')
-  assert.match(page, /icon=\{Icon\} path=\{"\/"\}/)
+  assert.match(page, /icon=\{Icon\} custom=\{CUSTOM\} path=\{"\/"\}/)
   assert.match(files[`${app}/components/icon.tsx`], /from 'lucide-react'/)
   assert.match(files[`${app}/components/icon.tsx`], /BY_NAME\.get\(squash\(name\)\)/, 'any spelling of an icon name resolves')
   assert.ok(JSON.parse(files[`${app}/package.json`]).dependencies['lucide-react'])
@@ -509,4 +509,30 @@ test('an empty list says whether nothing exists or nothing matched', async () =>
   assert.ok(!filtered(undefined) && !filtered({}) && !filtered({ page: '2' }) && !filtered({ q: '' }))
   assert.ok(!filtered({ sort: 'name' }) && !filtered({ error: '400' }) && !filtered({ limit: '10', offset: '20' }), 'sorting, paging and errors are not filters')
   assert.ok(filtered({ q: 'bean' }) && filtered({ crop: ['Bean'] }))
+})
+
+test('hand-written components become files the pages render', async () => {
+  const { analyze } = await import('../src/analysis')
+  const doc = tasksTemplate()
+  const web = doc.nodes.find((n) => n.techId === 'web-app')!
+  const home = doc.pages.find((p) => p.route === '/')!
+  const chart = runOp(doc, 'addComponent', { appNodeId: web.id, name: 'PriceChart' }) as string
+  assert.throws(() => runOp(doc, 'addComponent', { appNodeId: web.id, name: 'PriceChart' }), /already has/)
+  assert.throws(() => runOp(doc, 'addComponent', { appNodeId: web.id, name: 'price-chart' }), /PascalCase/)
+  assert.throws(() => runOp(doc, 'addComponent', { appNodeId: web.id, name: '../Evil' }), /PascalCase/)
+  const el = runOp(doc, 'addElement', { pageId: home.id, element: { type: 'custom', props: { component: chart, title: 'Prices' } } }) as string
+  assert.ok(el)
+
+  const files = generateAll(doc)
+  const app = `apps/${web.name}`
+  assert.match(files[`${app}/components/custom/PriceChart.tsx`], /export default function PriceChart/)
+  assert.ok(files[`${app}/components/custom/index.ts`].includes(`import PriceChart from './PriceChart'`))
+  assert.ok(files[`${app}/components/custom/index.ts`].includes(`${JSON.stringify(chart)}: PriceChart,`))
+  assert.match(files[`${app}/app/page.tsx`], /custom=\{CUSTOM\}/)
+
+  runOp(doc, 'updateComponent', { componentId: chart, patch: { source: 'export function Nope() { return null }' } })
+  assert.ok(analyze(doc, undefined, null).some((x) => /needs a default export/.test(x.message)))
+  runOp(doc, 'removeComponent', { componentId: chart })
+  assert.ok(analyze(doc, undefined, null).some((x) => x.target?.blockId === el && /does not exist/.test(x.message)))
+  assert.ok(!Object.keys(generateAll(doc)).some((f) => f.endsWith('/custom/PriceChart.tsx')))
 })

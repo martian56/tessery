@@ -71,6 +71,8 @@ Web app pages (for web-app nodes)
         path    { d, viewBox }  an SVG path in viewBox units; style.stroke, style.strokeWidth and style.fill draw it
         embed   { src, title }  an https iframe such as a video or a map
         block   { block, ...props }  one of the blocks below, with props.source / props.action for data
+        custom  { component, ...props }  renders a hand-written component (see addComponent) with the other props, which
+                can use {field} inside a record frame. Use it for what elements cannot express: charts, maps, canvases.
       style is CSS in camelCase; numbers are pixels for lengths (fontSize: 64, gap: 24). Use theme tokens for color and type:
         var(--c-primary) var(--c-onPrimary) var(--c-text) var(--c-muted) var(--c-bg) var(--c-surface) var(--c-border) and any
         color you add with setTheme, var(--font-heading) var(--font-body) var(--font-mono) var(--radius).
@@ -112,6 +114,11 @@ Web app pages (for web-app nodes)
     Motion: animate one or two things per view, with transform and opacity, 100 to 150ms for feedback, 150 to 300ms for
       routine changes, 300 to 500ms for entrances; exits faster than entrances.
     Empty and error states say what happened and what to do next; errors do not apologize.
+  addComponent { appNodeId, name, source? }  -> component id. name is PascalCase and becomes components/custom/<name>.tsx.
+      source is TSX with a default export taking props; it may import react and lucide-react, should style with the
+      theme variables, and can be a client component ('use client' first) when it needs state or effects.
+  updateComponent { componentId, patch: { name?, source? } }
+  removeComponent { componentId }
   addBlock { pageId, type, props }  -> element id. Adds a block at the end of the page. Data blocks read with props.source = "<serviceNodeId>:<operationName>"; forms write with props.action the same way.
       Block types: navbar, banner, hero, text, features, stats, table (columns: "Title, Done"), grid, detail, kanban, cart, form (fields: "Title, Body", submit), upload, chat, pricing, testimonial, faq, footer.
   updateBlock { pageId, blockId, key, value }
