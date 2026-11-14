@@ -1,4 +1,5 @@
-import type { ApiSpec, Block, Column, Environment, Index, Operation, Page, ProjectDoc, Table, TypeDef, AlertRule, SloDef, ObservabilityConfig, ConfigValue, ElementType, Theme, UIElement } from '../types'
+import type { ApiSpec, Block, Column, Environment, Index, Operation, Page, ProjectDoc, Table, TypeDef, AlertRule, SloDef, ObservabilityConfig, ConfigValue, ElementType, StyleKey, Theme, UIElement } from '../types'
+import { STYLE_KEYS } from '../types'
 import { blockElement, find, pageRoot, themeOf } from '../tree'
 import { block as mkBlock, op as mkOp, table as mkTable, type as mkType, uid } from '../builders'
 
@@ -122,16 +123,16 @@ export const dbOps = {
 }
 
 type ElementInput = Partial<Omit<UIElement, 'children'>> & { type: ElementType; children?: ElementInput[] }
-type ElementPatch = { props?: Record<string, ConfigValue | null>; style?: Record<string, string | number | null>; tablet?: Record<string, string | number | null>; mobile?: Record<string, string | number | null>; hover?: Record<string, string | number | null>; name?: string; hidden?: boolean }
+type ElementPatch = { props?: Record<string, ConfigValue | null>; name?: string; hidden?: boolean } & Partial<Record<StyleKey, Record<string, string | number | null>>>
 
-const ELEMENT_TYPES = new Set<ElementType>(['frame', 'text', 'image', 'video', 'button', 'shape', 'path', 'embed', 'block'])
+const ELEMENT_TYPES = new Set<ElementType>(['frame', 'text', 'image', 'video', 'button', 'icon', 'input', 'select', 'shape', 'path', 'embed', 'block'])
 
 /** Gives an element and its children fresh ids. */
 function build(e: ElementInput): UIElement {
   if (!ELEMENT_TYPES.has(e.type)) throw new Error(`unknown element type ${e.type}; use ${[...ELEMENT_TYPES].join(', ')}`)
   const out: UIElement = { id: uid('el'), type: e.type, props: { ...(e.props ?? {}) } }
   if (e.name) out.name = e.name
-  for (const k of ['style', 'tablet', 'mobile', 'hover'] as const) if (e[k] && Object.keys(e[k]!).length) out[k] = { ...e[k] }
+  for (const k of STYLE_KEYS) if (e[k] && Object.keys(e[k]!).length) out[k] = { ...e[k] }
   if (e.hidden) out.hidden = true
   if (e.type === 'frame') out.children = (e.children ?? []).map(build)
   return out
@@ -183,7 +184,7 @@ export const pageOps = {
   updateElement(doc: ProjectDoc, a: { pageId: string; elementId: string; patch: ElementPatch }) {
     const { el } = at(doc, a.pageId, a.elementId)
     if (a.patch.props) el.props = merge(el.props, a.patch.props) as UIElement['props']
-    for (const k of ['style', 'tablet', 'mobile', 'hover'] as const) {
+    for (const k of STYLE_KEYS) {
       if (!a.patch[k]) continue
       const next = merge(el[k], a.patch[k]!) as Record<string, string | number>
       if (Object.keys(next).length) el[k] = next; else delete el[k]
@@ -231,10 +232,11 @@ export const pageOps = {
     parent.children.splice(index, 0, frame)
     return frame.id
   },
-  setTheme(doc: ProjectDoc, a: { appNodeId: string; colors?: Record<string, string | null>; fonts?: Partial<Theme['fonts']>; radius?: number }) {
+  setTheme(doc: ProjectDoc, a: { appNodeId: string; colors?: Record<string, string | null>; dark?: Record<string, string | null>; fonts?: Partial<Theme['fonts']>; radius?: number }) {
     const t = themeOf(doc, a.appNodeId)
     const colors = merge(t.colors, a.colors ?? {}) as Record<string, string>
-    doc.themes = { ...(doc.themes ?? {}), [a.appNodeId]: { colors, fonts: { ...t.fonts, ...(a.fonts ?? {}) }, radius: a.radius ?? t.radius } }
+    const dark = merge(t.dark, a.dark ?? {}) as Record<string, string>
+    doc.themes = { ...(doc.themes ?? {}), [a.appNodeId]: { colors, fonts: { ...t.fonts, ...(a.fonts ?? {}) }, radius: a.radius ?? t.radius, ...(Object.keys(dark).length ? { dark } : {}) } }
   },
 
   addBlock(doc: ProjectDoc, a: { pageId: string; type: string; props: Block['props']; after?: string }) {
