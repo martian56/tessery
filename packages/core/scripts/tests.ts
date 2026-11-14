@@ -433,3 +433,17 @@ test('lists search, filter, sort and page, and pages pass their query along', as
   const again = generateAll(doc)[`${app}/app/page.tsx`]
   assert.ok(!again.includes('searchParams'), 'static pages do not read the query')
 })
+
+test('query values stay literal and casts never truncate', async () => {
+  const { fill } = await import('../src/render/tree')
+  assert.equal(fill('{?q}', { name: 'Bean' }, false, { q: '{name}' }), '{name}', 'a query value is not read as a record placeholder')
+  assert.equal(fill('{?q} {name}', { name: 'Bean' }, false, { q: 'x' }), 'x Bean')
+  const { columnTypes } = await import('../src/codegen/services/crud')
+  const { sqlType } = await import('../src/codegen/backend')
+  const types = columnTypes({ id: 't', name: 'items', columns: [
+    { id: 'a', name: 'id', type: 'serial', nullable: false, pk: true },
+    { id: 'b', name: 'code', type: 'varchar', length: 3, nullable: false },
+    { id: 'c', name: 'price', type: 'numeric', nullable: false },
+  ], indexes: [] } as never, (c) => sqlType(c, 'pg'))
+  assert.deepEqual(types, { id: 'bigint', code: 'varchar', price: 'numeric' })
+})

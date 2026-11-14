@@ -188,10 +188,11 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 
 /** Fills `{field}`, `{author.name}` and `{price|money}` from the record being rendered, and `{?q}` from the page's query. */
 export function fill(text: unknown, row: Row | undefined, encode = false, query?: TreeProps['query']): string {
-  let s = String(text ?? '')
-  if (s.includes('{?')) s = s.replace(/\{\?([A-Za-z_][\w-]*)\}/g, (_m, k: string) => (encode ? encodeURIComponent(one(query?.[k])) : one(query?.[k])))
-  if (!row) return s
-  return s.replace(/\{([A-Za-z_][\w.]*)(?:\|(\w+))?\}/g, (_m, path: string, how = '') => {
+  const s = String(text ?? '')
+  if (!row && !s.includes('{?')) return s
+  return s.replace(/\{(\?)?([A-Za-z_][\w.-]*)(?:\|(\w+))?\}/g, (m, q: string | undefined, path: string, how = '') => {
+    if (q) return encode ? encodeURIComponent(one(query?.[path])) : one(query?.[path])
+    if (!row) return m
     const out = format(lookup(row, path), how)
     return encode && row !== SAMPLE ? encodeURIComponent(out) : out
   })
@@ -252,8 +253,8 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
       return <Tag {...base}>{text}</Tag>
     }
     case 'image': {
-      const src = asset(fill(p.src, row === SAMPLE ? undefined : row), t.assetBase)
-      return src && !String(src).includes('{') ? <img {...base} src={String(src)} alt={fill(p.alt, row)} loading={p.eager ? 'eager' : 'lazy'} /> : <div {...base} role="presentation" />
+      const src = asset(fill(p.src, row === SAMPLE ? undefined : row, false, t.query), t.assetBase)
+      return src && !String(src).includes('{') ? <img {...base} src={String(src)} alt={f(p.alt)} loading={p.eager ? 'eager' : 'lazy'} /> : <div {...base} role="presentation" />
     }
     case 'video': {
       const src = asset(p.src, t.assetBase)
@@ -266,10 +267,11 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
       if (p.disabled) base['aria-disabled'] = true
       if (p.opens) return <button {...base} type="button" disabled={!!p.disabled} popoverTarget={t.editing ? undefined : popId(String(p.opens), scope)}>{inner}</button>
       if (p.submit) return <button {...base} type="submit" disabled={!!p.disabled}>{inner}</button>
-      return <a {...base} href={p.disabled ? undefined : link(p.href) ?? '#'}>{inner}</a>
+      const href = p.disabled ? undefined : link(p.href) ?? '#'
+      return <a {...base} href={href}>{inner}</a>
     }
     case 'icon': {
-      const name = fill(p.name, row === SAMPLE ? undefined : row)
+      const name = fill(p.name, row === SAMPLE ? undefined : row, false, t.query)
       if (!t.icon || !name) return <span {...base} aria-hidden />
       return t.icon({ name, className: String(base.className), ...(p.label ? { 'aria-label': String(base['aria-label']) } : { 'aria-hidden': true }), ...(copy ? {} : { 'data-node': e.id }) })
     }

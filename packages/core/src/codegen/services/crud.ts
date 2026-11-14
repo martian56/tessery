@@ -100,8 +100,15 @@ export function orderBy(t: Table): string {
   return created ? `"${created.name}" DESC` : `"${primaryKey(t)!.name}"`
 }
 
+const SERIAL: Record<string, string> = { smallserial: 'smallint', serial: 'integer', bigserial: 'bigint' }
+
+/** Types the runtimes cast query values to: no length or precision, which would truncate or round a value before
+ * comparing, and serial types as the integers they are, since serial only exists in CREATE TABLE. */
 export function columnTypes(t: Table, sqlType: (c: Column) => string): Record<string, string> {
-  return Object.fromEntries(t.columns.map((c) => [c.name, sqlType(c)]))
+  return Object.fromEntries(t.columns.map((c) => {
+    const ty = sqlType(c).replace(/\s*\([^)]*\)/g, '').trim()
+    return [c.name, SERIAL[ty] ?? ty]
+  }))
 }
 
 export function tableForOperation(doc: ProjectDoc, nodeId: string, opName: string): CrudRoute | undefined {
