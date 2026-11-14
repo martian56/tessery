@@ -46,7 +46,7 @@ window.addEventListener('message', (e) => {
   if (e.source !== window.parent) return
   const m = e.data as Render
   if (m?.type !== 'render') return
-  style.textContent = `html,body{margin:0;background:transparent}${m.css}`
+  style.textContent = `html,body{margin:0;background:transparent;overflow:hidden}${m.css}`
   try {
     const C = compile(m.source)
     root.render(<Boundary key={m.source}><C {...m.props} /></Boundary>)
@@ -55,5 +55,6 @@ window.addEventListener('message', (e) => {
   }
 })
 
-new ResizeObserver(() => window.parent.postMessage({ type: 'size', height: document.documentElement.scrollHeight }, '*')).observe(document.body)
+const rootEl = document.getElementById('root')!
+new ResizeObserver(() => window.parent.postMessage({ type: 'size', height: Math.ceil(rootEl.getBoundingClientRect().height) }, '*')).observe(rootEl)
 window.parent.postMessage({ type: 'ready' }, '*')

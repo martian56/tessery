@@ -117,6 +117,11 @@ pub fn app(state: AppState) -> Router {
             .layer(SetResponseHeaderLayer::overriding(header::CACHE_CONTROL, HeaderValue::from_static("no-cache")))
             .service(ServeFile::new(dir.join("sandbox.html")));
         router = router.route_service("/sandbox.html", sandbox);
+        // Its script has a fixed name, so it is revalidated like the page.
+        let script = ServiceBuilder::new()
+            .layer(SetResponseHeaderLayer::overriding(header::CACHE_CONTROL, HeaderValue::from_static("no-cache")))
+            .service(ServeFile::new(dir.join("sandbox.js")));
+        router = router.route_service("/sandbox.js", script);
         router = router.fallback_service(
             ServiceBuilder::new()
                 .layer(SetResponseHeaderLayer::overriding(header::CACHE_CONTROL, cache))
