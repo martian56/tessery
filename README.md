@@ -86,7 +86,8 @@ curl -fsSL https://raw.githubusercontent.com/martian56/tessery/main/deploy/insta
 The script installs Docker if needed, asks for the domain, writes `/opt/tessery/.env` with generated
 secrets and starts the published images behind Caddy, which serves HTTPS. Only ports 80 and 443 are
 opened; Postgres, Redis and RabbitMQ stay on the internal network. Back up `.env`:
-`TESSERY_SECRET_KEY` encrypts environment secrets and git credentials and cannot be recovered.
+`TESSERY_SECRET_KEY` encrypts environment secrets, git credentials and provider credentials and cannot be
+recovered.
 Set `TESSERY_IMAGE_TAG` in `.env` to pin a version. Every variable is described in
 [`deploy/.env.example`](deploy/.env.example).
 
@@ -95,6 +96,20 @@ repositories and `.env` to `/opt/tessery/backups`, and can also upload it to any
 Cloudflare R2, when `TESSERY_BACKUP_S3_BUCKET`, `TESSERY_BACKUP_S3_ENDPOINT`, `TESSERY_BACKUP_S3_ACCESS_KEY` and
 `TESSERY_BACKUP_S3_SECRET_KEY` are set. Restore with `sudo /opt/tessery/restore.sh <archive>` on the same or a new
 machine after running `install.sh`. Run `backup.sh` from cron for regular backups.
+
+### Rotating the secret key
+
+Change `TESSERY_SECRET_KEY` when it may have leaked, or on a schedule. In `/opt/tessery`:
+
+1. Generate a new key with `openssl rand -hex 32`. In `.env`, move the current value to
+   `TESSERY_SECRET_KEY_PREVIOUS` and put the new one in `TESSERY_SECRET_KEY`.
+2. `docker compose up -d`. Tessery now writes with the new key and still reads with the old one.
+3. `docker compose exec server tessery-server rotate-key`. It re-encrypts every stored value in one
+   transaction and prints how many it moved. If any value cannot be read it changes nothing.
+4. Redeploy environments that send traces, so they get telemetry tokens made from the new key.
+5. Remove `TESSERY_SECRET_KEY_PREVIOUS` from `.env` and run `docker compose up -d` again.
+
+Take a backup first; archives made before the rotation need the old key to restore.
 
 The root `docker-compose.yml` is for development: it builds from source, uses fixed passwords and
 publishes the database ports.

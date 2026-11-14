@@ -6,6 +6,9 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
+    if std::env::args().nth(1).as_deref() == Some("rotate-key") {
+        return tessery_api::rotate::run_command().await;
+    }
     let config = Config::from_env()?;
     init_tracing(config.log_json);
     let bind = config.bind;

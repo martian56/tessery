@@ -24,8 +24,8 @@ pub async fn ingest(State(state): State<AppState>, Path((project, env, signal)):
         return plain(StatusCode::SERVICE_UNAVAILABLE, "TESSERY_SECRET_KEY is not set, so telemetry is off");
     };
     let sent = headers.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).unwrap_or_default();
-    let want = tessery_core::runner::telemetry_token(key, project, &env);
-    if !constant_time_eq(sent.as_bytes(), want.as_bytes()) {
+    let accepted = tessery_core::runner::telemetry_tokens(key, project, &env);
+    if !accepted.iter().any(|want| constant_time_eq(sent.as_bytes(), want.as_bytes())) {
         return plain(StatusCode::UNAUTHORIZED, "bad ingest token");
     }
     if signal != "traces" {
