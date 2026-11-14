@@ -206,6 +206,7 @@ function Node({ e, t, row, copy }: { e: El; t: Ctx; row?: Row; copy?: boolean })
           : <p className="tsp-empty">{String(p.empty ?? 'Nothing here yet.')}</p>
       }
       if (p.popover && !t.editing) { base.id = cls(e.id); base.popover = 'auto' }
+      if (p.popover && t.editing) base['data-popover'] = ''
       if (tag === 'details' && (t.editing || p.open)) base.open = true
       if (tag === 'form') {
         const action = link(p.href)

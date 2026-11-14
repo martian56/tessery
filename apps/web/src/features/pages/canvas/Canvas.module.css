@@ -26,3 +26,4 @@
 .ink path { fill: none; stroke: #4f8cff; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .ink circle { fill: #fff; stroke: #4f8cff; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .editor { position: absolute; pointer-events: auto; outline: 1.5px solid #4f8cff; white-space: pre-wrap; cursor: text; user-select: text; box-sizing: border-box; }
+.page :global([data-popover]) { position: relative !important; inset: auto !important; translate: none !important; margin: 40px auto !important; animation: none !important; outline: 1px dashed #4f8cff; outline-offset: 8px; }
