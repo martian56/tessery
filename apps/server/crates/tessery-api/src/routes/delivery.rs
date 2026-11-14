@@ -579,6 +579,33 @@ pub async fn release_preview(
     Ok(Json(ReleasePreviewDto { migrations: migrations.into_iter().map(Into::into).collect() }))
 }
 
+/// Where an environment runs, its domains, scale and secrets are settings, not code, so a release applies the ones the
+/// environment has now. When they differ from the checkpoint's copy, the release deploys a commit on top of the
+/// checkpoint whose deploy/<env> files and design are regenerated with the current settings; otherwise None.
+async fn with_current_settings(state: &AppState, p: &Principal, project: Uuid, current: &Value, env: &str, checkpoint: &db::Checkpoint) -> ApiResult<Option<String>> {
+    let repo = state.repos.open(project).await.map_err(git_err)?;
+    let Ok(raw) = repo.read_file(&checkpoint.commit_sha, DESIGN_FILE).await else { return Ok(None) };
+    let mut doc: Value = serde_json::from_slice(&raw).map_err(|e| ApiError::Internal(e.into()))?;
+    let find = |d: &Value| d["environments"].as_array().and_then(|list| list.iter().find(|e| e["id"] == env)).cloned();
+    let (Some(now), Some(then)) = (find(current), find(&doc)) else { return Ok(None) };
+    if now == then {
+        return Ok(None);
+    }
+    if let Some(list) = doc["environments"].as_array_mut() {
+        list.iter_mut().filter(|e| e["id"] == env).for_each(|e| *e = now.clone());
+    }
+    let previous = previous_migrations(state, project).await?;
+    let generated = state.engine.generate(&doc, previous.as_ref()).await.map_err(engine_err)?;
+    let prefix = format!("deploy/{env}/");
+    let mut files: BTreeMap<String, Vec<u8>> = generated.into_iter().filter(|(path, _)| path.starts_with(&prefix)).map(|(path, content)| (path, content.into_bytes())).collect();
+    let mut design = serde_json::to_vec_pretty(&doc).map_err(|e| ApiError::Internal(e.into()))?;
+    design.push(b'\n');
+    files.insert(DESIGN_FILE.to_owned(), design);
+    let author = tessery_git::Author { name: p.user.name.clone(), email: p.user.email.clone() };
+    let message = format!("Apply the current {env} settings to checkpoint {}", checkpoint.seq);
+    Ok(Some(repo.commit_over(&checkpoint.commit_sha, &prefix, &files, &message, &author).await.map_err(git_err)?))
+}
+
 /// Releases a checkpoint into an environment. Goes live at once unless the environment requires
 /// approval, in which case it waits as `pending`.
 #[utoipa::path(post, path = "/api/projects/{project}/releases", tag = "delivery", params(("project" = Uuid, Path)), request_body = CreateRelease, responses((status = 201, body = ReleaseDto), (status = 409)))]
@@ -610,13 +637,15 @@ pub async fn create_release(
     {
         return Err(ApiError::Conflict(format!("checkpoint {} has not been released to {} yet", checkpoint.seq, all[idx - 1].name)));
     }
+    let settings = with_current_settings(&state, &p, project, &saved.doc, &stage.key, &checkpoint).await?;
+    let commit = settings.as_deref().unwrap_or(&checkpoint.commit_sha);
     let head = db::heads(&mut *tx, project).await?.into_iter().find(|h| h.env_key == stage.key);
     if !req.redeploy && head.as_ref().is_some_and(|h| h.checkpoint_id == checkpoint.id) {
         return Err(ApiError::Conflict(format!("{} already runs checkpoint {}", stage.name, checkpoint.seq)));
     }
 
     if !req.confirm_destructive {
-        let risky: Vec<String> = release_migrations(&state, project, &stage.key, &checkpoint.commit_sha)
+        let risky: Vec<String> = release_migrations(&state, project, &stage.key, commit)
             .await?
             .into_iter()
             .flat_map(|m| m.destructive.into_iter().map(move |d| format!("{} {}: {d}", m.database, m.file)))
@@ -626,9 +655,9 @@ pub async fn create_release(
         }
     }
 
-    let runner = needs_runner(&state, project, &checkpoint.commit_sha, &stage.key).await;
+    let runner = needs_runner(&state, project, commit, &stage.key).await;
     if runner {
-        let missing = missing_secrets(&state, project, &checkpoint.commit_sha, &stage.key).await?;
+        let missing = missing_secrets(&state, project, commit, &stage.key).await?;
         if !missing.is_empty() {
             return Err(ApiError::Conflict(format!("set these secrets for {} first: {}", stage.name, missing.join(", "))));
         }
@@ -640,7 +669,7 @@ pub async fn create_release(
     };
     let id = db::insert_release(
         &mut tx,
-        NewRelease { project_id: project, env_key: &stage.key, checkpoint_id: checkpoint.id, from_env, status, note: req.note.trim(), requested_by: p.user.id },
+        NewRelease { project_id: project, env_key: &stage.key, checkpoint_id: checkpoint.id, from_env, status, note: req.note.trim(), requested_by: p.user.id, commit_sha: settings.as_deref() },
     )
     .await
     .map_err(|e| match e {
@@ -655,7 +684,7 @@ pub async fn create_release(
         &p,
         Entry::new(Some(project_target.org().0), if stage.approval { "release.request" } else { "release.apply" }, "project", project)
             .decision(d)
-            .details(json!({ "env": stage.key, "checkpoint": checkpoint.seq, "commit": checkpoint.commit_sha, "release": id })),
+            .details(json!({ "env": stage.key, "checkpoint": checkpoint.seq, "commit": commit, "release": id })),
     )
     .await?;
     let row = db::get_release(&mut *tx, id).await?;

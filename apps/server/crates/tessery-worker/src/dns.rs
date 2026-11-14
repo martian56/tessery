@@ -30,6 +30,20 @@ fn host_of(address: &str) -> Option<&str> {
     Some(host.rsplit_once(':').map_or(host, |(h, _)| h))
 }
 
+/// The host in Tessery's public URL, which is where environments on Tessery's own machine are reached.
+fn public_host(url: &str) -> Option<String> {
+    let rest = url.trim().split_once("://").map_or(url.trim(), |(_, r)| r);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
+    let host = host.rsplit_once(':').map_or(host, |(h, _)| h).trim().to_ascii_lowercase();
+    (!host.is_empty() && host != "localhost" && !host.ends_with(".localhost")).then_some(host)
+}
+
+/// Records must lead somewhere people can reach, so loopback, private and link-local addresses are never published.
+fn reachable(ip: &str) -> bool {
+    ip.parse::<std::net::Ipv4Addr>().is_ok_and(|a| !(a.is_loopback() || a.is_private() || a.is_link_local() || a.is_unspecified() || a.is_broadcast() || (a.octets()[0] == 100 && (a.octets()[1] & 0xc0) == 64)))
+}
+
 async fn ipv4(host: &str) -> Option<String> {
     if host.parse::<std::net::Ipv4Addr>().is_ok() {
         return Some(host.to_owned());
@@ -47,14 +61,24 @@ pub async fn publish(ctx: &Ctx, project: Uuid, env: &str, plan: &Value, remote: 
     if accounts.is_empty() {
         return Ok(());
     }
-    let Some(host) = remote.and_then(host_of) else {
-        log.line("DNS: not managed, because this environment runs on the machine Tessery itself uses. Point the records at its public address by hand.");
-        return Ok(());
+    let host = match remote.and_then(host_of) {
+        Some(h) => h.to_owned(),
+        None => match ctx.runner.public_url.as_deref().and_then(public_host) {
+            Some(h) => h,
+            None => {
+                log.line("DNS: not managed, because this environment runs on the machine Tessery itself uses and TESSERY_PUBLIC_URL does not name a public host. Point the records at its public address by hand.");
+                return Ok(());
+            }
+        },
     };
-    let Some(ip) = ipv4(host).await else {
+    let Some(ip) = ipv4(&host).await else {
         log.line(format!("DNS: could not find an IPv4 address for {host}, so no records were created"));
         return Ok(());
     };
+    if !reachable(&ip) {
+        log.line(format!("DNS: {host} is at {ip}, which the internet cannot reach, so no records were created"));
+        return Ok(());
+    }
     let apis = tessery_cloud::endpoints_from_env();
     let tag = tessery_cloud::dns_tag(&project.to_string(), env);
     for name in names {
@@ -90,7 +114,23 @@ pub async fn unpublish(ctx: &Ctx, org: Uuid, project: Uuid, env: &str, log: &Log
 
 #[cfg(test)]
 mod tests {
-    use super::host_of;
+    use super::{host_of, public_host, reachable};
+
+    #[test]
+    fn environments_on_tessery_itself_use_its_public_host() {
+        assert_eq!(public_host("https://tessery.example.com").as_deref(), Some("tessery.example.com"));
+        assert_eq!(public_host("https://Tessery.Example.com:8443/app?x=1").as_deref(), Some("tessery.example.com"));
+        assert_eq!(public_host("http://localhost:5173"), None);
+        assert_eq!(public_host("http://app.localhost"), None);
+    }
+
+    #[test]
+    fn only_public_addresses_get_records() {
+        assert!(reachable("167.233.46.141"));
+        for ip in ["127.0.0.1", "10.0.0.5", "192.168.1.9", "172.17.0.1", "169.254.1.1", "100.64.0.1", "0.0.0.0", "nope"] {
+            assert!(!reachable(ip), "{ip}");
+        }
+    }
 
     #[test]
     fn reads_the_host_of_an_ssh_address() {

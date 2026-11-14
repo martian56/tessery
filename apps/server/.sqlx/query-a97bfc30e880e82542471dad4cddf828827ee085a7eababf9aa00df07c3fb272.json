@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT r.id, r.project_id, r.env_key, r.checkpoint_id, c.seq AS checkpoint_seq, c.name AS checkpoint_name,\n                  c.commit_sha, r.from_env, r.status AS \"status: ReleaseStatus\", r.note, r.requested_by,\n                  rq.name AS \"requester_name?\", r.requested_at, r.decided_by, dc.name AS \"decider_name?\",\n                  r.decided_at, r.decision_note, r.error, r.started_at, r.finished_at, r.endpoints\n           FROM releases r JOIN checkpoints c ON c.id = r.checkpoint_id\n           LEFT JOIN users rq ON rq.id = r.requested_by LEFT JOIN users dc ON dc.id = r.decided_by\n           WHERE r.project_id = $1 ORDER BY r.requested_at DESC LIMIT $2",
+  "query": "SELECT r.id, r.project_id, r.env_key, r.checkpoint_id, c.seq AS checkpoint_seq, c.name AS checkpoint_name,\n                  coalesce(r.commit_sha, c.commit_sha) AS \"commit_sha!\", r.from_env, r.status AS \"status: ReleaseStatus\", r.note, r.requested_by,\n                  rq.name AS \"requester_name?\", r.requested_at, r.decided_by, dc.name AS \"decider_name?\",\n                  r.decided_at, r.decision_note, r.error, r.started_at, r.finished_at, r.endpoints\n           FROM releases r JOIN checkpoints c ON c.id = r.checkpoint_id\n           LEFT JOIN users rq ON rq.id = r.requested_by LEFT JOIN users dc ON dc.id = r.decided_by\n           WHERE r.id = $1",
   "describe": {
     "columns": [
       {
@@ -71,14 +71,9 @@
       },
       {
         "ordinal": 6,
-        "name": "commit_sha",
+        "name": "commit_sha!",
         "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "checkpoints",
-            "name": "commit_sha"
-          }
-        }
+        "origin": "Expression"
       },
       {
         "ordinal": 7,
@@ -252,8 +247,7 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Int8"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -263,15 +257,15 @@
       false,
       false,
       false,
-      false,
+      null,
       true,
       false,
       false,
       true,
-      false,
-      false,
       true,
       false,
+      true,
+      true,
       true,
       false,
       true,
@@ -280,5 +274,5 @@
       false
     ]
   },
-  "hash": "ee0de0a656925605d1cf3347580a03a711fcdb2a8503b3eacba57deccc9ed326"
+  "hash": "a97bfc30e880e82542471dad4cddf828827ee085a7eababf9aa00df07c3fb272"
 }

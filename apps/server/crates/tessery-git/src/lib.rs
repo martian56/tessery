@@ -211,6 +211,31 @@ impl Repo {
         Ok(self.run(&["write-tree"], &env, None).await?.trim().to_owned())
     }
 
+    /// A commit on top of `parent` that replaces everything under `replace` with `files` (paths are from the root) and
+    /// pins it under refs/tessery/settings so it is kept and can be fetched. Used to apply an environment's current
+    /// settings to a checkpoint without touching main.
+    pub async fn commit_over(&self, parent: &str, replace: &str, files: &BTreeMap<String, Vec<u8>>, message: &str, author: &Author) -> Result<String> {
+        for path in files.keys() {
+            validate_path(path)?;
+        }
+        let tmp = tempfile::tempdir()?;
+        let work = tmp.path().join("work");
+        tokio::fs::create_dir_all(&work).await?;
+        let index = tmp.path().join("index");
+        let env = [("GIT_WORK_TREE", work.as_os_str()), ("GIT_INDEX_FILE", index.as_os_str())];
+        self.run(&["read-tree", parent], &env, None).await?;
+        self.run(&["rm", "--cached", "-r", "-q", "--ignore-unmatch", "--", replace], &env, None).await?;
+        for (path, content) in files {
+            let blob = self.run(&["hash-object", "-w", "--stdin"], &env, Some(content)).await?;
+            let info = format!("100644,{},{path}", blob.trim());
+            self.run(&["update-index", "--add", "--cacheinfo", &info], &env, None).await?;
+        }
+        let tree = self.run(&["write-tree"], &env, None).await?.trim().to_owned();
+        let commit = self.commit_tree(&tree, &[parent], message, author).await?;
+        self.run(&["update-ref", &format!("refs/tessery/settings/{commit}"), &commit], &[], None).await?;
+        Ok(commit)
+    }
+
     async fn commit_tree(&self, tree: &str, parents: &[&str], message: &str, author: &Author) -> Result<String> {
         let mut args = vec!["commit-tree", tree];
         for p in parents {
@@ -691,6 +716,36 @@ mod tests {
         let commit = repo.commit_tree(tree.trim(), &[&main], "developer change", &author()).await.unwrap();
         repo.run(&["update-ref", "refs/heads/main", &commit, &main], &[], None).await.unwrap();
         commit
+    }
+
+    #[tokio::test]
+    async fn settings_commits_replace_one_environment_and_keep_the_rest() {
+        let data = tempfile::tempdir().unwrap();
+        let repo = Repos::new(data.path()).ensure(Uuid::now_v7()).await.unwrap();
+        let c1 = repo
+            .checkpoint(&files(&[("tessery.json", "{}
+"), ("src/app.ts", "app
+"), ("deploy/dev/plan.json", "old
+"), ("deploy/dev/extra.yml", "gone
+"), ("deploy/prod/plan.json", "prod
+")]), "first", &author())
+            .await
+            .unwrap();
+        let c = repo.commit_over(&c1, "deploy/dev/", &files(&[("deploy/dev/plan.json", "new
+"), ("tessery.json", "{\"dev\":2}
+")]), "Apply the current dev settings", &author()).await.unwrap();
+        let read = |path: &'static str| { let (r, c) = (repo.clone(), c.clone()); async move { r.read_file_if_exists(&c, path).await.unwrap().map(|b| String::from_utf8(b).unwrap()) } };
+        assert_eq!(read("deploy/dev/plan.json").await.as_deref(), Some("new
+"));
+        assert_eq!(read("deploy/dev/extra.yml").await, None, "files the settings no longer produce are dropped");
+        assert_eq!(read("deploy/prod/plan.json").await.as_deref(), Some("prod
+"), "other environments are untouched");
+        assert_eq!(read("src/app.ts").await.as_deref(), Some("app
+"));
+        assert_eq!(read("tessery.json").await.as_deref(), Some("{\"dev\":2}
+"));
+        assert!(repo.is_ancestor(&c1, &c).await.unwrap(), "the checkpoint is its parent");
+        assert_eq!(repo.resolve(&format!("refs/tessery/settings/{c}")).await.unwrap().as_deref(), Some(c.as_str()), "the commit is kept by a ref");
     }
 
     #[tokio::test]
