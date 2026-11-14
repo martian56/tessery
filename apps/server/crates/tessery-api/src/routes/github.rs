@@ -119,11 +119,13 @@ pub struct GithubRepoDto {
     pub installation: i64,
 }
 
-/// Repositories the app is installed on, to pick one for a project.
-#[utoipa::path(get, path = "/api/projects/{project}/github/repos", tag = "delivery", params(("project" = Uuid, Path)), responses((status = 200, body = [GithubRepoDto]), (status = 409)))]
+/// Repositories the app is installed on, to pick one for a project. The app and its installations belong to the
+/// instance and can reach repositories of every organization on it, so only instance administrators may list them.
+#[utoipa::path(get, path = "/api/projects/{project}/github/repos", tag = "delivery", params(("project" = Uuid, Path)), responses((status = 200, body = [GithubRepoDto]), (status = 403), (status = 409)))]
 pub async fn repos(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>) -> ApiResult<Json<Vec<GithubRepoDto>>> {
     let target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &target, P::ProjectEdit).await?;
+    p.require_instance_admin()?;
     let (app, _) = app(&state).await?.ok_or_else(|| ApiError::Conflict("an instance admin has to create the GitHub App first, under Instance admin, GitHub".into()))?;
     let repos = app.repos().await.map_err(ApiError::Conflict)?;
     Ok(Json(repos.into_iter().map(|r| GithubRepoDto { full_name: r.full_name, private: r.private, installation: r.installation }).collect()))
@@ -140,6 +142,7 @@ pub struct LinkInput {
 pub async fn link(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>, Json(req): Json<LinkInput>) -> ApiResult<Json<Ok>> {
     let target = rbac::project_target(&state, project).await?;
     let d = rbac::require(&state, &p, &target, P::ProjectEdit).await?;
+    p.require_instance_admin()?;
     let (app, _) = app(&state).await?.ok_or_else(|| ApiError::Conflict("an instance admin has to create the GitHub App first".into()))?;
     let repo = app.repos().await.map_err(ApiError::Conflict)?.into_iter().find(|r| r.full_name.eq_ignore_ascii_case(req.repo.trim())).ok_or_else(|| ApiError::invalid("repo", "the GitHub App is not installed on that repository"))?;
     tessery_db::github::link(&state.db, tessery_db::github::Link { project_id: project, repo: &repo.full_name, installation: repo.installation, linked_by: p.user.id, auto_push: true }).await?;

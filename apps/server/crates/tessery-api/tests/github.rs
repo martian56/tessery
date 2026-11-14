@@ -9,7 +9,7 @@ use tessery_core::SecretKey;
 #[tokio::test]
 async fn webhooks_need_a_valid_signature() {
     let app = common::spawn().await;
-    let (_admin, _org) = app.setup().await;
+    let (admin, org) = app.setup().await;
     let http = reqwest::Client::new();
     let hook = format!("{}/api/github/webhook", app.base);
     let body = json!({ "ref": "refs/heads/main", "repository": { "full_name": "acme/shop" }, "after": "abc" }).to_string();
@@ -39,4 +39,10 @@ async fn webhooks_need_a_valid_signature() {
     assert_eq!(ok.status(), StatusCode::ACCEPTED);
     let push = http.post(&hook).header("x-github-event", "push").header("x-hub-signature-256", sign_webhook(b"s3cret", body.as_bytes())).body(body).send().await.unwrap();
     assert_eq!(push.status(), StatusCode::ACCEPTED);
+
+    let project: serde_json::Value = admin.post(&format!("/api/orgs/{org}/projects"), json!({ "doc": common::doc("shop") })).await.json().await.unwrap();
+    let pid = project["id"].as_str().unwrap();
+    let (editor, _) = common::add_member(&app, &admin, org, "dev@example.com", "editor").await;
+    assert_eq!(editor.get(&format!("/api/projects/{pid}/github/repos")).await.status(), StatusCode::FORBIDDEN, "the app reaches every organization's repositories, so only instance admins list them");
+    assert_eq!(editor.put(&format!("/api/projects/{pid}/github"), json!({ "repo": "other-org/private" })).await.status(), StatusCode::FORBIDDEN);
 }

@@ -8,6 +8,7 @@ import { API_URL } from '@/config/env'
 import { bus } from '@/lib/bus'
 import { timeAgo } from '@/lib/format'
 import { useAppSelector } from '@/store'
+import { useMeQuery } from '@/api/endpoints/identity'
 import { Button, Dialog, Dot, Field, Input, Select, Switch, toast, useDialogs } from '@/ui'
 import s from './Delivery.module.css'
 
@@ -110,10 +111,12 @@ function GithubLinked({ repo, remote, canConfigure, onSync, syncing, onUnlink }:
 }
 
 function GithubLink({ pid }: { pid: string }) {
+  const { data: me } = useMeQuery()
   const [show, setShow] = useState(false)
   const { data: repos, error, isFetching } = useGithubReposQuery(pid, { skip: !show })
   const [link, { isLoading }] = useLinkGithubMutation()
   const [repo, setRepo] = useState('')
+  if (!me?.instanceAdmin) return <p className={s.muted}>An instance administrator can link this project to a GitHub repository through the instance's GitHub App.</p>
   if (!show) return <div className={s.actions}><Button icon={<Github />} onClick={() => setShow(true)}>Link a GitHub repository</Button></div>
   const save = async () => {
     const r = await link({ pid, repo })
