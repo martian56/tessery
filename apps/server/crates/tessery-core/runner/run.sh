@@ -168,6 +168,14 @@ rolling_up() {
         exit 1
       fi
     done
+    first=$(echo "$new" | head -n 1)
+    address=$(docker inspect -f "{{with index .NetworkSettings.Networks \"${stack}_default\"}}{{.IPAddress}}{{end}}" "$first")
+    if ! (check_contract "${stack}_default" "$host" "$name" "$address"); then
+      echo "The new $name does not match its design, so the running one keeps serving."
+      docker rm -f $new >/dev/null 2>&1 || true
+      exit 1
+    fi
+    contract_checked="$contract_checked $name"
     step "Stopping the old $name"
     docker stop -t 15 $old >/dev/null
     docker rm $old >/dev/null
@@ -244,23 +252,30 @@ fi
 # Runs deploy/<env>/contract.json: HTTP checks made from the API and database design. Each check names the request and
 # what it expects; the first one that fails stops the release with its name. On a remote server the requests run in a
 # short-lived curl container on the stack's network, since the runner cannot join a network on another machine.
+# With a service and an address it checks only that service, at that address: a rolling deploy uses this to check the
+# new containers before the old ones stop serving.
+contract_checked=""
 check_contract() {
-  network=$1 remote=$2
+  network=$1 remote=$2 only=${3:-} address=${4:-}
   file="deploy/$TESSERY_ENV/contract.json"
   [ -f "$file" ] || return 0
-  total=$(jq '.checks | length' "$file")
-  step "Checking the API against its design ($total checks, $(jq -r .mode "$file"))"
-  vars=/tmp/contract-vars.json body=/tmp/contract-body
-  echo '{}' > "$vars"
+  checks=/tmp/contract-checks.json vars=/tmp/contract-vars.json body=/tmp/contract-body
+  jq --arg only "$only" --arg checked "$contract_checked" '[.checks[] | select(($only == "" or .service == $only) and (.service as $s | ($checked | split(" ") | index($s)) | not))]' "$file" > "$checks"
+  total=$(jq length "$checks")
+  [ "$total" -gt 0 ] || return 0
+  step "Checking ${only:-the API} against its design ($total checks, $(jq -r .mode "$file"))"
+  jq -n --arg run "${TESSERY_RELEASE:-$(date +%s)}" --arg uuid "$(cat /proc/sys/kernel/random/uuid)" --arg num "$(date +%s)" '{run: $run, uuid: $uuid, run_num: $num}' > "$vars"
   if [ -z "$remote" ]; then
     docker network connect "$network" "$(hostname)" >/dev/null 2>&1 || true
   fi
   i=0
   while [ "$i" -lt "$total" ]; do
-    check=$(jq -c --slurpfile v "$vars" --argjson i "$i" '.checks[$i] | .path |= (reduce ($v[0] | to_entries[]) as $e (.; gsub("\\{\\{" + $e.key + "\\}\\}"; $e.value)))' "$file")
+    check=$(jq -c --slurpfile v "$vars" --argjson i "$i" '
+      def fill: reduce ($v[0] | to_entries[]) as $e (.; gsub("\\{\\{" + $e.key + "\\}\\}"; $e.value));
+      .[$i] | .path |= fill | (if .shape then .shape |= fill else . end) | (if .body then .body |= walk(if type == "string" then fill else . end) else . end)' "$checks")
     name=$(printf '%s' "$check" | jq -r .name)
     method=$(printf '%s' "$check" | jq -r .method)
-    url=$(printf '%s' "$check" | jq -r '"http://\(.service):\(.port)\(.path)"')
+    url=$(printf '%s' "$check" | jq -r --arg a "$address" '"http://\(if $a == "" then .service else $a end):\(.port)\(.path)"')
     data=$(printf '%s' "$check" | jq -c '.body // empty')
     if [ -z "$remote" ]; then
       if [ -n "$data" ]; then

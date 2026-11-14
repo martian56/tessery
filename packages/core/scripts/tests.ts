@@ -552,7 +552,7 @@ test('releases check each service against its API and database design', async ()
   assert.ok(names.some((n) => /turns away visitors who are not signed in/.test(n)), 'operations for signed-in users refuse anonymous requests')
   assert.ok(full.checks.every((c) => c.status.length && c.service && c.port))
   const read = contract(doc, prod)
-  assert.ok(!read || read.checks.every((c) => c.method === 'GET' || c.status.includes(401)), 'the last environment never writes')
+  assert.ok(!read || read.checks.every((c) => c.method === 'GET' || c.method === 'DELETE'), 'the last environment never sends a write, not even to check sign-in')
   runOp(doc, 'updateEnv', { envId: dev.id, patch: { contractTests: 'off' } })
   assert.equal(contract(doc, dev), null)
 
@@ -564,6 +564,15 @@ test('releases check each service against its API and database design', async ()
   assert.match(list.shape!, /has\("total"\)/, 'the list must carry the designed fields')
   const create = c.checks.find((x) => x.method === 'POST')!
   assert.deepEqual(create.body, { total: 1 })
+  const ordersTable = Object.values(shop.databases)[0].tables.find((x) => x.name === 'orders')!
+  runOp(shop, 'addColumn', { nodeId: db, tableId: ordersTable.id, column: { name: 'code', type: 'text', nullable: false, unique: true } })
+  runOp(shop, 'addColumn', { nodeId: db, tableId: ordersTable.id, column: { name: 'note', type: 'text', nullable: true } })
+  const again = contract(shop, shop.environments[0])!.checks.find((x) => x.method === 'POST')!
+  assert.equal(again.body!.code, 'Contract check {{run}}', 'unique columns get a value that changes with each release')
+  const customers = runOp(shop, 'addTable', { nodeId: db, name: 'customers' }) as string
+  runOp(shop, 'addColumn', { nodeId: db, tableId: ordersTable.id, column: { name: 'customer_id', type: 'uuid', nullable: false, ref: { table: 'customers', column: 'id', onDelete: 'cascade' } } })
+  void customers
+  assert.ok(!contract(shop, shop.environments[0])!.checks.some((x) => x.method === 'POST'), 'a record that needs a reference is not made up')
   assert.deepEqual(create.save, { id: '."id"' })
   assert.ok(c.checks.some((x) => x.path.includes('{{id}}') && x.status.includes(404)), 'a deleted record is gone')
 })
