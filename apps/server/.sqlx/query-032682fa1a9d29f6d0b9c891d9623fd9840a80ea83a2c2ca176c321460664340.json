@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO releases (project_id, env_key, checkpoint_id, from_env, status, note, requested_by)\n           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+  "query": "INSERT INTO releases (project_id, env_key, checkpoint_id, from_env, status, note, requested_by, commit_sha)\n           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
   "describe": {
     "columns": [
       {
@@ -38,12 +38,13 @@
           }
         },
         "Text",
-        "Uuid"
+        "Uuid",
+        "Text"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "19cb8253027f8e5c325857f011cef64e22a8c5a3d6297f29bb91a04b12693681"
+  "hash": "032682fa1a9d29f6d0b9c891d9623fd9840a80ea83a2c2ca176c321460664340"
 }

@@ -62,6 +62,8 @@ pub struct NewRelease<'a> {
     pub status: ReleaseStatus,
     pub note: &'a str,
     pub requested_by: Uuid,
+    /// The commit to deploy when it is not the checkpoint's own, because the environment's settings changed since.
+    pub commit_sha: Option<&'a str>,
 }
 
 #[derive(Debug, Clone)]
@@ -139,9 +141,9 @@ pub async fn get_checkpoint(ex: impl PgExecutor<'_>, project_id: Uuid, id: Uuid)
 
 pub async fn insert_release(tx: &mut Transaction<'_, Postgres>, r: NewRelease<'_>) -> DbResult<Uuid> {
     Ok(sqlx::query_scalar!(
-        r#"INSERT INTO releases (project_id, env_key, checkpoint_id, from_env, status, note, requested_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id"#,
-        r.project_id, r.env_key, r.checkpoint_id, r.from_env, r.status as ReleaseStatus, r.note, r.requested_by
+        r#"INSERT INTO releases (project_id, env_key, checkpoint_id, from_env, status, note, requested_by, commit_sha)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id"#,
+        r.project_id, r.env_key, r.checkpoint_id, r.from_env, r.status as ReleaseStatus, r.note, r.requested_by, r.commit_sha
     )
     .fetch_one(&mut **tx)
     .await?)
@@ -151,7 +153,7 @@ pub async fn get_release(ex: impl PgExecutor<'_>, id: Uuid) -> DbResult<Release>
     sqlx::query_as!(
         Release,
         r#"SELECT r.id, r.project_id, r.env_key, r.checkpoint_id, c.seq AS checkpoint_seq, c.name AS checkpoint_name,
-                  c.commit_sha, r.from_env, r.status AS "status: ReleaseStatus", r.note, r.requested_by,
+                  coalesce(r.commit_sha, c.commit_sha) AS "commit_sha!", r.from_env, r.status AS "status: ReleaseStatus", r.note, r.requested_by,
                   rq.name AS "requester_name?", r.requested_at, r.decided_by, dc.name AS "decider_name?",
                   r.decided_at, r.decision_note, r.error, r.started_at, r.finished_at, r.endpoints
            FROM releases r JOIN checkpoints c ON c.id = r.checkpoint_id
@@ -168,7 +170,7 @@ pub async fn list_releases(ex: impl PgExecutor<'_>, project_id: Uuid, limit: i64
     Ok(sqlx::query_as!(
         Release,
         r#"SELECT r.id, r.project_id, r.env_key, r.checkpoint_id, c.seq AS checkpoint_seq, c.name AS checkpoint_name,
-                  c.commit_sha, r.from_env, r.status AS "status: ReleaseStatus", r.note, r.requested_by,
+                  coalesce(r.commit_sha, c.commit_sha) AS "commit_sha!", r.from_env, r.status AS "status: ReleaseStatus", r.note, r.requested_by,
                   rq.name AS "requester_name?", r.requested_at, r.decided_by, dc.name AS "decider_name?",
                   r.decided_at, r.decision_note, r.error, r.started_at, r.finished_at, r.endpoints
            FROM releases r JOIN checkpoints c ON c.id = r.checkpoint_id
@@ -269,7 +271,8 @@ pub async fn was_released(ex: impl PgExecutor<'_>, project_id: Uuid, env_key: &s
 
 pub async fn ref_targets(ex: impl PgExecutor<'_> + Copy, project_id: Uuid) -> DbResult<(Vec<(String, String)>, Vec<(String, String)>)> {
     let branches = sqlx::query!(
-        r#"SELECT h.env_key, c.commit_sha FROM environment_heads h JOIN checkpoints c ON c.id = h.checkpoint_id WHERE h.project_id = $1"#,
+        r#"SELECT h.env_key, coalesce(r.commit_sha, c.commit_sha) AS "commit_sha!" FROM environment_heads h JOIN checkpoints c ON c.id = h.checkpoint_id
+           LEFT JOIN releases r ON r.id = h.release_id WHERE h.project_id = $1"#,
         project_id
     )
     .fetch_all(ex)

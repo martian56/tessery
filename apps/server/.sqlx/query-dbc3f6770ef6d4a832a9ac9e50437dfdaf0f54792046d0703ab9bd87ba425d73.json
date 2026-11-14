@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT h.env_key, c.commit_sha FROM environment_heads h JOIN checkpoints c ON c.id = h.checkpoint_id WHERE h.project_id = $1",
+  "query": "SELECT h.env_key, coalesce(r.commit_sha, c.commit_sha) AS \"commit_sha!\" FROM environment_heads h JOIN checkpoints c ON c.id = h.checkpoint_id\n           LEFT JOIN releases r ON r.id = h.release_id WHERE h.project_id = $1",
   "describe": {
     "columns": [
       {
@@ -16,14 +16,9 @@
       },
       {
         "ordinal": 1,
-        "name": "commit_sha",
+        "name": "commit_sha!",
         "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "checkpoints",
-            "name": "commit_sha"
-          }
-        }
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -33,8 +28,8 @@
     },
     "nullable": [
       false,
-      false
+      null
     ]
   },
-  "hash": "fd982cfae4a986e1c02e758732502d0e1c01c1b8fd675744317779d5144c5d07"
+  "hash": "dbc3f6770ef6d4a832a9ac9e50437dfdaf0f54792046d0703ab9bd87ba425d73"
 }
