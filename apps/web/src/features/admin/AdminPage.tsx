@@ -3,7 +3,7 @@ import { useAdminOrgsQuery, useAdminSettingsQuery, useAdminUpdateUserMutation, u
 import { errorMessage } from '@/api/types'
 import { setCurrentOrg } from '@/app/currentOrg'
 import { navigate } from '@/app/router'
-import { Badge, Button, Empty, Switch, toast, useDialogs } from '@/ui'
+import { Badge, Button, Empty, Field, NumberInput, Switch, toast, useDialogs } from '@/ui'
 import { Card, PageLayout, PageTitle, Table, mono, muted } from '@/features/chrome/PageLayout'
 import { timeAgo } from '@/lib/format'
 import { EmailView } from './EmailView'
@@ -90,6 +90,14 @@ function SettingsView() {
           toast('error' in r ? errorMessage(r.error) : 'Settings saved', 'error' in r ? 'err' : 'ok')
         }} />
         <p className={muted}>When this is off, only instance administrators can create organizations.</p>
+      </Card>
+      <Card title="Metrics history">
+        <Field label="Keep for" hint="Days of container CPU, memory, restart and health samples. Older samples are deleted.">
+          <NumberInput value={data.metricsRetentionDays ?? 7} min={1} max={90} onCommit={async (v) => {
+            const r = await put({ ...data, metricsRetentionDays: v })
+            toast('error' in r ? errorMessage(r.error) : 'Settings saved', 'error' in r ? 'err' : 'ok')
+          }} />
+        </Field>
       </Card>
     </>
   )

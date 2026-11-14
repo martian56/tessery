@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE alert_rules SET firing_nodes = $2, fired_at = CASE WHEN $3 THEN now() ELSE fired_at END WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "30d47d93543005ae712d77f149879e8c55a793f5db4b747699975ae7f4a42b65"
+}

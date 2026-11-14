@@ -74,7 +74,11 @@ fn bytes(s: &str) -> Option<u64> {
 #[utoipa::path(get, path = "/api/projects/{project}/environments/{env}/status", tag = "runtime", params(("project" = Uuid, Path), ("env" = String, Path)), responses((status = 200, body = EnvStatusDto)))]
 pub async fn status(State(state): State<AppState>, p: Principal, Path((project, env)): Path<(Uuid, String)>) -> ApiResult<Json<EnvStatusDto>> {
     let ids = guard(&state, &p, project, &env, P::DeploymentRead).await?;
-    let Running { place, plan } = runtime::locate(&state, project, &env).await?;
+    Ok(Json(collect(&state, project, &env, &ids).await?))
+}
+
+pub async fn collect(state: &AppState, project: Uuid, env: &str, ids: &HashMap<String, String>) -> ApiResult<EnvStatusDto> {
+    let Running { place, plan } = runtime::locate(state, project, env).await?;
     let mut nodes: Vec<NodeStatusDto> = Vec::new();
     let mut push = |name: String, inst: InstanceDto| match nodes.iter_mut().find(|n| n.name == name) {
         Some(n) => n.instances.push(inst),
@@ -96,6 +100,21 @@ pub async fn status(State(state): State<AppState>, p: Principal, Path((project, 
                     }
                 }
             }
+            let mut restarts: HashMap<String, u64> = HashMap::new();
+            let all: Vec<String> = list.iter().filter_map(|c| c["ID"].as_str().map(str::to_owned)).collect();
+            if !all.is_empty() {
+                let mut args = vec!["inspect".to_owned(), "--format".into(), "{{.Id}} {{.RestartCount}}".into()];
+                args.extend(all);
+                if let Ok(out) = runtime::docker(host, &args, None).await {
+                    for l in out.stdout.lines() {
+                        if let Some((id, n)) = l.split_once(' ')
+                            && let Ok(n) = n.trim().parse()
+                        {
+                            restarts.insert(id.to_owned(), n);
+                        }
+                    }
+                }
+            }
             for c in &list {
                 let id = c["ID"].as_str().unwrap_or_default().to_owned();
                 let detail = c["Status"].as_str().unwrap_or_default().to_owned();
@@ -107,7 +126,7 @@ pub async fn status(State(state): State<AppState>, p: Principal, Path((project, 
                     cpu_percent: s.and_then(|s| s["CPUPerc"].as_str()).and_then(|c| c.trim_end_matches('%').parse().ok()),
                     memory_bytes: mem.as_ref().and_then(|m| m.first().copied().flatten()),
                     memory_limit_bytes: mem.as_ref().and_then(|m| m.get(1).copied().flatten()),
-                    restarts: None,
+                    restarts: restarts.get(&id).copied(),
                     detail,
                     id: id.chars().take(12).collect(),
                 });
@@ -158,7 +177,7 @@ pub async fn status(State(state): State<AppState>, p: Principal, Path((project, 
         }
     };
     nodes.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(Json(EnvStatusDto { target: target.into(), endpoints: plan["endpoints"].clone(), nodes }))
+    Ok(EnvStatusDto { target: target.into(), endpoints: plan["endpoints"].clone(), nodes })
 }
 
 fn cores(q: &str) -> Option<f64> {

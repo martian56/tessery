@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM metric_samples WHERE at < now() - make_interval(days => (SELECT metrics_retention_days FROM instance_settings))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "7c76900294ac64697ada8d0505142d88bf135252a3c33413068f6c58992f1b53"
+}

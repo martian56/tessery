@@ -52,6 +52,8 @@ pub const EVENTS: &[(&str, &str)] = &[
     ("release.failed", "A release fails or rolls back"),
     ("approval.requested", "A release waits for approval"),
     ("backup.failed", "A database backup fails"),
+    ("alert.firing", "An alert rule starts firing"),
+    ("alert.resolved", "An alert rule clears"),
 ];
 
 pub const KINDS: &[&str] = &["email", "slack", "discord", "telegram", "webhook"];
