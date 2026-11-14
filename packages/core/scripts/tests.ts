@@ -580,7 +580,6 @@ test('releases check each service against its API and database design', async ()
   assert.ok(c.checks.indexOf(cleanup[0]) > c.checks.indexOf(create))
 })
 
-
 test('contract ids never collide, even for services and tables whose names flatten alike', async () => {
   const { contract } = await import('../src/codegen/deploy/contract')
   const doc = blankTemplate('shop', 'self', 'onprem')
@@ -601,4 +600,9 @@ test('contract ids never collide, even for services and tables whose names flatt
     const own = c.checks.filter((x) => x.path.includes(`{{${key}}}`))
     assert.ok(own.length && own.every((x) => x.service === creates[i].service), 'each saved id is only used by its own service')
   }
+})
+
+test('updates never move a row out of the parent or owner its route scopes to', async () => {
+  const runtimes = await Promise.all(['ts-db', 'go-db', 'py-db'].map(async (r) => [r, (await import(`../src/codegen/runtime/${r}.txt`)).default as string] as const))
+  for (const [name, src] of runtimes) assert.match(src, /The parent and owner the route scopes to cannot be moved by the caller/, `${name} drops scoped columns from an update`)
 })

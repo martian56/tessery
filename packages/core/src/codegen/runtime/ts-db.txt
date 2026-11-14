@@ -139,6 +139,8 @@ export function table(name: string, key: string, types: Record<string, string>, 
     async update(id: string, body: unknown, filter: Row = {}): Promise<Result> {
       const row = pick(body)
       delete row[key]
+      // The parent and owner the route scopes to cannot be moved by the caller.
+      for (const k of Object.keys(filter)) delete row[k]
       const cols = Object.keys(row)
       if (!cols.length) return { status: 400, body: { error: 'invalid', detail: `nothing to update; writable fields are ${writable.join(', ')}` } }
       const w = where({ [key]: id, ...filter }, cols.length + 1)

@@ -169,6 +169,9 @@ class Table:
     def update(self, id, body, filters=None):
         row = self._pick(body)
         row.pop(self.key, None)
+        # The parent and owner the route scopes to cannot be moved by the caller.
+        for k in filters or {}:
+            row.pop(k, None)
         if not row:
             return 400, {"error": "invalid", "detail": "nothing to update; writable fields are " + ", ".join(self.writable)}
         cols = list(row)

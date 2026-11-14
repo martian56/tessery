@@ -324,6 +324,14 @@ func (t Table) Create(ctx context.Context, body map[string]any, fixed map[string
 
 func (t Table) Update(ctx context.Context, id string, body map[string]any, filter map[string]string) Result {
 	cols, vals := t.pick(body)
+	// The parent and owner the route scopes to cannot be moved by the caller.
+	kept, keptVals := cols[:0], vals[:0]
+	for i, c := range cols {
+		if _, scoped := filter[c]; !scoped {
+			kept, keptVals = append(kept, c), append(keptVals, vals[i])
+		}
+	}
+	cols, vals = kept, keptVals
 	if len(cols) == 0 {
 		return errorResult(400, map[string]string{"error": "invalid", "detail": "nothing to update; writable fields are " + strings.Join(t.Writable, ", ")})
 	}
