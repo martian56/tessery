@@ -1,5 +1,5 @@
 import type { SystemNode, Page, ProjectDoc } from '../domain/types'
-import { apiClient, apiProxy } from './apiclient'
+import { apiClient, apiProxy, formAction } from './apiclient'
 import { builtInAuth } from './deploy/runtime'
 import NEXT_AUTH from './runtime/next-auth.txt'
 import NEXT_LOGIN from './runtime/next-login.txt'
@@ -39,6 +39,19 @@ function actionExpr(doc: ProjectDoc, action: unknown, params: string[]): string 
   return `{ service: ${JSON.stringify(svc)}, method: ${JSON.stringify(route.method)}, path: \`${path}\` }`
 }
 
+/** A designed form's target: the raw path, filled in the page from the record and the route params, which ride along. */
+function formActionExpr(doc: ProjectDoc, action: unknown, params: string[]): string {
+  if (typeof action !== 'string' || !action.includes(':')) return ''
+  const [nid, opName] = action.split(':')
+  const svc = doc.nodes.find((n) => n.id === nid)?.name
+  const op = doc.apis[nid]?.operations.find((o) => o.name === opName)
+  const route = op ? httpRoute(op) : null
+  if (!svc || !route || route.method === 'GET') return ''
+  const prefix = restPrefix(doc.apis[nid])
+  const path = prefix && !route.path.startsWith(`${prefix}/`) ? prefix + route.path : route.path
+  return `{ service: ${JSON.stringify(svc)}, method: ${JSON.stringify(route.method)}, path: ${JSON.stringify(path)}, params: { ${params.join(', ')} } }`
+}
+
 export function pageSource(doc: ProjectDoc, p: Page): string {
   const params = routeParams(p.route)
   const auth = !!builtInAuth(doc)
@@ -61,7 +74,7 @@ export function pageSource(doc: ProjectDoc, p: Page): string {
     loads.push([b.id, `  const data${i} = await api.${camel(svc)}.${op}(${args.join(', ')}).catch(() => null)`])
   }
   const data = loads.map(([id], k) => `${JSON.stringify(id)}: ${loads[k][1].match(/const (data\d+)/)![1]}`)
-  const actions = blocks.map((b) => [b.id, actionExpr(doc, b.props.action, params)] as const).filter(([, e]) => e).map(([id, e]) => `${JSON.stringify(id)}: ${e}`)
+  const actions = blocks.map((b) => [b.id, b.type === 'frame' ? formActionExpr(doc, b.props.action, params) : actionExpr(doc, b.props.action, params)] as const).filter(([, e]) => e).map(([id, e]) => `${JSON.stringify(id)}: ${e}`)
   const current = params.length ? `\`${p.route.replace(/\[(\w+)\]/g, (_m, x: string) => `\${${x}}`)}\`` : JSON.stringify(p.route)
   const mode = p.render === 'isr' ? 'export const revalidate = 60\n' : p.render === 'ssg' ? "export const dynamic = 'force-static'\n" : "export const dynamic = 'force-dynamic'\n"
   const takes = [params.length ? 'params' : '', live ? 'searchParams' : ''].filter(Boolean)
@@ -213,6 +226,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 `
   f[`${dir}/app/globals.css`] = themeCss(appTheme, '.tsp-app') + '\n' + BASE_CSS + '\n' + BLOCK_STYLES
   f[`${dir}/app/api/[service]/[...path]/route.ts`] = apiProxy(doc, app)
+  f[`${dir}/app/form-action/[service]/[...path]/route.ts`] = formAction(doc, app)
   const auth = builtInAuth(doc)
   if (auth) {
     f[`${dir}/lib/session.ts`] = SESSION_RUNTIME

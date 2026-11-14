@@ -45,7 +45,7 @@ export const contains = (ancestor: UIElement, id: string) => !!find(ancestor, id
 /** Elements that load or submit data, blocks and record-repeating frames, in document order, which is the order generated pages load their data. */
 export const blocksOf = (root: UIElement) => {
   const out: UIElement[] = []
-  walk(root, (e) => { if (e.type === 'block' || (e.type === 'frame' && e.props.source)) out.push(e) })
+  walk(root, (e) => { if (e.type === 'block' || (e.type === 'frame' && (e.props.source || e.props.action))) out.push(e) })
   return out
 }
 

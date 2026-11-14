@@ -108,3 +108,53 @@ export { forward as GET, forward as POST, forward as PUT, forward as PATCH, forw
 export const dynamic = 'force-dynamic'
 `
 }
+
+/** Lets designed forms change data without client code: the form posts here, this calls the service with the visitor's session and sends them back. */
+export function formAction(doc: ProjectDoc, app: SystemNode): string {
+  const auth = builtInAuth(doc)?.name
+  const allowed = [...new Set([...doc.edges.filter((e) => e.source === app.id).map((e) => doc.nodes.find((n) => n.id === e.target)?.name), auth])].filter((n): n is string => !!n)
+  return `import { serviceUrl } from '@/lib/api'
+
+// Turns a POST from a form designed in Tessery into a JSON call to the service, then returns the visitor to the page.
+const ALLOWED = new Set(${JSON.stringify(allowed)})
+const METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+const sameSite = (req: Request) => {
+  const origin = req.headers.get('origin')
+  if (!origin) return true
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host')
+  try {
+    return new URL(origin).host === host
+  } catch {
+    return false
+  }
+}
+
+export async function POST(req: Request, ctx: { params: Promise<{ service: string; path?: string[] }> }) {
+  const { service, path = [] } = await ctx.params
+  if (!ALLOWED.has(service)) return Response.json({ error: 'unknown service' }, { status: 404 })
+  if (!sameSite(req)) return Response.json({ error: 'forms can only be sent from this site' }, { status: 403 })
+  const form = await req.formData()
+  const method = String(form.get('_method') ?? 'POST').toUpperCase()
+  if (!METHODS.has(method)) return Response.json({ error: 'unsupported method' }, { status: 400 })
+  const body: Record<string, unknown> = {}
+  for (const [k, v] of form.entries()) if (!k.startsWith('_') && typeof v === 'string' && v !== '') body[k] = v
+  const headers: Record<string, string> = { 'content-type': 'application/json' }
+  for (const h of ['cookie', 'authorization']) {
+    const v = req.headers.get(h)
+    if (v) headers[h] = v
+  }
+  let status = 502
+  try {
+    const r = await fetch(serviceUrl(service) + '/' + path.map(encodeURIComponent).join('/'), { method, headers, body: method === 'DELETE' ? undefined : JSON.stringify(body), cache: 'no-store' })
+    status = r.status
+  } catch {}
+  const back = String(form.get('_back') ?? '/')
+  const to = new URL(back.startsWith('/') && !back.startsWith('//') ? back : '/', 'http://app')
+  if (status >= 400) to.searchParams.set('error', String(status))
+  return new Response(null, { status: 303, headers: { location: to.pathname + to.search } })
+}
+
+export const dynamic = 'force-dynamic'
+`
+}
