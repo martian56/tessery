@@ -7,6 +7,8 @@ use crate::state::AppState;
 use tessery_core::{OrgId, Target, TeamId};
 use axum::Json;
 use axum::extract::{Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use axum_extra::extract::CookieJar;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -18,13 +20,13 @@ pub struct LoginRequest {
     pub password: String,
 }
 
-#[utoipa::path(post, path = "/api/auth/login", tag = "auth", request_body = LoginRequest, responses((status = 200, body = UserDto), (status = 401), (status = 429)))]
+#[utoipa::path(post, path = "/api/auth/login", tag = "auth", request_body = LoginRequest, responses((status = 200, body = UserDto), (status = 202, description = "Two-factor is on; finish with /api/auth/login/two-factor", body = crate::routes::two_factor::TwoFactorChallenge), (status = 401), (status = 429)))]
 pub async fn login(
     State(state): State<AppState>,
     meta: RequestMeta,
     jar: CookieJar,
     Json(req): Json<LoginRequest>,
-) -> ApiResult<(CookieJar, Json<UserDto>)> {
+) -> ApiResult<Response> {
     let email = req.email.trim().to_lowercase();
     let mut redis = state.redis.clone();
     let ip_key = format!("login:ip:{}", meta.ip.as_deref().unwrap_or("unknown"));
@@ -61,6 +63,15 @@ pub async fn login(
         }
     };
     rate_limit::reset(&mut redis, &email_key).await?;
+    if user.two_factor_enabled_at.is_some() {
+        let ticket = crate::routes::two_factor::new_ticket(&state, user.id).await?;
+        return Ok((StatusCode::ACCEPTED, Json(crate::routes::two_factor::TwoFactorChallenge { two_factor_ticket: ticket })).into_response());
+    }
+    Ok(start_session(&state, meta, jar, user, serde_json::json!({})).await?.into_response())
+}
+
+pub async fn start_session(state: &AppState, meta: RequestMeta, jar: CookieJar, user: tessery_db::users::User, details: serde_json::Value) -> ApiResult<(CookieJar, Json<UserDto>)> {
+    let mut redis = state.redis.clone();
     let token = session::create(&mut redis, user.id, state.config.session_ttl).await?;
     tessery_db::users::touch_login(&state.db, user.id).await?;
     let actor = Principal {
@@ -72,11 +83,11 @@ pub async fn login(
     audit::record(
         &state.db,
         &actor,
-        Entry::new(None, "auth.login", "session", user.id),
+        Entry::new(None, "auth.login", "session", user.id).details(details),
     )
     .await?;
     Ok((
-        jar.add(auth::session_cookie(&state, token)),
+        jar.add(auth::session_cookie(state, token)),
         Json(user.into()),
     ))
 }

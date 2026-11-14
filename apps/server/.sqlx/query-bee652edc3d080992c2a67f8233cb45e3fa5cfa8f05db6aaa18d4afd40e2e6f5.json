@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET totp_secret = $2 WHERE id = $1 AND two_factor_enabled_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bee652edc3d080992c2a67f8233cb45e3fa5cfa8f05db6aaa18d4afd40e2e6f5"
+}

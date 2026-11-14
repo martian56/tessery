@@ -9,7 +9,7 @@ export const identityApi = baseApi.injectEndpoints({
       invalidatesTags: ['Setup', 'Me', 'Orgs'],
     }),
     me: b.query<User, void>({ query: () => '/auth/me', providesTags: ['Me'] }),
-    login: b.mutation<User, { email: string; password: string }>({ query: (body) => ({ url: '/auth/login', method: 'POST', body }), invalidatesTags: ['Me', 'Orgs'] }),
+    login: b.mutation<User | { twoFactorTicket: string }, { email: string; password: string }>({ query: (body) => ({ url: '/auth/login', method: 'POST', body }), invalidatesTags: ['Me', 'Orgs'] }),
     logout: b.mutation<void, void>({ query: () => ({ url: '/auth/logout', method: 'POST' }) }),
     updateMe: b.mutation<User, { name: string }>({ query: (body) => ({ url: '/auth/me', method: 'PATCH', body }), invalidatesTags: ['Me'] }),
     ssoInfo: b.query<{ enabled: boolean; name?: string | null }, void>({ query: () => '/auth/sso' }),

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, email, name, password_hash, is_instance_admin, disabled_at, created_at, last_login_at FROM users WHERE id = $1",
+  "query": "SELECT id, email, name, password_hash, is_instance_admin, disabled_at, created_at, last_login_at, two_factor_enabled_at FROM users WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -90,6 +90,17 @@
             "name": "last_login_at"
           }
         }
+      },
+      {
+        "ordinal": 8,
+        "name": "two_factor_enabled_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "two_factor_enabled_at"
+          }
+        }
       }
     ],
     "parameters": {
@@ -105,8 +116,9 @@
       false,
       true,
       false,
+      true,
       true
     ]
   },
-  "hash": "a8435b6c731f0506126b491bfeb9b61daabcb2874116ccdaf40663b9a113449e"
+  "hash": "bc01f30b602c3f9f715ec9207978349956d7785545acfcbeaccdf0281bd2b66f"
 }

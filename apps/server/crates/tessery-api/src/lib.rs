@@ -10,6 +10,7 @@ pub mod rbac;
 pub mod routes;
 pub mod runtime;
 pub mod state;
+pub mod totp;
 
 use crate::error::ApiError;
 use crate::state::AppState;

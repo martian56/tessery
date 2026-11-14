@@ -73,6 +73,13 @@ pub async fn require(
             return Err(ApiError::ForbiddenMsg(format!("this API token does not allow {}", perm.as_str())));
         }
     }
+    if !eff.is_empty()
+        && !p.user.is_instance_admin
+        && p.user.two_factor_enabled_at.is_none()
+        && tessery_db::two_factor::org_requires(&state.db, target.org().0).await?
+    {
+        return Err(ApiError::ForbiddenMsg("this organization requires two-factor sign-in; turn it on under Account, Security".into()));
+    }
     match decide(p.is_instance_admin(), &eff, perm) {
         Decision::Denied => {
             let entry = Entry::new(

@@ -5,6 +5,7 @@ import { errorMessage } from '@/api/types'
 import { Button, Field, Input, toast } from '@/ui'
 import { Card, PageLayout, PageTitle, muted } from '@/features/chrome/PageLayout'
 import { TokensCard } from './TokensCard'
+import { TwoFactorCard } from './TwoFactorCard'
 
 export function AccountPage() {
   const { data: me } = useMeQuery()
@@ -40,6 +41,7 @@ export function AccountPage() {
         <Field label="Repeat new password" wide><Input size="md" type="password" value={pw.confirm} onChange={(v) => setPw((p) => ({ ...p, confirm: v }))} /></Field>
         <div><Button variant="primary" disabled={changing || !pw.current || !pw.next} onClick={savePassword}>Change password</Button></div>
       </Card>
+      <TwoFactorCard />
       <TokensCard />
     </PageLayout>
   )

@@ -6,6 +6,7 @@ pub mod backups;
 pub mod delivery;
 pub mod dto;
 pub mod email;
+pub mod two_factor;
 pub mod metrics;
 pub mod notifications;
 pub mod git;
@@ -56,6 +57,14 @@ pub fn api() -> Router<AppState> {
         .route("/orgs/{org}/servers", get(servers::list).post(servers::create))
         .route("/integrations/providers", get(integrations::providers))
         .route("/admin/email", get(email::get_settings).put(email::put_settings))
+        .route("/auth/login/two-factor", post(two_factor::login_second_step))
+        .route("/auth/two-factor", get(two_factor::status))
+        .route("/auth/two-factor/setup", post(two_factor::setup))
+        .route("/auth/two-factor/enable", post(two_factor::enable))
+        .route("/auth/two-factor/disable", post(two_factor::disable))
+        .route("/auth/two-factor/recovery-codes", post(two_factor::new_codes))
+        .route("/orgs/{org}/security", get(two_factor::org_security).put(two_factor::put_org_security))
+        .route("/orgs/{org}/members/{user}/two-factor", delete(two_factor::reset_member))
         .route("/notifications/events", get(notifications::events))
         .route("/projects/{project}/environments/{env}/metrics", get(metrics::series))
         .route("/projects/{project}/environments/{env}/alerts", get(metrics::rules).post(metrics::add_rule))

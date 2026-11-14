@@ -13,6 +13,7 @@ pub struct User {
     pub disabled_at: Option<OffsetDateTime>,
     pub created_at: OffsetDateTime,
     pub last_login_at: Option<OffsetDateTime>,
+    pub two_factor_enabled_at: Option<OffsetDateTime>,
 }
 
 pub async fn create(
@@ -25,7 +26,7 @@ pub async fn create(
     Ok(sqlx::query_as!(
         User,
         "INSERT INTO users (email, name, password_hash, is_instance_admin) VALUES ($1, $2, $3, $4)
-         RETURNING id, email, name, password_hash, is_instance_admin, disabled_at, created_at, last_login_at",
+         RETURNING id, email, name, password_hash, is_instance_admin, disabled_at, created_at, last_login_at, two_factor_enabled_at",
         email,
         name,
         password_hash,
@@ -36,20 +37,20 @@ pub async fn create(
 }
 
 pub async fn get(ex: impl PgExecutor<'_>, id: Uuid) -> DbResult<User> {
-    sqlx::query_as!(User, "SELECT id, email, name, password_hash, is_instance_admin, disabled_at, created_at, last_login_at FROM users WHERE id = $1", id)
+    sqlx::query_as!(User, "SELECT id, email, name, password_hash, is_instance_admin, disabled_at, created_at, last_login_at, two_factor_enabled_at FROM users WHERE id = $1", id)
         .fetch_optional(ex)
         .await?
         .or_not_found()
 }
 
 pub async fn find_by_email(ex: impl PgExecutor<'_>, email: &str) -> DbResult<Option<User>> {
-    Ok(sqlx::query_as!(User, "SELECT id, email, name, password_hash, is_instance_admin, disabled_at, created_at, last_login_at FROM users WHERE email = $1", email)
+    Ok(sqlx::query_as!(User, "SELECT id, email, name, password_hash, is_instance_admin, disabled_at, created_at, last_login_at, two_factor_enabled_at FROM users WHERE email = $1", email)
         .fetch_optional(ex)
         .await?)
 }
 
 pub async fn list_all(ex: impl PgExecutor<'_>) -> DbResult<Vec<User>> {
-    Ok(sqlx::query_as!(User, "SELECT id, email, name, password_hash, is_instance_admin, disabled_at, created_at, last_login_at FROM users ORDER BY created_at")
+    Ok(sqlx::query_as!(User, "SELECT id, email, name, password_hash, is_instance_admin, disabled_at, created_at, last_login_at, two_factor_enabled_at FROM users ORDER BY created_at")
         .fetch_all(ex)
         .await?)
 }

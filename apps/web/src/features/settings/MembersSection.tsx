@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, ShieldOff, Trash2 } from 'lucide-react'
 import { useMeQuery } from '@/api/endpoints/identity'
 import { useAddMemberMutation, useListMembersQuery, useListRolesQuery, useRemoveMemberMutation } from '@/api/endpoints/orgs'
 import { errorMessage } from '@/api/types'
-import { Badge, Button, Dialog, Field, Input, Select, toast, useDialogs } from '@/ui'
-import { PageTitle, Table, muted } from '@/features/chrome/PageLayout'
+import { useOrgSecurityQuery, usePutOrgSecurityMutation, useResetMemberTwoFactorMutation } from '@/api/endpoints/twoFactor'
+import { Badge, Button, Dialog, Field, Input, Select, Switch, toast, useDialogs } from '@/ui'
+import { Card, PageTitle, Table, muted } from '@/features/chrome/PageLayout'
 import { timeAgo } from '@/lib/format'
 import type { Perms } from './OrgSettings'
 
@@ -16,6 +17,20 @@ export function MembersSection({ org, perms }: { org: string; perms: Perms }) {
   const dialogs = useDialogs()
   const [open, setOpen] = useState(false)
   const roleName = (key: string) => roles?.find((r) => r.key === key)?.name ?? key
+  const { data: security } = useOrgSecurityQuery(org)
+  const [putSecurity] = usePutOrgSecurityMutation()
+  const [resetFactor] = useResetMemberTwoFactorMutation()
+  const canManage = perms.can('org:manage')
+  const hasFactor = (email: string) => !!security && !(security.membersWithout ?? []).includes(email)
+  const require = async (on: boolean) => {
+    const r = await putSecurity({ org, requireTwoFactor: on })
+    toast('error' in r ? errorMessage(r.error) : on ? 'Members now need two-factor sign-in' : 'Two-factor is optional again', 'error' in r ? 'err' : 'ok')
+  }
+  const reset = async (userId: string, name: string) => {
+    if (!(await dialogs.confirm({ title: `Reset two-factor for ${name}?`, body: 'Their authenticator app and recovery codes stop working and they are signed out. They sign in with their password and set it up again.', ok: 'Reset', danger: true }))) return
+    const r = await resetFactor({ org, user: userId })
+    toast('error' in r ? errorMessage(r.error) : `Two-factor reset for ${name}`, 'error' in r ? 'err' : 'ok')
+  }
 
   const kick = async (userId: string, name: string) => {
     const self = userId === me?.id
@@ -28,6 +43,15 @@ export function MembersSection({ org, perms }: { org: string; perms: Perms }) {
     <>
       <PageTitle title="Members" description="People who belong to this organization. Roles shown here are granted at organization scope; finer grants live under Access."
         actions={perms.can('member:invite') && <Button variant="primary" icon={<Plus />} onClick={() => setOpen(true)}>Add member</Button>} />
+      {security && (
+        <Card title="Two-factor sign-in">
+          <Switch checked={security.requireTwoFactor} disabled={!canManage} onChange={require} label="Require two-factor for every member" />
+          <p className={muted}>
+            {security.requireTwoFactor ? 'Members without it can sign in but cannot open anything in this organization until they turn it on under Account.' : 'Members choose for themselves under Account.'}
+            {security.membersWithout?.length ? ` Not set up yet: ${security.membersWithout.join(', ')}.` : ' Every member has it on.'}
+          </p>
+        </Card>
+      )}
       <Table head={['Name', 'Email', 'Organization roles', 'Joined', '']}>
         {(members ?? []).map((m) => (
           <tr key={m.userId}>
@@ -35,12 +59,14 @@ export function MembersSection({ org, perms }: { org: string; perms: Perms }) {
               {m.name}{' '}
               {m.userId === me?.id && <Badge>you</Badge>}{' '}
               {m.instanceAdmin && <Badge tone="accent">instance admin</Badge>}{' '}
-              {m.disabled && <Badge tone="err">disabled</Badge>}
+              {m.disabled && <Badge tone="err">disabled</Badge>}{' '}
+              {security && (hasFactor(m.email) ? <Badge tone="ok">2FA</Badge> : <Badge tone={security.requireTwoFactor ? 'warn' : 'neutral'}>no 2FA</Badge>)}
             </td>
             <td className={muted}>{m.email}</td>
             <td>{m.orgRoles.length ? m.orgRoles.map((k) => <span key={k} style={{ marginRight: 4 }}><Badge tone="info">{roleName(k)}</Badge></span>) : <span className={muted}>none</span>}</td>
             <td className={muted}>{timeAgo(new Date(m.joinedAt).getTime())}</td>
             <td style={{ textAlign: 'right' }}>
+              {canManage && hasFactor(m.email) && m.userId !== me?.id && <Button variant="ghost" size="xs" icon={<ShieldOff />} aria-label={`Reset two-factor for ${m.name}`} onClick={() => reset(m.userId, m.name)} />}
               {(perms.can('member:remove') || m.userId === me?.id) && <Button variant="ghost" size="xs" icon={<Trash2 />} aria-label={`Remove ${m.name}`} onClick={() => kick(m.userId, m.name)} />}
             </td>
           </tr>
