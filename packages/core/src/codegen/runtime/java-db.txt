@@ -251,6 +251,8 @@ public final class Db {
 
         public Result update(String id, String body, Map<String, String> filter) {
             Map<String, String> cols = pick(readBody(body));
+            // The parent and owner the route scopes to cannot be moved by the caller.
+            cols.keySet().removeAll(filter.keySet());
             if (cols.isEmpty()) return error(400, Map.of("error", "invalid", "detail", "nothing to update; writable fields are " + String.join(", ", writable)));
             List<String> args = new ArrayList<>(cols.values());
             String sets = cols.keySet().stream().map(c -> quote(c) + " = " + cast(c)).collect(Collectors.joining(", "));

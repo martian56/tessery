@@ -35,10 +35,10 @@ ${used.map((t) => `
 }
 
 /** Java source of one CRUD call: path values, the request body, and the parent and owner filters. */
-function javaCall(c: CrudRoute, owned: boolean, v: { param: (p: string) => string; query: string; body: string; sub: string }): string {
+function javaCall(c: CrudRoute, owned: boolean, v: { param: (p: string) => string; query: string; body: string; sub: string; map?: (pairs: [string, string][]) => string }): string {
   const owner = owned ? ownerColumn(c) : undefined
-  const entries = [...(c.parent ? [`${jstr(c.parent.column)}, ${v.param(c.parent.param)}`] : []), ...(owner ? [`${jstr(owner)}, ${v.sub}`] : [])]
-  const filter = entries.length ? `Map.of(${entries.join(', ')})` : 'Map.of()'
+  const pairs: [string, string][] = [...(c.parent ? [[jstr(c.parent.column), v.param(c.parent.param)] as [string, string]] : []), ...(owner ? [[jstr(owner), v.sub] as [string, string]] : [])]
+  const filter = (v.map ?? ((x) => `Map.of(${x.map(([k, val]) => `${k}, ${val}`).join(', ')})`))(pairs)
   const id = c.idParam ? v.param(c.idParam) : '""'
   const t = `Tables.${tableConst(c.table.name)}`
   switch (c.action) {
@@ -243,18 +243,49 @@ ENTRYPOINT ["java", "-jar", "/app.jar"]
   return f
 }
 
+/** A Ktor route for one designed operation: sign-in checks, then the CRUD call or a 501. */
+function kotlinRoute(m: ServiceModel, r: Route, c: CrudRoute | undefined): string {
+  const method = r.method.toLowerCase()
+  const guard = guardedJvm(m, r)
+  const lines: string[] = []
+  const json = (body: string, status: string) => `call.respondText(\"\"\"${body}\"\"\", ContentType.Application.Json, HttpStatusCode.${status})`
+  if (guard) {
+    lines.push('val session = Session.from(call.request.headers["Authorization"], call.request.headers["Cookie"])')
+    lines.push(`if (session == null) return@${method} ${json('{"error":"unauthorized"}', 'Unauthorized')}`)
+    if (r.op.auth === 'admin') lines.push(`if (session.role() != "admin") return@${method} ${json('{"error":"forbidden"}', 'Forbidden')}`)
+  }
+  lines.push(c
+    ? `call.send(${javaCall(c, guard, {
+      param: (p) => `call.parameters[${jstr(p)}]!!`,
+      query: 'call.request.queryParameters.entries().associate { it.key to it.value.first() }',
+      body: 'call.receiveText()',
+      sub: 'session.sub()',
+      map: (pairs) => `mapOf(${pairs.map(([k, v]) => `${k} to ${v}`).join(', ')})`,
+    })})`
+    : json(`{"error":"not_implemented","operation":"${r.name}"}`, 'NotImplemented'))
+  return `${comment(stepLines(r.op), '//', '            ')}
+            ${method}(${jstr(r.path)}) {
+${lines.map((l) => `                ${l}`).join('\n')}
+            }`
+}
+
 export function kotlinService(m: ServiceModel): Files {
   const pkg = pkgName(m)
+  const da = m.kind === 'api' && m.style === 'rest' ? dataAccess(m) : undefined
   const notes: string[] = []
   if (m.frameworkId === 'spring-kt') notes.push('Spring Boot for Kotlin is not generated yet; this service uses Ktor.')
   if (m.kind === 'api' && !['rest', 'webhook', 'sse'].includes(m.style)) notes.push(`${m.style} handlers are not generated for Kotlin yet; the contract is included and Ktor serves health.`)
   const f: Files = {}
+  jvmData(m, pkg, `${m.dir}/src/main/java/${pkg.replace(/\./g, '/')}`, `${m.dir}/src/main/resources`, da, f)
   f[`${m.dir}/src/main/kotlin/${pkg.replace(/\./g, '/')}/Application.kt`] = `package ${pkg}
 
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
+import io.ktor.server.request.receiveText
+import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.*
 
@@ -265,17 +296,19 @@ val dependencies = mapOf(
 ${m.deps.map((d) => `    "${d.env}" to env("${d.env}", "${d.url}"),`).join('\n')}
 )
 
+private suspend fun ApplicationCall.send(r: Db.Result) {
+    val body = r.body()
+    if (body == null) respond(HttpStatusCode.fromValue(r.status())) else respondText(body, ContentType.Application.Json, HttpStatusCode.fromValue(r.status()))
+}
+
 fun main() {
-${m.kind === 'cron' ? `    // Runs once per schedule (${m.schedule}); the platform starts the container on that schedule.
+${da ? `    Db.open(dependencies.getValue(${jstr(da.dep.env)}))\n` : ''}${m.kind === 'cron' ? `    // Runs once per schedule (${m.schedule}); the platform starts the container on that schedule.
     println("${m.name} started with \${dependencies.size} dependencies")
     return
 ` : ''}    embeddedServer(Netty, port = env("PORT", "${m.port}").toInt(), host = "0.0.0.0") {
         routing {
             get("/healthz") { call.respondText("""{"status":"ok"}""", ContentType.Application.Json) }
-${m.kind === 'api' ? m.routes.map((r) => `${comment(stepLines(r.op), '//', '            ')}
-            ${r.method.toLowerCase()}("${r.path}") {
-                call.respondText("""{"error":"not_implemented","operation":"${r.name}"}""", ContentType.Application.Json, HttpStatusCode.NotImplemented)
-            }`).join('\n') : `            // Worker: consumes from ${m.sources.join(', ') || 'nothing connected yet'}.`}
+${m.kind === 'api' ? m.routes.map((r) => kotlinRoute(m, r, da?.routes.find((c) => c.route === r))).join('\n') : `            // Worker: consumes from ${m.sources.join(', ') || 'nothing connected yet'}.`}
         }
     }.start(wait = true)
 }
@@ -299,7 +332,10 @@ repositories {
 dependencies {
     implementation("io.ktor:ktor-server-core-jvm")
     implementation("io.ktor:ktor-server-netty-jvm")
-    implementation("ch.qos.logback:logback-classic:1.5.18")
+    implementation("ch.qos.logback:logback-classic:1.5.18")${da ? `
+    implementation("org.postgresql:postgresql:42.7.7")
+    implementation("com.zaxxer:HikariCP:6.3.0")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.19.1")` : ''}
 }
 
 kotlin {
