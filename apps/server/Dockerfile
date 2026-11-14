@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 COPY --from=docker /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 USER tessery
-ENV RUST_LOG=info TESSERY_BIND=0.0.0.0:8080 TESSERY_DATA_DIR=/var/lib/tessery
+ENV RUST_LOG=info TESSERY_BIND=0.0.0.0:8080 TESSERY_DATA_DIR=/var/lib/tessery HOME=/var/lib/tessery
 VOLUME /var/lib/tessery
 
 FROM runtime AS server
