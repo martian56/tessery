@@ -573,10 +573,32 @@ test('releases check each service against its API and database design', async ()
   runOp(shop, 'addColumn', { nodeId: db, tableId: ordersTable.id, column: { name: 'customer_id', type: 'uuid', nullable: false, ref: { table: 'customers', column: 'id', onDelete: 'cascade' } } })
   void customers
   assert.ok(!contract(shop, shop.environments[0])!.checks.some((x) => x.method === 'POST'), 'a record that needs a reference is not made up')
-  assert.deepEqual(create.save, { orders_orders_id: '."id"' }, 'saved ids are named by service and table, so two services with a table of the same name never share one')
-  assert.ok(c.checks.some((x) => x.path.includes('{{orders_orders_id}}') && x.status.includes(404)), 'a deleted record is gone')
+  assert.deepEqual(create.save, { created_1: '."id"' })
+  assert.ok(c.checks.some((x) => x.path.includes('{{created_1}}') && x.status.includes(404)), 'a deleted record is gone')
   const cleanup = c.checks.filter((x) => x.cleanup)
   assert.ok(cleanup.length === 1 && cleanup[0].method === 'DELETE', 'the delete is marked so a failed release still removes its record')
   assert.ok(c.checks.indexOf(cleanup[0]) > c.checks.indexOf(create))
 })
 
+
+test('contract ids never collide, even for services and tables whose names flatten alike', async () => {
+  const { contract } = await import('../src/codegen/deploy/contract')
+  const doc = blankTemplate('shop', 'self', 'onprem')
+  for (const [service, table] of [['a-b', 'c'], ['a', 'b_c']]) {
+    const api = runOp(doc, 'addNode', { techId: 'service', x: 0, y: 0, name: service, config: { language: 'Go' } }) as string
+    const db = runOp(doc, 'addNode', { techId: 'postgres', x: 0, y: 0, name: `${service}-db` }) as string
+    runOp(doc, 'connect', { source: api, target: db })
+    const t = runOp(doc, 'addTable', { nodeId: db, name: table }) as string
+    runOp(doc, 'addColumn', { nodeId: db, tableId: t, column: { name: 'label', type: 'text', nullable: false } })
+    runOp(doc, 'addCrudOperations', { nodeId: api, table })
+  }
+  const c = contract(doc, doc.environments[0])!
+  const creates = c.checks.filter((x) => x.save)
+  assert.equal(creates.length, 2)
+  const keys = creates.map((x) => Object.keys(x.save!)[0])
+  assert.notEqual(keys[0], keys[1])
+  for (const [i, key] of keys.entries()) {
+    const own = c.checks.filter((x) => x.path.includes(`{{${key}}}`))
+    assert.ok(own.length && own.every((x) => x.service === creates[i].service), 'each saved id is only used by its own service')
+  }
+})

@@ -72,6 +72,7 @@ export function contract(doc: ProjectDoc, env: Environment): Contract | null {
   const auth = !!builtInAuth(doc)
   const guarded = (op: Operation) => auth && (op.auth === 'user' || op.auth === 'admin')
   const checks: ContractCheck[] = []
+  let created = 0
   for (const n of doc.nodes) {
     const spec = doc.apis[n.id]
     if (!running.has(n.name) || !spec || spec.style !== 'rest') continue
@@ -101,7 +102,8 @@ export function contract(doc: ProjectDoc, env: Environment): Contract | null {
       const required = fields.filter((c) => !c.nullable && !c.default)
       const body = Object.fromEntries(fields.filter((c) => !c.default).map((c) => [c.name, sample(c)]).filter(([, v]) => v !== undefined))
       if (mode !== 'full' || !create || !remove || !pk || required.some((c) => !(c.name in body))) continue
-      const idVar = `${n.name}_${t.name}_id`.replace(/\W/g, '_')
+      // Numbered rather than named, so ids saved for different services and tables can never share a name.
+      const idVar = `created_${++created}`
       checks.push({ ...at, name: `${label(create)} creates a ${t.name} record`, method: create.route.method, path: full(create.route.path), body, status: [200, 201], shape: has(t), ...fieldsOf, save: { [idVar]: `.${JSON.stringify(pk.name)}` } })
       const one = (c: CrudRoute) => full(c.route.path).replace(`{${c.idParam}}`, `{{${idVar}}}`)
       const get = of('get')
