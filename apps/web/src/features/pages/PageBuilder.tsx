@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import { useAppDispatch, useDoc, useEdit } from '@/store'
 import { ui } from '@/store/uiSlice'
 import { Badge, DropdownMenu, Empty, Segmented, Spacer, Toolbar, Button } from '@/ui'
-import { BLOCKS, BLOCK_BY_TYPE, renderBlock } from './blocks'
+import { BLOCKS, BLOCK_BY_TYPE, PreviewStyles, renderBlock } from './blocks'
 import { useCurrentPage } from './usePage'
 import s from './Pages.module.css'
 
@@ -50,7 +50,8 @@ export function PageBuilder() {
       <div className={s.stage} onClick={(e) => { if (e.target === e.currentTarget) dispatch(ui.setPages({ blockId: null })) }}>
         <div className={s.frame} style={{ width }}>
           <div className={s.chrome}><i /><i /><i /><span>{app?.name}.example.com{page.route.replace(/\[(\w+)\]/g, '$1-1')}</span></div>
-          <div className={s.page} onDragOver={(e) => { e.preventDefault(); if (!page.blocks.length) setDropAt(0) }} onDrop={(e) => onDrop(e, page.blocks.length)} onDragLeave={(e) => { if (e.currentTarget === e.target) setDropAt(null) }}>
+          <PreviewStyles />
+          <div className={clsx(s.page, 'tsp')} onClickCapture={(e) => { if ((e.target as HTMLElement).closest('a, button, summary, label')) e.preventDefault() }} onDragOver={(e) => { e.preventDefault(); if (!page.blocks.length) setDropAt(0) }} onDrop={(e) => onDrop(e, page.blocks.length)} onDragLeave={(e) => { if (e.currentTarget === e.target) setDropAt(null) }}>
             {page.blocks.map((b, i) => {
               const src = opLabel(b.props.source), act = opLabel(b.props.action)
               return (
@@ -63,7 +64,7 @@ export function PageBuilder() {
                     onDrop={(e) => { e.stopPropagation(); onDrop(e, dropAt ?? i) }}
                     onClick={() => dispatch(ui.setPages({ blockId: b.id }))}>
                     <span className={s.tag}>{BLOCK_BY_TYPE[b.type]?.label ?? b.type}</span>
-                    {renderBlock(b, device)}
+                    {renderBlock(b)}
                     {(src || act) && <div className={s.binding}>{src && <span className={src.ok ? '' : s.bad}>↳ data: {src.text}{src.ok ? '' : ' (missing)'}</span>}{act && <span className={act.ok ? '' : s.bad}>↳ action: {act.text}{act.ok ? '' : ' (missing)'}</span>}</div>}
                   </div>
                 </div>
