@@ -68,6 +68,13 @@
 .tsp-feature { display: flex; flex-direction: column; gap: 4px; padding: 14px; border-radius: var(--tsp-radius); background: var(--tsp-panel); font-size: 12px; }
 .tsp-feature span { color: var(--tsp-muted); }
 .tsp-empty { color: var(--tsp-faint); font-size: 13px; }
+.tsp-block-state { padding: 20px var(--tsp-gutter); }
+.tsp-skeleton { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; }
+.tsp-skeleton span { display: block; height: 12px; border-radius: 4px; background: linear-gradient(90deg, var(--tsp-line) 25%, color-mix(in srgb, var(--tsp-line) 40%, transparent) 50%, var(--tsp-line) 75%); background-size: 200% 100%; animation: tsp-shimmer 1.4s linear infinite; }
+.tsp-skeleton span:last-child { width: 60%; }
+.tsp-failed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 14px; border: 1px solid var(--tsp-line); border-radius: var(--tsp-radius); font-size: 13px; }
+.tsp-failed p { margin: 0; color: var(--tsp-muted); }
+.tsp .tsp-retry { color: var(--tsp-accent); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
 
 .tsp-table-wrap { overflow-x: auto; }
 .tsp-table { width: 100%; border-collapse: collapse; font-size: 12px; }

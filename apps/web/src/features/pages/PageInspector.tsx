@@ -162,6 +162,17 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
   const edit = useEdit()
   const p = el.props
   const str = (k: string) => String(p[k] ?? '')
+  // What a bound frame or block shows while loading, when empty and when the request fails, and which one the canvas previews.
+  const states = (
+    <>
+      <Field label="When it fails" hint="Shown with a retry link when the service cannot be reached."><Input value={str('error')} onChange={(x) => prop('error', x || null)} placeholder="This could not be loaded." /></Field>
+      <Field label="Retry link"><Input value={str('retry')} onChange={(x) => prop('retry', x || null)} placeholder="Try again" /></Field>
+      <Field label="Preview" hint="Which state the canvas shows. The app picks the state from the data.">
+        <Select value={str('previewState') || 'data'} onChange={(x) => prop('previewState', x === 'data' ? null : x, false)} aria-label="Preview state"
+          options={[{ value: 'data', label: 'Records' }, { value: 'loading', label: 'Loading' }, { value: 'empty', label: 'Empty' }, { value: 'error', label: 'Failed' }]} />
+      </Field>
+    </>
+  )
   switch (el.type) {
     case 'text':
       return <Section title="Text"><Field label="Text" hint="Inside a record frame, {field} shows that field."><Textarea value={str('text')} onChange={(x) => prop('text', x)} /></Field>
@@ -226,6 +237,7 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
               <Field label="When empty"><Input value={str('empty')} onChange={(x) => prop('empty', x)} placeholder="Nothing here yet." /></Field>
               <Field label="When nothing matches" hint="Shown instead while the page has a search or filter."><Input value={str('emptyFiltered')} onChange={(x) => prop('emptyFiltered', x)} placeholder="Same as when empty" /></Field>
               <Field label="Preview rows"><NumberInput value={Number(p.preview) || 3} min={1} max={12} onCommit={(x) => prop('preview', x, false)} /></Field>
+              {states}
             </>}
           </Section>
         </>
@@ -245,7 +257,7 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
       return (
         <>
           <Section title={meta?.label ?? 'Block'}>
-            {Object.entries(props).filter(([k]) => k !== 'block' && k !== 'source' && k !== 'action').map(([k, val]) => (
+            {Object.entries(props).filter(([k]) => !['block', 'source', 'action', 'error', 'retry', 'previewState'].includes(k)).map(([k, val]) => (
               <Field key={k} label={k}>
                 {typeof val === 'boolean' ? <Switch checked={val} onChange={(x) => prop(k, x, false)} /> : typeof val === 'number' ? <NumberInput value={val} min={1} max={48} onCommit={(x) => prop(k, x, false)} />
                   : ['body', 'sub', 'items', 'quote', 'tiers'].includes(k) ? <Textarea value={String(val)} onChange={(x) => prop(k, x)} /> : <Input value={String(val)} onChange={(x) => prop(k, x)} />}
@@ -260,6 +272,7 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
                     options={[{ value: '', label: 'Not bound' }, ...ops.filter((o) => k === 'action' || o.reads).map((o) => ({ value: o.key, label: o.label, group: o.style.toUpperCase() }))]} />
                 </Field>
               ))}
+              {!!p.source && states}
             </Section>
           )}
         </>

@@ -677,3 +677,62 @@ test('Rust services implement designed CRUD in SQL for Axum and Actix', () => {
     assert.match(files['services/tasks-api/Cargo.toml'], /tokio-postgres = /)
   }
 })
+
+test('record frames and data blocks show loading, failed and empty states', async () => {
+  const { Tree, FAILED } = await import('../src/render/tree')
+  type N = { type: unknown; props: Record<string, unknown> }
+  // The JSX stub returns plain objects; run function components so the output can be searched.
+  const expand = (x: unknown): unknown => {
+    if (Array.isArray(x)) return x.map(expand)
+    if (!x || typeof x !== 'object') return x
+    const n = x as N
+    if (typeof n.type === 'function') return expand((n.type as (p: unknown) => unknown)(n.props))
+    return { type: n.type, props: { ...n.props, children: expand(n.props?.children) } }
+  }
+  const all = (x: unknown, out: N[] = []): N[] => {
+    if (Array.isArray(x)) x.forEach((y) => all(y, out))
+    else if (x && typeof x === 'object') { out.push(x as N); all((x as N).props?.children, out) }
+    return out
+  }
+  const text = (n: N): string => all(n).map((x) => x.props?.children).flat(Infinity).filter((c) => typeof c === 'string').join(' ')
+  const list = { id: 'list', type: 'frame', props: { source: 'svc:listSeeds', error: 'Seeds are unavailable.', retry: 'Reload', preview: 4 }, children: [{ id: 'name', type: 'text', props: { text: '{name}' } }] }
+  const root = { id: 'root', type: 'frame', props: {}, children: [list] }
+  const theme = { colors: {}, fonts: { heading: 'serif', body: 'sans-serif' }, radius: 6 }
+  const render = (extra: Record<string, unknown>) => all(expand(Tree({ root: root as never, theme, blocks: {}, path: '/seeds', ...extra })))
+  const cls = (nodes: N[], c: string) => nodes.filter((n) => String(n.props?.className ?? '').split(' ').includes(c))
+
+  const failed = render({ data: { list: FAILED }, query: { q: 'bean' } })
+  const box = cls(failed, 'tsp-failed')[0]
+  assert.ok(box && box.props.role === 'alert', 'a failed load says so instead of showing an empty list')
+  assert.match(text(box), /Seeds are unavailable\./)
+  const retry = cls(failed, 'tsp-retry')[0]
+  assert.equal(retry.props.href, '/seeds?q=bean', 'retry reloads the page with the same query')
+  assert.equal(retry.props.children, 'Reload')
+  assert.equal(cls(failed, 'tsp-empty').length, 0)
+
+  const loading = render({ loading: true })
+  assert.equal(cls(loading, 'tsp-skeleton').length, 4, 'loading shows one placeholder per preview row')
+  assert.ok(loading.some((n) => n.props?.['aria-busy'] === 'true'))
+
+  assert.equal(cls(render({ data: { list: [] } }), 'tsp-empty').length, 1)
+  assert.equal(cls(render({ data: { list: [{ name: 'Bean' }] } }), 'tsp-failed').length, 0)
+
+  list.props = { ...list.props, previewState: 'error' } as typeof list.props
+  const preview = cls(render({ editing: true }), 'tsp-retry')[0]
+  assert.ok(preview && preview.props.href === undefined, 'the editor previews the failed state without a live link')
+})
+
+test('pages that load data get a loading screen and mark failed loads', () => {
+  const doc = tasksTemplate()
+  const files = generateAll(doc)
+  const pages = Object.keys(files).filter((f) => /\/app\/(.+\/)?page\.tsx$/.test(f) && !f.includes('/login/'))
+  const withData = pages.filter((f) => files[f].includes('await api.'))
+  assert.ok(withData.length > 0)
+  for (const f of withData) {
+    assert.match(files[f], /\.catch\(\(\) => FAILED\)/, `${f} marks a failed load`)
+    assert.match(files[f], /import \{ FAILED, Tree, type El \} from '@\/components\/tree'/)
+    const loading = f.replace(/page\.tsx$/, 'loading.tsx')
+    assert.match(files[loading] ?? '', /<Tree [^>]* loading \/>/, `${loading} renders the page while it loads`)
+  }
+  for (const f of pages.filter((x) => !withData.includes(x))) assert.ok(!files[f.replace(/page\.tsx$/, 'loading.tsx')], `${f} loads nothing, so it needs no loading screen`)
+})
