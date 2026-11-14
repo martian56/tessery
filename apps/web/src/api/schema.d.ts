@@ -2059,7 +2059,13 @@ export interface components {
              * Format: int32
              * @description Days of container metrics to keep, 1 to 90.
              */
-            metricsRetentionDays?: number;
+            metricsRetentionDays: number;
+        };
+        /** @description Fields left out keep their stored value. */
+        SettingsUpdate: {
+            allowOrgCreation?: boolean | null;
+            /** Format: int32 */
+            metricsRetentionDays?: number | null;
         };
         SetupRequest: {
             email: string;
@@ -2394,7 +2400,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Settings"];
+                "application/json": components["schemas"]["SettingsUpdate"];
             };
         };
         responses: {

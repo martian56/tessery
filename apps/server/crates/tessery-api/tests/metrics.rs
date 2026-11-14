@@ -58,4 +58,8 @@ async fn charts_read_stored_samples_and_rules_are_checked() {
     assert_eq!(admin.put("/api/admin/settings", json!({ "allowOrgCreation": true, "metricsRetentionDays": 400 })).await.status(), StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(admin.put("/api/admin/settings", json!({ "allowOrgCreation": true, "metricsRetentionDays": 30 })).await.status(), StatusCode::OK);
     assert_eq!(admin.json("/api/admin/settings").await["metricsRetentionDays"], 30);
+    assert_eq!(admin.put("/api/admin/settings", json!({ "allowOrgCreation": false })).await.status(), StatusCode::OK);
+    let kept: Value = admin.json("/api/admin/settings").await;
+    assert_eq!(kept["metricsRetentionDays"], 30, "fields left out keep their value");
+    assert_eq!(kept["allowOrgCreation"], false);
 }
