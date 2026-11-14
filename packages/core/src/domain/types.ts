@@ -204,6 +204,10 @@ export interface Theme {
   radius: number
   /** Colors that replace `colors` when the visitor's system is in dark mode. */
   dark?: Record<string, string>
+  /** An uploaded image ("asset:<id>/<name>") or https URL; image elements show it with src "theme:logo". */
+  logo?: string
+  /** The browser tab icon of every page, an uploaded image or https URL. */
+  favicon?: string
 }
 
 export interface Page {

@@ -7,6 +7,7 @@ import SESSION_RUNTIME from './runtime/ts-session.txt'
 import { httpRoute, restPrefix, readsOnly } from './services/model'
 import BLOCKS_SOURCE from '../render/blocks.source.txt'
 import TREE_SOURCE from '../render/tree.source.txt'
+import { themeCss } from '../render/tree'
 import { blocksOf, themeOf } from '../domain/tree'
 import BLOCK_STYLES from '../render/styles.txt'
 import { BLOCK_CATALOG } from '../render/catalog'
@@ -164,8 +165,8 @@ body { background: #fafafa; }
 /* Pages Tessery writes outside the page builder, such as sign-in. */
 .form { display: flex; flex-direction: column; gap: 12px; max-width: 420px; margin: 48px auto; padding: 0 24px; }
 .form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--tsp-muted); }
-.form input { border: 1px solid #ddd; border-radius: 4px; padding: 8px; font: inherit; }
-.btn { display: inline-block; padding: 9px 16px; border-radius: 4px; background: var(--tsp-accent); color: #fff; font-weight: 600; border: 0; cursor: pointer; }
+.form input { border: 1px solid var(--tsp-line); border-radius: var(--tsp-radius); padding: 8px; font: inherit; color: var(--tsp-ink); background: var(--tsp-surface); }
+.btn { display: inline-block; padding: 9px 16px; border-radius: var(--tsp-radius); background: var(--tsp-accent); color: var(--tsp-on-accent); font-weight: 600; border: 0; cursor: pointer; }
 .btn:disabled { opacity: .6; }
 .link { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; text-align: left; }
 .error { color: #d33; margin: 0; }
@@ -175,6 +176,8 @@ export function webAppFiles(doc: ProjectDoc, app: SystemNode): Files {
   const dir = `apps/${app.name}`
   const pages = doc.pages.filter((p) => p.appNodeId === app.id)
   const framework = String(app.config.framework ?? 'Next.js')
+  const appTheme = themeOf(doc, app.id)
+  const favicon = appTheme.favicon?.startsWith('asset:') ? `/assets/${appTheme.favicon.slice(6)}` : appTheme.favicon?.startsWith('https://') ? appTheme.favicon : undefined
   const f: Files = {}
   f[`${dir}/lib/api.ts`] = apiClient(doc)
   pages.forEach((p) => { f[`${dir}/app/${routeDir(p.route)}page.tsx`] = pageSource(doc, p) })
@@ -198,17 +201,17 @@ export function webAppFiles(doc: ProjectDoc, app: SystemNode): Files {
   f[`${dir}/app/layout.tsx`] = `import './globals.css'
 import type { ReactNode } from 'react'
 
-export const metadata = { title: ${JSON.stringify(doc.name)} }
+export const metadata = ${JSON.stringify({ title: doc.name, ...(favicon ? { icons: { icon: favicon } } : {}) })}
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body><div className="tsp">{children}</div></body>
+      <body><div className="tsp tsp-app">{children}</div></body>
     </html>
   )
 }
 `
-  f[`${dir}/app/globals.css`] = BASE_CSS + '\n' + BLOCK_STYLES
+  f[`${dir}/app/globals.css`] = themeCss(appTheme, '.tsp-app') + '\n' + BASE_CSS + '\n' + BLOCK_STYLES
   f[`${dir}/app/api/[service]/[...path]/route.ts`] = apiProxy(doc, app)
   const auth = builtInAuth(doc)
   if (auth) {
