@@ -137,10 +137,13 @@ const safeEmbed = (v: unknown) => {
 }
 const safePath = (v: unknown) => String(v ?? '').replace(/[^MLHVCSQTAZmlhvcsqtaz0-9.,\-\se]/g, '')
 
-/** The records a bound frame repeats over: the response itself when it is a list, or its first list field. */
+/** The records a bound frame repeats over: the response when it is a list, its first list field, or one record for a detail page. */
 export function records(data: unknown): Row[] {
   if (Array.isArray(data)) return data as Row[]
-  if (data && typeof data === 'object') for (const k of ['items', 'data', 'results', 'rows', 'nodes']) { const v = (data as Row)[k]; if (Array.isArray(v)) return v as Row[] }
+  if (data && typeof data === 'object') {
+    for (const k of ['items', 'data', 'results', 'rows', 'nodes']) { const v = (data as Row)[k]; if (Array.isArray(v)) return v as Row[] }
+    return [data as Row]
+  }
   return []
 }
 

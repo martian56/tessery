@@ -339,6 +339,7 @@ test('record frames, placeholders, states, dark colors and icons render the way 
   assert.deepEqual(records({ items: [{ id: 1 }] }), [{ id: 1 }])
   assert.deepEqual(records([{ id: 2 }]), [{ id: 2 }])
   assert.deepEqual(records(null), [])
+  assert.deepEqual(records({ id: 3, name: 'one' }), [{ id: 3, name: 'one' }], 'a detail response is one record')
   const row = { id: 'a b', title: 'Fix login', price: 1234.5, author: { name: 'Ada Lovelace' } }
   assert.equal(fill('{title} by {author.name} ({author.name|initials})', row), 'Fix login by Ada Lovelace (AL)')
   assert.equal(fill('{price|money}', row), '$1,234.50')
