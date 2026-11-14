@@ -536,3 +536,22 @@ test('hand-written components become files the pages render', async () => {
   assert.ok(analyze(doc, undefined, null).some((x) => x.target?.blockId === el && /does not exist/.test(x.message)))
   assert.ok(!Object.keys(generateAll(doc)).some((f) => f.endsWith('/custom/PriceChart.tsx')))
 })
+
+test('Java services implement designed CRUD in SQL with sign-in and per-user rows', () => {
+  const doc = tasksTemplate()
+  const api = doc.nodes.find((n) => n.name === 'tasks-api')!
+  runOp(doc, 'setConfig', { id: api.id, key: 'language', value: 'Java' })
+  runOp(doc, 'setConfig', { id: api.id, key: 'framework', value: 'Spring Boot' })
+  const files = generateAll(doc)
+  const src = 'services/tasks-api/src/main/java/com/example/tasks_api'
+  const controller = files[`${src}/ApiController.java`]
+  assert.match(controller, /Tables\.PROJECTS\.list\(query, Map\.of\("user_id", session\.sub\(\)\)\)/, 'lists only the signed-in user\'s rows')
+  assert.match(controller, /Tables\.TASKS\.list\(query, Map\.of\("project_id", projectId, "user_id", session\.sub\(\)\)\)/, 'nested routes filter by their parent')
+  assert.match(controller, /if \(session == null\) return status\(401/)
+  assert.doesNotMatch(controller, /not_implemented/, 'every designed CRUD route is implemented')
+  assert.match(files[`${src}/Application.java`], /Db\.open\(DEPENDENCIES\.get\("TASKS_DB_URL"\)\)/)
+  assert.match(files[`${src}/Tables.java`], /new Db\.Table\("projects", "id"/)
+  assert.ok(files[`${src}/Db.java`].includes('pg_advisory_lock') && files[`${src}/Session.java`].includes('HmacSHA256'))
+  assert.equal(files['services/tasks-api/src/main/resources/migrations/tasks-db/index.txt'], '0001_init.sql\n')
+  assert.match(files['services/tasks-api/pom.xml'], /<artifactId>postgresql<\/artifactId>/)
+})
