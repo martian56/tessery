@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import type { Page, StyleMap, UIElement } from '@tessery/core/domain/types'
-import { Tree, type TreeProps } from '@tessery/core/render/tree'
+import { Tree, themeCss, type TreeProps } from '@tessery/core/render/tree'
 import * as Shared from '@tessery/core/render/blocks'
 import { BLOCK_CATALOG } from '@tessery/core/render/catalog'
 import BLOCK_STYLES from '@tessery/core/render/styles.txt'
@@ -11,6 +11,7 @@ import { AssetPicker } from '@/features/assets/AssetPicker'
 import { DEVICE_WIDTH, boxFrom, effective, normalizePath, penPath, px, simplify, smoothPath, type Anchor, type Box, type Breakpoint, type Pt } from './geometry'
 import { BOX_TOOLS, SEEDS, STATE_LABEL, TOOL_KEYS, type ElementSeed } from './tools'
 import { EditorIcon } from './EditorIcon'
+import { useCustomPreviews } from './CustomPreview'
 import s from './Canvas.module.css'
 
 const BLOCKS = Object.fromEntries(BLOCK_CATALOG.map((b) => [b.type, b.type === 'form' ? Shared.FormView : (Shared as unknown as Record<string, ComponentType<Record<string, unknown>>>)[b.component]])) as unknown as TreeProps['blocks']
@@ -39,6 +40,7 @@ export function Canvas({ page }: { page: Page }) {
   const doc = useDoc()
   const { device, tool, blockId: selected, selection, state: previewState } = useUi((u) => u.pages)
   const theme = themeOf(doc, page.appNodeId)
+  const custom = useCustomPreviews(doc.components, page.appNodeId, themeCss(theme, 'body', '/api/assets/'))
   const width = DEVICE_WIDTH[device]
   const geoKey: Breakpoint = device === 'desktop' ? 'style' : device
   const writeKey: Breakpoint = previewState !== 'none' ? previewState : geoKey
@@ -416,7 +418,7 @@ export function Canvas({ page }: { page: Page }) {
             onClickCapture={(e) => { if ((e.target as HTMLElement).closest('a, button, summary, label')) e.preventDefault() }}
             onSubmitCapture={(e) => e.preventDefault()}
             onDragOver={onDragOver} onDragLeave={(e) => { if (e.currentTarget === e.target) setDrop(null) }} onDrop={onDrop}>
-            <Tree root={tree} theme={theme} blocks={BLOCKS} defaults={DEFAULTS} assetBase="/api/assets/" icon={EditorIcon} path={page.route} editing />
+            <Tree root={tree} theme={theme} blocks={BLOCKS} defaults={DEFAULTS} assetBase="/api/assets/" icon={EditorIcon} custom={custom} path={page.route} editing />
           </div>
           <div className={s.overlay}>
             {hoverBox && <div className={s.hover} style={{ left: hoverBox.x, top: hoverBox.y, width: hoverBox.w, height: hoverBox.h }} />}

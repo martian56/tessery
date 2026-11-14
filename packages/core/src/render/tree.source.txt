@@ -40,8 +40,10 @@ export interface TreeProps {
   editing?: boolean
   /** The page's query string values, for {?name} placeholders and for marking ?filter links current. */
   query?: Record<string, string | string[] | undefined>
+  /** Hand-written components for custom elements, by component id. */
+  custom?: Record<string, (p: any) => any>
 }
-type Ctx = Required<Omit<TreeProps, 'root' | 'theme' | 'icon' | 'path' | 'query'>> & Pick<TreeProps, 'icon' | 'path' | 'query'> & { logo?: string }
+type Ctx = Required<Omit<TreeProps, 'root' | 'theme' | 'icon' | 'path' | 'query' | 'custom'>> & Pick<TreeProps, 'icon' | 'path' | 'query' | 'custom'> & { logo?: string }
 type Row = Record<string, unknown>
 
 const PX = new Set(['width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'gap', 'rowGap', 'columnGap', 'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'paddingInline', 'paddingBlock', 'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'marginInline', 'marginBlock', 'top', 'right', 'bottom', 'left', 'fontSize', 'borderRadius', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius', 'borderWidth', 'letterSpacing', 'strokeWidth', 'outlineOffset', 'outlineWidth', 'flexBasis', 'textIndent', 'textUnderlineOffset', 'scrollPaddingTop', 'scrollMarginTop'])
@@ -344,6 +346,12 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
       const src = safeEmbed(p.src)
       return src ? <iframe {...base} src={src} title={String(p.title ?? 'Embedded content')} loading="lazy" sandbox="allow-scripts allow-same-origin allow-popups allow-presentation" allow="fullscreen; picture-in-picture" /> : <div {...base} />
     }
+    case 'custom': {
+      const Custom = t.custom?.[String(p.component)]
+      const props: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(p)) if (!['component', 'label', 'tooltip', 'when'].includes(k)) props[k] = typeof v === 'string' ? f(v) : v
+      return <div {...base}>{Custom ? <Custom {...props} /> : null}</div>
+    }
     case 'block': {
       const Block = t.blocks[String(p.block)]
       if (!Block) return <div {...base} />
@@ -358,11 +366,11 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
   }
 }
 
-export function Tree({ root, theme, blocks, defaults = {}, data = {}, actions = {}, assetBase = '/assets/', icon, path, editing = false, query }: TreeProps) {
+export function Tree({ root, theme, blocks, defaults = {}, data = {}, actions = {}, assetBase = '/assets/', icon, path, editing = false, query, custom }: TreeProps) {
   return (
     <div className="tsp tsp-tree">
       <style>{treeCss(root, theme, assetBase)}</style>
-      <Node e={root} t={{ blocks, defaults, data, actions, assetBase, icon, path, editing, query, logo: theme.logo }} />
+      <Node e={root} t={{ blocks, defaults, data, actions, assetBase, icon, path, editing, query, custom, logo: theme.logo }} />
     </div>
   )
 }

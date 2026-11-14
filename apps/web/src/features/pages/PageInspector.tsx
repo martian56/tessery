@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlignCenter, AlignLeft, AlignRight, ArrowDown, ArrowRight, Copy, Group, ImagePlus, Trash2 } from 'lucide-react'
+import { AlignCenter, AlignLeft, AlignRight, ArrowDown, ArrowRight, Copy, Group, ImagePlus, Plus, Trash2 } from 'lucide-react'
 import type { ConfigValue, Page, StyleMap, UIElement } from '@tessery/core/domain/types'
 import { find, themeOf, walk } from '@tessery/core/domain/tree'
 import { THEME_PRESETS } from '@tessery/core/domain/themes'
@@ -192,6 +192,8 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
           <Field label="Disabled"><Switch checked={!!p.disabled} onChange={(x) => prop('disabled', x || null, false)} /></Field>
         </Section>
       )
+    case 'custom':
+      return <CustomContent page={page} el={el} prop={prop} />
     case 'select':
       return <Section title="Select"><Field label="Options"><Textarea value={str('options')} onChange={(x) => prop('options', x)} /></Field><Field label="Name"><Input mono value={str('name')} onChange={(x) => prop('name', x)} /></Field><Field label="Selected"><Input value={str('value')} onChange={(x) => prop('value', x)} /></Field></Section>
     case 'image':
@@ -339,6 +341,60 @@ function PageList({ page }: { page: Page }) {
   const doc = useDoc()
   const routes = doc.pages.filter((p) => p.appNodeId === page.appNodeId).map((p) => p.route.replace(/\[(\w+)\]/g, '{$1}'))
   return <datalist id="tsp-pages">{routes.map((r) => <option key={r} value={r} />)}</datalist>
+}
+
+const CUSTOM_RESERVED = ['component', 'label', 'tooltip', 'when']
+
+/** A custom element: which hand-written component it renders, the props it passes, and that component's code. */
+function CustomContent({ page, el, prop }: { page: Page; el: UIElement; prop: (k: string, v: ConfigValue | null, coalesce?: boolean) => void }) {
+  const doc = useDoc()
+  const edit = useEdit()
+  const comps = Object.values(doc.components ?? {}).filter((c) => c.appNodeId === page.appNodeId)
+  const current = doc.components?.[String(el.props.component ?? '')]
+  const extra = Object.entries(el.props).filter(([k]) => !CUSTOM_RESERVED.includes(k))
+  const text = extra.map(([k, v]) => `${k}: ${v}`).join('\n')
+  const create = () => {
+    let name = 'Widget'
+    for (let i = 2; comps.some((c) => c.name === name); i++) name = `Widget${i}`
+    const id = edit('addComponent', { appNodeId: page.appNodeId, name })
+    if (typeof id === 'string') prop('component', id, false)
+  }
+  const saveProps = (raw: string) => {
+    const next: Record<string, string> = {}
+    for (const line of raw.split('\n')) {
+      const m = /^\s*([A-Za-z_]\w*)\s*:\s?(.*)$/.exec(line)
+      if (m && !CUSTOM_RESERVED.includes(m[1])) next[m[1]] = m[2]
+    }
+    const patch: Record<string, ConfigValue | null> = { ...next }
+    for (const [k] of extra) if (!(k in next)) patch[k] = null
+    edit('updateElement', { pageId: page.id, elementId: el.id, patch: { props: patch } })
+  }
+  const onTab = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== 'Tab') return
+    e.preventDefault()
+    const t = e.currentTarget
+    t.setRangeText('  ', t.selectionStart, t.selectionEnd, 'end')
+    t.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+  return (
+    <>
+      <Section title="Component">
+        <Field label="Renders"><Select value={current?.id ?? ''} onChange={(x) => prop('component', x || null, false)} aria-label="Component" options={[{ value: '', label: comps.length ? 'Choose a component' : 'No components yet' }, ...comps.map((c) => ({ value: c.id, label: c.name }))]} /></Field>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}><Button size="sm" icon={<Plus />} onClick={create}>New component</Button></div>
+        <Field label="Props" hint="One per line as name: value. Inside a record frame, {field} fills from the record.">
+          <textarea key={text} className={f.code} style={{ minHeight: 84 }} spellCheck={false} defaultValue={text} onBlur={(e) => e.target.value !== text && saveProps(e.target.value)} aria-label="Component props" />
+        </Field>
+      </Section>
+      {current && (
+        <Section title={`Code, ${current.name}.tsx`}>
+          <Field label="Name"><Input mono value={current.name} onCommit={(x) => x !== current.name && edit('updateComponent', { componentId: current.id, patch: { name: x } })} /></Field>
+          <textarea className={f.code} spellCheck={false} value={current.source} onKeyDown={onTab}
+            onChange={(e) => edit('updateComponent', { componentId: current.id, patch: { source: e.target.value } }, { coalesce: `component:${current.id}` })} aria-label={`${current.name} source`} />
+          <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>A default export taking props. It may import react and lucide-react; add 'use client' at the top for state or effects. The preview runs in a sandbox.</div>
+        </Section>
+      )}
+    </>
+  )
 }
 
 const popovers = (page: Page) => {

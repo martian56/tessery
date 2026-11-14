@@ -26,3 +26,5 @@
 .presetSwatches { display: flex; height: 14px; border-radius: 3px; overflow: hidden; }
 .presetSwatches i { flex: 1; }
 .brandThumb { width: 28px; height: 28px; object-fit: contain; border-radius: 4px; background: var(--bg-2); border: 1px solid var(--line-2); }
+.code { display: block; width: 100%; min-height: 260px; resize: vertical; padding: 10px; border: 1px solid var(--line-2); border-radius: var(--r-1); background: var(--bg-1); color: var(--tx-1); font: 12px/1.55 var(--font-mono); tab-size: 2; white-space: pre; overflow: auto; }
+.code:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }

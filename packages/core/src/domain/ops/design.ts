@@ -126,7 +126,7 @@ export const dbOps = {
 type ElementInput = Partial<Omit<UIElement, 'children'>> & { type: ElementType; children?: ElementInput[] }
 type ElementPatch = { props?: Record<string, ConfigValue | null>; name?: string; hidden?: boolean } & Partial<Record<StyleKey, Record<string, string | number | null>>>
 
-const ELEMENT_TYPES = new Set<ElementType>(['frame', 'text', 'image', 'video', 'button', 'icon', 'input', 'select', 'shape', 'path', 'embed', 'block'])
+const ELEMENT_TYPES = new Set<ElementType>(['frame', 'text', 'image', 'video', 'button', 'icon', 'input', 'select', 'shape', 'path', 'embed', 'block', 'custom'])
 
 /** Gives an element and its children fresh ids. */
 function build(e: ElementInput): UIElement {
@@ -172,6 +172,26 @@ const at = (doc: ProjectDoc, pageId: string, id?: string) => {
   if (!hit) throw new Error(`no element ${id} on page ${p.name}`)
   return { p, ...hit }
 }
+
+const RESERVED_NAMES = new Set(['React', 'Fragment', 'Component', 'Index', 'Default', 'Custom', 'Tree', 'Icon', 'Form'])
+
+/** Component names are PascalCase identifiers, unique within their app, since each becomes a file and an import. */
+function componentName(doc: ProjectDoc, appNodeId: string, raw: string): string {
+  const name = raw.trim()
+  if (!/^[A-Z][A-Za-z0-9]{0,48}$/.test(name) || RESERVED_NAMES.has(name)) throw new Error(`component names are PascalCase letters and digits, such as PriceChart; ${name || 'an empty name'} is not one`)
+  if (Object.values(doc.components ?? {}).some((c) => c.appNodeId === appNodeId && c.name === name)) throw new Error(`this app already has a component named ${name}`)
+  return name
+}
+
+const starterComponent = (name: string) => `// Props come from the element's settings in the page builder. Style with the theme's CSS variables.
+export default function ${name}({ title = 'Hello' }: { title?: string }) {
+  return (
+    <div style={{ padding: 24, borderRadius: 'var(--radius)', background: 'var(--c-surface)', border: '1px solid var(--c-border)' }}>
+      <strong style={{ fontFamily: 'var(--font-heading)', fontSize: 20 }}>{title}</strong>
+    </div>
+  )
+}
+`
 
 export const pageOps = {
   addPage(doc: ProjectDoc, a: { appNodeId: string; name: string; route: string }) {
@@ -262,6 +282,27 @@ export const pageOps = {
     const logo = a.logo === undefined ? t.logo : a.logo || undefined
     const favicon = a.favicon === undefined ? t.favicon : a.favicon || undefined
     doc.themes = { ...(doc.themes ?? {}), [a.appNodeId]: { colors, fonts: { ...t.fonts, ...(a.fonts ?? {}) }, radius: a.radius ?? t.radius, ...(Object.keys(dark).length ? { dark } : {}), ...(logo ? { logo } : {}), ...(favicon ? { favicon } : {}) } }
+  },
+
+  /** A hand-written React component for a web app; custom elements render it with their props. */
+  addComponent(doc: ProjectDoc, a: { appNodeId: string; name: string; source?: string }) {
+    const app = doc.nodes.find((n) => n.id === a.appNodeId)
+    if (!app || app.techId !== 'web-app') throw new Error('components belong to a web-app node')
+    const name = componentName(doc, a.appNodeId, a.name)
+    const id = uid('cmp')
+    doc.components = { ...(doc.components ?? {}), [id]: { id, appNodeId: a.appNodeId, name, source: a.source ?? starterComponent(name) } }
+    return id
+  },
+  updateComponent(doc: ProjectDoc, a: { componentId: string; patch: { name?: string; source?: string } }) {
+    const c = doc.components?.[a.componentId]
+    if (!c) throw new Error(`no component ${a.componentId}`)
+    if (a.patch.name !== undefined && a.patch.name !== c.name) c.name = componentName(doc, c.appNodeId, a.patch.name)
+    if (a.patch.source !== undefined) c.source = a.patch.source
+  },
+  removeComponent(doc: ProjectDoc, a: { componentId: string }) {
+    if (!doc.components?.[a.componentId]) return
+    const { [a.componentId]: _gone, ...rest } = doc.components
+    doc.components = rest
   },
 
   addBlock(doc: ProjectDoc, a: { pageId: string; type: string; props: Block['props']; after?: string }) {
