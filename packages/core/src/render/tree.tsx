@@ -68,7 +68,7 @@ const fontStack = (f: string) => (SYSTEM_FONTS.has(fontName(f)) ? `${f}, system-
 /** The stylesheet for a page: theme variables, then one rule per element, its hover state and its breakpoints. */
 export function treeCss(root: El, theme: PageTheme, base = '/assets/'): string {
   const fonts = [...new Set([theme.fonts.heading, theme.fonts.body].map(fontName))].filter((f) => f && !SYSTEM_FONTS.has(f) && /^[A-Za-z0-9 ]+$/.test(f))
-  const head = fonts.length ? `@import url("https://fonts.googleapis.com/css2?${fonts.map((f) => `family=${f.replace(/ /g, '+')}:ital,wght@0,300..900;1,300..900`).join('&')}&display=swap");\n` : ''
+  const head = fonts.length ? `@import url("https://fonts.googleapis.com/css2?${fonts.map((f) => `family=${f.replace(/ /g, '+')}:wght@400;700`).join('&')}&display=swap");\n` : ''
   const vars = [
     ...Object.entries(theme.colors).filter(([k, v]) => /^[A-Za-z0-9-]+$/.test(k) && cssValue('color', v, base) !== null).map(([k, v]) => `--c-${k}:${v}`),
     `--font-heading:${fontStack(theme.fonts.heading)}`,
