@@ -250,70 +250,93 @@ if [ "$action" != deploy ]; then
 fi
 
 # Runs deploy/<env>/contract.json: HTTP checks made from the API and database design. Each check names the request and
-# what it expects; the first one that fails stops the release with its name. On a remote server the requests run in a
-# short-lived curl container on the stack's network, since the runner cannot join a network on another machine.
+# what it expects; the first one that fails stops the release with its name, after sending the cleanup checks not yet
+# reached so no test record is left behind. On a remote server the requests run in a short-lived curl container on the
+# stack's network, since the runner cannot join a network on another machine.
 # With a service and an address it checks only that service, at that address: a rolling deploy uses this to check the
 # new containers before the old ones stop serving.
 contract_checked=""
+
+# Fills {{name}} placeholders in check number $1 from the saved values.
+contract_check() {
+  jq -c --slurpfile v "$contract_vars" --argjson i "$1" '
+    def fill: reduce ($v[0] | to_entries[]) as $e (.; gsub("\\{\\{" + $e.key + "\\}\\}"; $e.value));
+    .[$i] | .path |= fill | (if .shape then .shape |= fill else . end) | (if .body then .body |= walk(if type == "string" then fill else . end) else . end)' "$contract_checks"
+}
+
+# Sends one filled check; sets $code and writes the response to $contract_body.
+contract_send() {
+  method=$(printf '%s' "$1" | jq -r .method)
+  url=$(printf '%s' "$1" | jq -r --arg a "$contract_address" '"http://\(if $a == "" then .service else $a end):\(.port)\(.path)"')
+  data=$(printf '%s' "$1" | jq -c '.body // empty')
+  set -- -s --max-time 15 -X "$method"
+  [ -z "$data" ] || set -- "$@" -H 'content-type: application/json' --data "$data"
+  if [ -z "$contract_remote" ]; then
+    code=$(curl "$@" -o "$contract_body" -w '%{http_code}' "$url" || echo 000)
+  else
+    out=$(docker run --rm --network "$contract_network" curlimages/curl:8.11.1 "$@" -w '\n%{http_code}' "$url" || printf '\n000')
+    code=$(printf '%s\n' "$out" | tail -n 1)
+    printf '%s\n' "$out" | sed '$d' > "$contract_body"
+  fi
+}
+
+# Stops the release with $1, first sending the cleanup checks from number $2 on whose values are known.
+contract_fail() {
+  echo "::error::$1"
+  head -c 600 "$contract_body" 2>/dev/null; echo
+  j=$2
+  while [ "$j" -lt "$contract_total" ]; do
+    check=$(contract_check "$j")
+    if printf '%s' "$check" | jq -e '.cleanup and (.path | contains("{{") | not)' >/dev/null; then
+      contract_send "$check"
+      echo "cleaned up: $(printf '%s' "$check" | jq -r .name) ($code)"
+    fi
+    j=$((j + 1))
+  done
+  exit 1
+}
+
 check_contract() {
-  network=$1 remote=$2 only=${3:-} address=${4:-}
+  contract_network=$1 contract_remote=$2 only=${3:-} contract_address=${4:-}
   file="deploy/$TESSERY_ENV/contract.json"
   [ -f "$file" ] || return 0
-  checks=/tmp/contract-checks.json vars=/tmp/contract-vars.json body=/tmp/contract-body
-  jq --arg only "$only" --arg checked "$contract_checked" '[.checks[] | select(($only == "" or .service == $only) and (.service as $s | ($checked | split(" ") | index($s)) | not))]' "$file" > "$checks"
-  total=$(jq length "$checks")
-  [ "$total" -gt 0 ] || return 0
-  step "Checking ${only:-the API} against its design ($total checks, $(jq -r .mode "$file"))"
-  jq -n --arg run "${TESSERY_RELEASE:-$(date +%s)}" --arg uuid "$(cat /proc/sys/kernel/random/uuid)" --arg num "$(date +%s)" '{run: $run, uuid: $uuid, run_num: $num}' > "$vars"
-  if [ -z "$remote" ]; then
-    docker network connect "$network" "$(hostname)" >/dev/null 2>&1 || true
+  contract_checks=/tmp/contract-checks.json contract_vars=/tmp/contract-vars.json contract_body=/tmp/contract-body
+  jq --arg only "$only" --arg checked "$contract_checked" '[.checks[] | select(($only == "" or .service == $only) and (.service as $s | ($checked | split(" ") | index($s)) | not))]' "$file" > "$contract_checks"
+  contract_total=$(jq length "$contract_checks")
+  [ "$contract_total" -gt 0 ] || return 0
+  step "Checking ${only:-the API} against its design ($contract_total checks, $(jq -r .mode "$file"))"
+  jq -n --arg run "${TESSERY_RELEASE:-$(date +%s)}" --arg uuid "$(cat /proc/sys/kernel/random/uuid)" --arg num "$(date +%s)" '{run: $run, uuid: $uuid, run_num: $num}' > "$contract_vars"
+  if [ -z "$contract_remote" ]; then
+    docker network connect "$contract_network" "$(hostname)" >/dev/null 2>&1 || true
   fi
   i=0
-  while [ "$i" -lt "$total" ]; do
-    check=$(jq -c --slurpfile v "$vars" --argjson i "$i" '
-      def fill: reduce ($v[0] | to_entries[]) as $e (.; gsub("\\{\\{" + $e.key + "\\}\\}"; $e.value));
-      .[$i] | .path |= fill | (if .shape then .shape |= fill else . end) | (if .body then .body |= walk(if type == "string" then fill else . end) else . end)' "$checks")
+  while [ "$i" -lt "$contract_total" ]; do
+    check=$(contract_check "$i")
     name=$(printf '%s' "$check" | jq -r .name)
-    method=$(printf '%s' "$check" | jq -r .method)
-    url=$(printf '%s' "$check" | jq -r --arg a "$address" '"http://\(if $a == "" then .service else $a end):\(.port)\(.path)"')
-    data=$(printf '%s' "$check" | jq -c '.body // empty')
-    if [ -z "$remote" ]; then
-      if [ -n "$data" ]; then
-        code=$(curl -s -o "$body" -w '%{http_code}' --max-time 15 -X "$method" -H 'content-type: application/json' --data "$data" "$url" || echo 000)
-      else
-        code=$(curl -s -o "$body" -w '%{http_code}' --max-time 15 -X "$method" "$url" || echo 000)
-      fi
-    else
-      if [ -n "$data" ]; then
-        out=$(docker run --rm --network "$network" curlimages/curl:8.11.1 -s -w '\n%{http_code}' --max-time 15 -X "$method" -H 'content-type: application/json' --data "$data" "$url" || printf '\n000')
-      else
-        out=$(docker run --rm --network "$network" curlimages/curl:8.11.1 -s -w '\n%{http_code}' --max-time 15 -X "$method" "$url" || printf '\n000')
-      fi
-      code=$(printf '%s\n' "$out" | tail -n 1)
-      printf '%s\n' "$out" | sed '$d' > "$body"
-    fi
+    contract_send "$check"
     if ! printf '%s' "$check" | jq -e --argjson c "${code:-0}" 'any(.status[]; . == $c)' >/dev/null; then
-      echo "::error::API check failed: $name. It answered $code, the design expects $(printf '%s' "$check" | jq -r '.status | map(tostring) | join(" or ")')."
-      head -c 600 "$body" 2>/dev/null; echo
-      exit 1
+      contract_fail "API check failed: $name. It answered $code, the design expects $(printf '%s' "$check" | jq -r '.status | map(tostring) | join(" or ")')." "$((i + 1))"
     fi
     shape=$(printf '%s' "$check" | jq -r '.shape // empty')
-    if [ -n "$shape" ] && ! jq -e "$shape" "$body" >/dev/null 2>&1; then
+    if [ -n "$shape" ] && ! jq -e "$shape" "$contract_body" >/dev/null 2>&1; then
       fields=$(printf '%s' "$check" | jq -c '.fields // []')
-      missing=$(jq -r --argjson f "$fields" '(if type == "array" then ([.[] | select(type == "object")][0] // {}) else . end) as $o | if ($o | type) == "object" then [$f[] | select(. as $k | $o | has($k) | not)] | join(", ") else "" end' "$body" 2>/dev/null || true)
-      echo "::error::API check failed: $name. The response does not have the fields the design gives it${missing:+ (missing: $missing)}."
-      head -c 600 "$body" 2>/dev/null; echo
-      exit 1
+      missing=$(jq -r --argjson f "$fields" '(if type == "array" then ([.[] | select(type == "object")][0] // {}) else . end) as $o | if ($o | type) == "object" then [$f[] | select(. as $k | $o | has($k) | not)] | join(", ") else "" end' "$contract_body" 2>/dev/null || true)
+      # A create that answered with the wrong shape may still have made a record, so its own values are saved first.
+      printf '%s' "$check" | jq -r '.save // {} | to_entries[] | "\(.key) \(.value)"' | while read -r key expr; do
+        value=$(jq -r "$expr // empty" "$contract_body" 2>/dev/null || true)
+        [ -z "$value" ] || { jq --arg k "$key" --arg v "$value" '.[$k] = $v' "$contract_vars" > "$contract_vars.next" && mv "$contract_vars.next" "$contract_vars"; }
+      done
+      contract_fail "API check failed: $name. The response does not have the fields the design gives it${missing:+ (missing: $missing)}." "$((i + 1))"
     fi
     printf '%s' "$check" | jq -r '.save // {} | to_entries[] | "\(.key) \(.value)"' | while read -r key expr; do
-      value=$(jq -r "$expr" "$body")
-      jq --arg k "$key" --arg v "$value" '.[$k] = $v' "$vars" > "$vars.next" && mv "$vars.next" "$vars"
+      value=$(jq -r "$expr" "$contract_body")
+      jq --arg k "$key" --arg v "$value" '.[$k] = $v' "$contract_vars" > "$contract_vars.next" && mv "$contract_vars.next" "$contract_vars"
     done
     echo "passed: $name"
     i=$((i + 1))
   done
-  if [ -z "$remote" ]; then
-    docker network disconnect "$network" "$(hostname)" >/dev/null 2>&1 || true
+  if [ -z "$contract_remote" ]; then
+    docker network disconnect "$contract_network" "$(hostname)" >/dev/null 2>&1 || true
   fi
 }
 

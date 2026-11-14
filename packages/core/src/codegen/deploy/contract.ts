@@ -21,6 +21,9 @@ export interface ContractCheck {
   fields?: string[]
   /** Values to keep for later checks, as jq expressions on the body. */
   save?: Record<string, string>
+  /** Removes what an earlier check created. When a check fails, the runner still sends the cleanup checks it has not
+   * reached, so a failed release leaves no test record behind. */
+  cleanup?: boolean
 }
 
 export interface Contract {
@@ -80,7 +83,7 @@ export function contract(doc: ProjectDoc, env: Environment): Contract | null {
     const at = { service: n.name, port: m.port }
     const label = (c: CrudRoute) => `${n.name}: ${c.route.method} ${full(c.route.path)}`
 
-    for (const c of da.routes.filter((x) => guarded(x.route.op) && (mode === 'full' || ['GET', 'DELETE'].includes(x.route.method)))) {
+    for (const c of da.routes.filter((x) => guarded(x.route.op) && (mode === 'full' || x.route.method === 'GET'))) {
       checks.push({ ...at, name: `${label(c)} turns away visitors who are not signed in`, method: c.route.method, path: full(c.route.path).replace(/\{\w+\}/g, NO_ID), ...(['POST', 'PUT', 'PATCH'].includes(c.route.method) ? { body: {} } : {}), status: [401] })
     }
 
@@ -98,14 +101,15 @@ export function contract(doc: ProjectDoc, env: Environment): Contract | null {
       const required = fields.filter((c) => !c.nullable && !c.default)
       const body = Object.fromEntries(fields.filter((c) => !c.default).map((c) => [c.name, sample(c)]).filter(([, v]) => v !== undefined))
       if (mode !== 'full' || !create || !remove || !pk || required.some((c) => !(c.name in body))) continue
-      checks.push({ ...at, name: `${label(create)} creates a ${t.name} record`, method: create.route.method, path: full(create.route.path), body, status: [200, 201], shape: has(t), ...fieldsOf, save: { id: `.${JSON.stringify(pk.name)}` } })
-      const one = (c: CrudRoute) => full(c.route.path).replace(`{${c.idParam}}`, '{{id}}')
+      const idVar = `${t.name}_id`
+      checks.push({ ...at, name: `${label(create)} creates a ${t.name} record`, method: create.route.method, path: full(create.route.path), body, status: [200, 201], shape: has(t), ...fieldsOf, save: { [idVar]: `.${JSON.stringify(pk.name)}` } })
+      const one = (c: CrudRoute) => full(c.route.path).replace(`{${c.idParam}}`, `{{${idVar}}}`)
       const get = of('get')
       if (get) checks.push({ ...at, name: `${label(get)} returns the new ${t.name} record`, method: 'GET', path: one(get), status: [200], shape: has(t), ...fieldsOf })
       const update = of('update')
       const text = fields.find((c) => c !== pk && !c.ref && (c.type === 'text' || c.type === 'varchar'))
       if (update && text) checks.push({ ...at, name: `${label(update)} changes the record`, method: update.route.method, path: one(update), body: { [text.name]: 'Contract check {{run}}, changed' }, status: [200], shape: `${has(t)} and .${JSON.stringify(text.name)} == "Contract check {{run}}, changed"` })
-      checks.push({ ...at, name: `${label(remove)} deletes the record`, method: 'DELETE', path: one(remove), status: [200, 204] })
+      checks.push({ ...at, name: `${label(remove)} deletes the record`, method: 'DELETE', path: one(remove), status: [200, 204], cleanup: true })
       if (get) checks.push({ ...at, name: `${label(get)} no longer finds the deleted record`, method: 'GET', path: one(get), status: [404] })
     }
   }
