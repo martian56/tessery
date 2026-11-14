@@ -66,6 +66,9 @@ async fn push_remote(ctx: &Ctx, project: Uuid) -> Result<()> {
         tracing::info!(%project, "remote was removed before the push ran");
         return Ok(());
     };
+    if remote.github_repo.is_some() {
+        return crate::github::sync(ctx, project).await;
+    }
     let outcome = async {
         let repo = ctx.repos.open(project).await?;
         let (branches, tags) = tessery_db::delivery::ref_targets(&ctx.db, project).await?;

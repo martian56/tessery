@@ -1,4 +1,4 @@
-use crate::routes::{access, admin, audit_log, auth, backups, delivery, dto, email, metrics, notifications, two_factor, integrations, orgs, projects, runtime, servers, sso, system, teams, telemetry, tokens};
+use crate::routes::{access, admin, audit_log, auth, backups, delivery, dto, email, github, metrics, notifications, two_factor, integrations, orgs, projects, runtime, servers, sso, system, teams, telemetry, tokens};
 use axum::Json;
 use utoipa::OpenApi;
 
@@ -14,6 +14,7 @@ use utoipa::OpenApi;
         integrations::providers, integrations::list, integrations::create, integrations::update, integrations::check, integrations::delete,
         backups::list, backups::create, backups::restore,
         email::get_settings, email::put_settings, email::test, email::forgot, email::token_info, email::reset,
+        github::settings, github::manifest_return, github::forget, github::repos, github::link, github::webhook,
         two_factor::login_second_step, two_factor::status, two_factor::setup, two_factor::enable, two_factor::disable, two_factor::new_codes,
         two_factor::org_security, two_factor::put_org_security, two_factor::reset_member,
         metrics::series, metrics::rules, metrics::add_rule, metrics::delete_rule,

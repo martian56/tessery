@@ -1,3 +1,4 @@
+pub mod github;
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};

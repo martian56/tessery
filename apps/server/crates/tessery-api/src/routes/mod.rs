@@ -6,6 +6,7 @@ pub mod backups;
 pub mod delivery;
 pub mod dto;
 pub mod email;
+pub mod github;
 pub mod two_factor;
 pub mod metrics;
 pub mod notifications;
@@ -57,6 +58,11 @@ pub fn api() -> Router<AppState> {
         .route("/orgs/{org}/servers", get(servers::list).post(servers::create))
         .route("/integrations/providers", get(integrations::providers))
         .route("/admin/email", get(email::get_settings).put(email::put_settings))
+        .route("/admin/github", get(github::settings).delete(github::forget))
+        .route("/github/manifest", get(github::manifest_return))
+        .route("/github/webhook", post(github::webhook))
+        .route("/projects/{project}/github/repos", get(github::repos))
+        .route("/projects/{project}/github", put(github::link))
         .route("/auth/login/two-factor", post(two_factor::login_second_step))
         .route("/auth/two-factor", get(two_factor::status))
         .route("/auth/two-factor/setup", post(two_factor::setup))

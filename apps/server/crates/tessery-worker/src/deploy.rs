@@ -122,6 +122,7 @@ pub async fn deploy(ctx: &Ctx, release_id: Uuid) -> Result<()> {
         Err(_) => release.env_key.clone(),
     };
     let who = release.requester_name.clone().map(|n| format!("Requested by {n}.")).unwrap_or_default();
+    crate::github::report(ctx, release.project_id, &release.commit_sha, &release.env_key, release.id, "pending", &format!("Deploying to {env_name}")).await;
     let started_title = format!("Releasing checkpoint {} to {env_name}", release.checkpoint_seq);
     let started = crate::notify::send_quietly(ctx, release.project_id, &release.env_key, Some(release.id), "release.started", &started_title, &who);
     if tokio::time::timeout(std::time::Duration::from_secs(10), started).await.is_err() {
@@ -157,6 +158,10 @@ pub async fn deploy(ctx: &Ctx, release_id: Uuid) -> Result<()> {
     }
     if error.is_none() {
         crate::jobs::after_release(ctx, release.project_id).await;
+    }
+    match &error {
+        None => crate::github::report(ctx, release.project_id, &release.commit_sha, &release.env_key, release.id, "success", &format!("Live on {env_name}")).await,
+        Some(e) => crate::github::report(ctx, release.project_id, &release.commit_sha, &release.env_key, release.id, "failure", e).await,
     }
     match &error {
         None => {

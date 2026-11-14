@@ -36,6 +36,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/github": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["settings"];
+        put?: never;
+        post?: never;
+        delete: operations["forget"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/orgs": {
         parameters: {
             query?: never;
@@ -372,6 +388,40 @@ export interface paths {
         put?: never;
         /** Replaces the data store's contents with this backup. */
         post: operations["restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/github/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GitHub sends the admin back here after creating the app; this stores its keys. */
+        get: operations["manifest_return"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/github/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Receives push events from GitHub. A push to `main` of a linked repository is imported as a checkpoint. */
+        post: operations["webhook"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1210,6 +1260,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project}/github": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Links the project to a GitHub repository and starts the first sync. */
+        put: operations["link"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project}/github/repos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Repositories the app is installed on, to pick one for a project. */
+        get: operations["repos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project}/notifications": {
         parameters: {
             query?: never;
@@ -1791,6 +1875,19 @@ export interface components {
                 [key: string]: string;
             };
         };
+        GithubRepoDto: {
+            fullName: string;
+            /** Format: int64 */
+            installation: number;
+            private: boolean;
+        };
+        GithubSettings: {
+            app?: Record<string, never> | null;
+            /** @description Where the browser posts the manifest to create the app: a personal account or, with `?org=`, an organization. */
+            createUrl: string;
+            manifest: Record<string, never>;
+            webhookUrl: string;
+        };
         Health: {
             database: boolean;
             /** @description The Node process that runs code generation and design edits. */
@@ -1832,6 +1929,10 @@ export interface components {
             /** @description Replace the credentials. They are checked with the provider first. */
             fields?: Record<string, never> | null;
             name?: string | null;
+        };
+        LinkInput: {
+            /** @description `owner/name`, from the repository list. */
+            repo: string;
         };
         LogLineDto: {
             /** Format: date-time */
@@ -2086,7 +2187,12 @@ export interface components {
         ReleaseStatus: "pending" | "queued" | "deploying" | "released" | "rejected" | "cancelled" | "failed";
         RemoteDto: {
             autoPush: boolean;
+            /** @description `owner/name` when the project is linked through the GitHub App. */
+            githubRepo?: string | null;
             hasToken: boolean;
+            /** Format: date-time */
+            lastImportAt?: string | null;
+            lastImportError?: string | null;
             /** Format: date-time */
             lastPushAt?: string | null;
             lastPushError?: string | null;
@@ -2510,6 +2616,47 @@ export interface operations {
                 "application/json": components["schemas"]["TestEmail"];
             };
         };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+        };
+    };
+    settings: {
+        parameters: {
+            query?: {
+                /** @description A GitHub organization to create the app in. Leave out for your personal account. */
+                org?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubSettings"];
+                };
+            };
+        };
+    };
+    forget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             200: {
                 headers: {
@@ -3109,6 +3256,54 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["BackupDto"];
                 };
+            };
+        };
+    };
+    manifest_return: {
+        parameters: {
+            query: {
+                code: string;
+                state: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description A GitHub webhook payload, signed with X-Hub-Signature-256 */
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -4858,6 +5053,64 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["GeneratedDto"];
                 };
+            };
+        };
+    };
+    link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    repos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubRepoDto"][];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

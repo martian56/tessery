@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO project_remotes (project_id, url, username, token_cipher, auto_push, updated_by, github_repo, github_installation, linked_by)\n           VALUES ($1, $2, '', NULL, $3, $4, $5, $6, $4)\n           ON CONFLICT (project_id) DO UPDATE SET url = $2, username = '', token_cipher = NULL, auto_push = $3, updated_by = $4,\n               github_repo = $5, github_installation = $6, linked_by = $4, updated_at = now(),\n               last_push_at = NULL, last_push_ok = NULL, last_push_error = NULL, last_import_at = NULL, last_import_error = NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bool",
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "19d09bc6cf3820e8ec60c6979f83aa24141b3626648be5d0ba84add7d58d1b0f"
+}
