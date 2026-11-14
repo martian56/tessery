@@ -431,7 +431,8 @@ pub(crate) async fn ensure_runner_image(cfg: &RunnerConfig, log: &Log) -> Result
     }
     log.step(&format!("Building the runner image {image} (first deploy only)"));
     let mut child = Command::new(&cfg.docker)
-        .args(["build", "--progress=plain", "-t", &image, "-"])
+        .args(["build", "-t", &image, "-"])
+        .env("BUILDKIT_PROGRESS", "plain")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
