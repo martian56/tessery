@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react'
 import type { Block } from '@tessery/core/domain/types'
 import * as Shared from '@tessery/core/render/blocks'
-import { BLOCK_CATALOG, BLOCK_META, blockProps, type BlockMeta } from '@tessery/core/render/catalog'
+import { BLOCK_CATALOG, BLOCK_META, blockProps, withAssets, type BlockMeta } from '@tessery/core/render/catalog'
 import BLOCK_STYLES from '@tessery/core/render/styles.txt'
 
 export type Device = 'desktop' | 'tablet' | 'mobile'
@@ -19,5 +19,5 @@ export function renderBlock(b: Block) {
   const meta = BLOCK_META[b.type]
   const Component = meta && (meta.type === 'form' ? Shared.FormView : components[meta.component])
   if (!Component) return <section className="tsp-sec"><i>Unknown block “{b.type}”</i></section>
-  return <Component {...blockProps(b)} onSubmit={(e: Event) => e.preventDefault()} />
+  return <Component {...withAssets(blockProps(b), 'editor')} onSubmit={(e: Event) => e.preventDefault()} />
 }

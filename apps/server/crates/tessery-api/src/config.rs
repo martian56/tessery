@@ -21,6 +21,28 @@ pub struct Config {
     pub engine: tessery_engine::EngineConfig,
     pub oidc: Option<crate::routes::sso::OidcConfig>,
     pub provider_apis: std::collections::BTreeMap<String, String>,
+    /// Tessery's own object storage (SeaweedFS by default) for uploaded images, fonts and other assets.
+    pub object_store: Option<ObjectStore>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ObjectStore {
+    pub s3: tessery_cloud::S3,
+    pub bucket: String,
+}
+
+fn object_store() -> Option<ObjectStore> {
+    let get = |k: &str| std::env::var(k).ok().filter(|v| !v.trim().is_empty());
+    let endpoint = get("TESSERY_S3_ENDPOINT")?;
+    Some(ObjectStore {
+        s3: tessery_cloud::S3 {
+            endpoint,
+            region: get("TESSERY_S3_REGION").unwrap_or_else(|| "us-east-1".into()),
+            access_key: get("TESSERY_S3_ACCESS_KEY").unwrap_or_default(),
+            secret: get("TESSERY_S3_SECRET_KEY").unwrap_or_default(),
+        },
+        bucket: get("TESSERY_S3_BUCKET").unwrap_or_else(|| "tessery".into()),
+    })
 }
 
 impl Config {
@@ -52,6 +74,7 @@ impl Config {
             data_dir: PathBuf::from(var("TESSERY_DATA_DIR", "./data")),
             oidc: crate::routes::sso::OidcConfig::from_env(),
             provider_apis: tessery_cloud::endpoints_from_env(),
+            object_store: object_store(),
             engine: tessery_engine::EngineConfig {
                 node: PathBuf::from(var("TESSERY_NODE_BIN", "node")),
                 script: engine_script(),

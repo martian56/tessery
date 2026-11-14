@@ -338,6 +338,7 @@ pub async fn create_checkpoint(
     let mut design = serde_json::to_vec_pretty(&doc).map_err(|e| ApiError::Internal(e.into()))?;
     design.push(b'\n');
     files.insert(DESIGN_FILE.to_owned(), design);
+    crate::routes::assets::bundle(&state, project, &doc, &mut files).await?;
 
     let repo = state.repos.ensure(project).await.map_err(git_err)?;
     let author = tessery_git::Author { name: p.user.name.clone(), email: p.user.email.clone() };

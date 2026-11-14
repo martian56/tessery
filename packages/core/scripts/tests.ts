@@ -257,6 +257,8 @@ test('generated web apps render pages with the same blocks and styles as the edi
   assert.ok(files[`${app}/app/globals.css`].includes(STYLES))
   assert.match(files[`${app}/app/layout.tsx`], /className="tsp"/)
   assert.match(files[`${app}/components/form.tsx`], /<FormView /)
+  assert.match(files[`${app}/Dockerfile`], /COPY --from=build \/app\/public \.\/public/, 'uploaded images in public/ ship with the app')
+  assert.ok(files[`${app}/public/robots.txt`], 'public/ always exists, so the copy cannot fail')
 
   const page = doc.pages.find((p) => p.blocks.some((b) => b.type === 'navbar'))!
   const nav = page.blocks.find((b) => b.type === 'navbar')!

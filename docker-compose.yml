@@ -39,6 +39,25 @@ services:
       timeout: 5s
       retries: 30
 
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.80
+    environment:
+      S3_ACCESS_KEY: tessery
+      S3_SECRET_KEY: tessery-dev-secret
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        printf '{"identities":[{"name":"tessery","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}'
+        "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" > /tmp/s3.json &&
+        exec weed server -dir=/data -ip.bind=0.0.0.0 -volume.max=0 -master.volumeSizeLimitMB=1024 -s3 -s3.port=8333 -s3.config=/tmp/s3.json
+    ports: ["18333:8333"]
+    volumes: ["objectdata:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9333/cluster/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
   server:
     profiles: ["app"]
     build: { context: ., dockerfile: apps/server/Dockerfile, target: server }
@@ -51,6 +70,9 @@ services:
       TESSERY_COOKIE_SECURE: "false"
       TESSERY_DATA_DIR: /var/lib/tessery
       TESSERY_SECRET_KEY: ${TESSERY_SECRET_KEY:-}
+      TESSERY_S3_ENDPOINT: http://seaweedfs:8333
+      TESSERY_S3_ACCESS_KEY: tessery
+      TESSERY_S3_SECRET_KEY: tessery-dev-secret
       TESSERY_TELEMETRY_URL: ${TESSERY_TELEMETRY_URL:-http://host.docker.internal:8080}
       RUST_LOG: info
     volumes: &appvolumes
@@ -62,6 +84,7 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
+      seaweedfs: { condition: service_healthy }
 
   worker:
     profiles: ["app"]
@@ -75,4 +98,5 @@ volumes:
   pgdata: {}
   redisdata: {}
   mqdata: {}
+  objectdata: {}
   tesserydata: {}

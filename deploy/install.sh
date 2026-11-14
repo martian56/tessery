@@ -30,19 +30,25 @@ for f in compose.yml .env.example backup.sh restore.sh; do
 done
 chmod +x backup.sh restore.sh
 
+hex() { od -An -N"$1" -tx1 /dev/urandom | tr -d ' \n'; }
 if [ -f .env ]; then
   say "Keeping the existing $DIR/.env"
+  if ! grep -q '^TESSERY_S3_SECRET_KEY=.' .env; then
+    sed -i '/^TESSERY_S3_SECRET_KEY=/d' .env
+    printf 'TESSERY_S3_SECRET_KEY=%s\n' "$(hex 24)" >> .env
+    say "Added a key for the bundled object storage to $DIR/.env"
+  fi
 else
   domain="${TESSERY_DOMAIN:-}"
   while [ -z "$domain" ]; do
     read -rp "Domain for Tessery (its DNS must point at this machine): " domain </dev/tty
   done
-  hex() { od -An -N"$1" -tx1 /dev/urandom | tr -d ' \n'; }
   sed \
     -e "s|^TESSERY_DOMAIN=.*|TESSERY_DOMAIN=${domain}|" \
     -e "s|^TESSERY_SECRET_KEY=.*|TESSERY_SECRET_KEY=$(hex 32)|" \
     -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(hex 24)|" \
     -e "s|^RABBITMQ_PASSWORD=.*|RABBITMQ_PASSWORD=$(hex 24)|" \
+    -e "s|^TESSERY_S3_SECRET_KEY=.*|TESSERY_S3_SECRET_KEY=$(hex 24)|" \
     -e "s|^DOCKER_GID=.*|DOCKER_GID=$(stat -c %g /var/run/docker.sock)|" \
     -e "s|^TESSERY_COMPOSE_DIR=.*|TESSERY_COMPOSE_DIR=${DIR}|" \
     -e "s|^TESSERY_IMAGE_TAG=.*|TESSERY_IMAGE_TAG=${TESSERY_IMAGE_TAG:-latest}|" \

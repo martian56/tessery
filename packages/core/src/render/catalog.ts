@@ -44,3 +44,16 @@ export function blockProps(b: Block): Record<string, ConfigValue> {
 }
 
 export const isBound = (b: Block) => typeof b.props.source === 'string' && b.props.source.includes(':')
+
+/**
+ * Resolves `asset:<id>/<name>` references. The editor loads assets from the Tessery API; generated apps ship them
+ * under public/assets, so a deployed site serves its own copies.
+ */
+export function assetUrl(value: ConfigValue, where: 'editor' | 'app'): ConfigValue {
+  if (typeof value !== 'string' || !value.startsWith('asset:')) return value
+  const ref = value.slice('asset:'.length)
+  return where === 'editor' ? `/api/assets/${ref}` : `/assets/${ref}`
+}
+
+export const withAssets = (props: Record<string, ConfigValue>, where: 'editor' | 'app') =>
+  Object.fromEntries(Object.entries(props).map(([k, v]) => [k, assetUrl(v, where)]))
