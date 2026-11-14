@@ -38,8 +38,10 @@ export interface TreeProps {
   path?: string
   /** In the editor, popovers and disclosures render open so their contents can be edited. */
   editing?: boolean
+  /** The page's query string values, for {?name} placeholders and for marking ?filter links current. */
+  query?: Record<string, string | string[] | undefined>
 }
-type Ctx = Required<Omit<TreeProps, 'root' | 'theme' | 'icon' | 'path'>> & Pick<TreeProps, 'icon' | 'path'>
+type Ctx = Required<Omit<TreeProps, 'root' | 'theme' | 'icon' | 'path' | 'query'>> & Pick<TreeProps, 'icon' | 'path' | 'query'>
 type Row = Record<string, unknown>
 
 const PX = new Set(['width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'gap', 'rowGap', 'columnGap', 'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'paddingInline', 'paddingBlock', 'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'marginInline', 'marginBlock', 'top', 'right', 'bottom', 'left', 'fontSize', 'borderRadius', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius', 'borderWidth', 'letterSpacing', 'strokeWidth', 'outlineOffset', 'outlineWidth', 'flexBasis', 'textIndent', 'textUnderlineOffset', 'scrollPaddingTop', 'scrollMarginTop'])
@@ -142,6 +144,13 @@ function walkIds(e: El, out: Set<string>) {
   e.children?.forEach((c) => walkIds(c, out))
 }
 
+/** Whether a `?a=b` link describes the query being shown; a bare `?` matches a page with no filters. */
+export function sameQuery(href: string, query: TreeProps['query']): boolean {
+  const want = new URLSearchParams(href.slice(1))
+  const have = Object.entries(query ?? {}).filter(([k, v]) => k !== 'page' && one(v) !== '')
+  return have.length === [...want.keys()].filter((k) => k !== 'page').length && have.every(([k, v]) => want.get(k) === one(v))
+}
+
 /** The records a bound frame repeats over: the response when it is a list, its first list field, or one record for a detail page. */
 export function records(data: unknown): Row[] {
   if (Array.isArray(data)) return data as Row[]
@@ -175,9 +184,12 @@ function format(v: unknown, how: string): string {
   }
 }
 
-/** Fills `{field}`, `{author.name}` and `{price|money}` from the record being rendered. */
-export function fill(text: unknown, row: Row | undefined, encode = false): string {
-  const s = String(text ?? '')
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? ''
+
+/** Fills `{field}`, `{author.name}` and `{price|money}` from the record being rendered, and `{?q}` from the page's query. */
+export function fill(text: unknown, row: Row | undefined, encode = false, query?: TreeProps['query']): string {
+  let s = String(text ?? '')
+  if (s.includes('{?')) s = s.replace(/\{\?([A-Za-z_][\w-]*)\}/g, (_m, k: string) => (encode ? encodeURIComponent(one(query?.[k])) : one(query?.[k])))
   if (!row) return s
   return s.replace(/\{([A-Za-z_][\w.]*)(?:\|(\w+))?\}/g, (_m, path: string, how = '') => {
     const out = format(lookup(row, path), how)
@@ -194,11 +206,12 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
   const p = e.props ?? {}
   const base: Record<string, unknown> = { className: `${cls(e.id)} tsp-el tsp-el-${e.type}` }
   if (!copy) base['data-node'] = e.id
-  if (p.label) base['aria-label'] = fill(p.label, row)
-  if (p.tooltip) base.title = fill(p.tooltip, row)
+  const f = (v: unknown) => fill(v, row, false, t.query)
+  if (p.label) base['aria-label'] = f(p.label)
+  if (p.tooltip) base.title = f(p.tooltip)
   const link = (v: unknown) => {
-    const href = safeHref(fill(v, row, true))
-    if (href && t.path && href === t.path) base['aria-current'] = 'page'
+    const href = safeHref(fill(v, row, true, t.query))
+    if (href && (href.startsWith('?') ? sameQuery(href, t.query) : t.path && href === t.path)) base['aria-current'] = 'page'
     return href
   }
   const kids = (r: Row | undefined, c?: boolean) => e.children?.map((x) => <Node key={x.id} e={x} t={t} row={r} copy={c} scope={scope} />)
@@ -232,7 +245,7 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
       return <Tag {...base}>{body}</Tag>
     }
     case 'text': {
-      const text = fill(p.text, row)
+      const text = f(p.text)
       const href = link(p.href)
       if (href) return <a {...base} href={href}>{text}</a>
       const Tag = (TEXT_TAGS.has(String(p.tag)) ? String(p.tag) : 'p') as any
@@ -248,7 +261,7 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
     }
     case 'button': {
       const icon = p.icon && t.icon ? t.icon({ name: String(p.icon), className: 'tsp-el-button-icon', 'aria-hidden': true }) : null
-      const text = fill(p.text, row)
+      const text = f(p.text)
       const inner = <>{icon}{text && <span>{text}</span>}</>
       if (p.disabled) base['aria-disabled'] = true
       if (p.opens) return <button {...base} type="button" disabled={!!p.disabled} popoverTarget={t.editing ? undefined : popId(String(p.opens), scope)}>{inner}</button>
@@ -262,14 +275,14 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
     }
     case 'input': {
       const kind = INPUT_KINDS.has(String(p.kind)) ? String(p.kind) : 'text'
-      const field = { ...base, name: p.name ? String(p.name) : undefined, placeholder: p.placeholder ? fill(p.placeholder, row) : undefined, disabled: !!p.disabled, required: !!p.required, 'aria-label': (base['aria-label'] as string | undefined) ?? (p.placeholder ? String(p.placeholder) : undefined) }
-      if (kind === 'textarea') return <textarea {...field} defaultValue={p.value === undefined ? undefined : fill(p.value, row)} rows={Number(p.rows) || 4} />
+      const field = { ...base, name: p.name ? String(p.name) : undefined, placeholder: p.placeholder ? f(p.placeholder) : undefined, disabled: !!p.disabled, required: !!p.required, 'aria-label': (base['aria-label'] as string | undefined) ?? (p.placeholder ? String(p.placeholder) : undefined) }
+      if (kind === 'textarea') return <textarea {...field} defaultValue={p.value === undefined ? undefined : f(p.value)} rows={Number(p.rows) || 4} />
       if (kind === 'checkbox' || kind === 'radio') return <input {...field} type={kind} defaultChecked={!!p.checked} value={p.value === undefined ? undefined : String(p.value)} />
-      return <input {...field} type={kind} defaultValue={p.value === undefined ? undefined : fill(p.value, row)} min={p.min as any} max={p.max as any} step={p.step as any} />
+      return <input {...field} type={kind} defaultValue={p.value === undefined ? undefined : f(p.value)} min={p.min as any} max={p.max as any} step={p.step as any} />
     }
     case 'select': {
       const options = String(p.options ?? '').split(',').map((x) => x.trim()).filter(Boolean)
-      return <select {...base} name={p.name ? String(p.name) : undefined} defaultValue={p.value ? String(p.value) : undefined} disabled={!!p.disabled} aria-label={(base['aria-label'] as string) ?? (p.name ? String(p.name) : 'Choose')}>{options.map((o) => <option key={o} value={o}>{o}</option>)}</select>
+      return <select {...base} name={p.name ? String(p.name) : undefined} defaultValue={p.value ? f(p.value) || undefined : undefined} disabled={!!p.disabled} aria-label={(base['aria-label'] as string) ?? (p.name ? String(p.name) : 'Choose')}>{options.map((o) => <option key={o} value={o}>{o}</option>)}</select>
     }
     case 'shape':
       return <div {...base} role="presentation" />
@@ -297,11 +310,11 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
   }
 }
 
-export function Tree({ root, theme, blocks, defaults = {}, data = {}, actions = {}, assetBase = '/assets/', icon, path, editing = false }: TreeProps) {
+export function Tree({ root, theme, blocks, defaults = {}, data = {}, actions = {}, assetBase = '/assets/', icon, path, editing = false, query }: TreeProps) {
   return (
     <div className="tsp tsp-tree">
       <style>{treeCss(root, theme, assetBase)}</style>
-      <Node e={root} t={{ blocks, defaults, data, actions, assetBase, icon, path, editing }} />
+      <Node e={root} t={{ blocks, defaults, data, actions, assetBase, icon, path, editing, query }} />
     </div>
   )
 }

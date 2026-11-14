@@ -15,6 +15,7 @@ import (
 	"log"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -232,6 +233,19 @@ func (t Table) one(ctx context.Context, status int, sql string, args ...any) Res
 	return Result{Status: status, Body: raw}
 }
 
+// reserved are the query keys a list understands besides column names.
+var reserved = map[string]bool{"limit": true, "offset": true, "page": true, "q": true, "sort": true}
+
+func textType(typ string) bool {
+	return typ == "text" || typ == "citext" || strings.HasPrefix(typ, "varchar") || strings.HasPrefix(typ, "character")
+}
+
+func likePattern(s string) string {
+	return "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s) + "%"
+}
+
+// List answers ?q= with a search of text columns, ?<column>= with a filter, ?sort=<column> or -<column> with an
+// order, and ?page= or ?offset= with ?limit= with a page of rows.
 func (t Table) List(ctx context.Context, q url.Values, filter map[string]string) Result {
 	limit, offset := 50, 0
 	if v, err := strconv.Atoi(q.Get("limit")); err == nil {
@@ -239,12 +253,53 @@ func (t Table) List(ctx context.Context, q url.Values, filter map[string]string)
 	}
 	if v, err := strconv.Atoi(q.Get("offset")); err == nil {
 		offset = max(v, 0)
+	} else if v, err := strconv.Atoi(q.Get("page")); err == nil && v > 1 {
+		offset = (v - 1) * limit
 	}
-	where, args := t.where(filter, 1)
+	match := map[string]string{}
+	for col := range t.Types {
+		if v := q.Get(col); v != "" && !reserved[col] {
+			match[col] = v
+		}
+	}
+	for k, v := range filter {
+		match[k] = v
+	}
+	where, args := t.where(match, 1)
+	if s := strings.TrimSpace(q.Get("q")); s != "" {
+		cols := []string{}
+		for col, typ := range t.Types {
+			if textType(typ) {
+				cols = append(cols, col)
+			}
+		}
+		slices.Sort(cols)
+		if len(cols) > 0 {
+			args = append(args, likePattern(s))
+			parts := make([]string, len(cols))
+			for i, c := range cols {
+				parts[i] = fmt.Sprintf("%s ILIKE $%d", quote(c), len(args))
+			}
+			if where != "" {
+				where += " AND "
+			}
+			where += "(" + strings.Join(parts, " OR ") + ")"
+		}
+	}
 	if where != "" {
 		where = " WHERE " + where
 	}
-	return t.one(ctx, 200, fmt.Sprintf("SELECT coalesce(json_agg(r), '[]'::json) FROM (SELECT * FROM %s%s ORDER BY %s LIMIT %d OFFSET %d) r", quote(t.Name), where, t.Order, limit, offset), args...)
+	order := t.Order
+	if s := q.Get("sort"); s != "" {
+		col, dir := strings.TrimPrefix(s, "-"), "ASC"
+		if strings.HasPrefix(s, "-") {
+			dir = "DESC"
+		}
+		if _, ok := t.Types[col]; ok {
+			order = quote(col) + " " + dir + ", " + t.Order
+		}
+	}
+	return t.one(ctx, 200, fmt.Sprintf("SELECT coalesce(json_agg(r), '[]'::json) FROM (SELECT * FROM %s%s ORDER BY %s LIMIT %d OFFSET %d) r", quote(t.Name), where, order, limit, offset), args...)
 }
 
 func (t Table) Get(ctx context.Context, id string, filter map[string]string) Result {

@@ -62,7 +62,14 @@ function rejected(e: unknown): Result {
   throw e
 }
 
-export function table(name: string, key: string, writable: string[], order: string) {
+/** Query keys a list understands besides column names. */
+const RESERVED = new Set(['limit', 'offset', 'page', 'q', 'sort'])
+const textType = (t: string) => t === 'text' || t === 'citext' || t.startsWith('varchar') || t.startsWith('character')
+const like = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+const first = (v: unknown) => (Array.isArray(v) ? v[0] : v)
+
+export function table(name: string, key: string, types: Record<string, string>, writable: string[], order: string) {
+  const has = (c: string) => Object.prototype.hasOwnProperty.call(types, c)
   const pick = (body: unknown): Row => {
     const out: Row = {}
     if (body && typeof body === 'object' && !Array.isArray(body)) {
@@ -75,16 +82,30 @@ export function table(name: string, key: string, writable: string[], order: stri
   }
   const where = (filter: Row, from: number) => {
     const keys = Object.keys(filter)
-    return { sql: keys.map((k, i) => `${quote(k)} = $${i + from}`).join(' AND '), values: keys.map((k) => filter[k]) }
+    return { sql: keys.map((k, i) => `${quote(k)} = $${i + from}::text::${has(k) ? types[k] : 'text'}`).join(' AND '), values: keys.map((k) => String(filter[k])) }
   }
 
   return {
+    /** ?q= searches text columns, ?<column>= filters, ?sort=<column> or -<column> orders, ?page= or ?offset= with ?limit= pages. */
     async list(query: Record<string, unknown>, filter: Row = {}): Promise<Result> {
-      const limit = Math.min(Math.max(Number(query.limit ?? 50) || 50, 1), 500)
-      const offset = Math.max(Number(query.offset ?? 0) || 0, 0)
-      const w = where(filter, 1)
+      const limit = Math.min(Math.max(Number(first(query.limit) ?? 50) || 50, 1), 500)
+      const page = Math.max(Number(first(query.page) ?? 1) || 1, 1)
+      const offset = query.offset !== undefined ? Math.max(Number(first(query.offset)) || 0, 0) : (page - 1) * limit
+      const match: Row = {}
+      for (const [k, v] of Object.entries(query)) if (has(k) && !RESERVED.has(k) && first(v) !== undefined && first(v) !== '') match[k] = first(v)
+      const w = where({ ...match, ...filter }, 1)
+      const parts = w.sql ? [w.sql] : []
+      const values: unknown[] = [...w.values]
+      const search = String(first(query.q) ?? '').trim()
+      const text = Object.keys(types).filter((c) => textType(types[c])).sort()
+      if (search && text.length) {
+        values.push(like(search))
+        parts.push(`(${text.map((c) => `${quote(c)} ILIKE $${values.length}`).join(' OR ')})`)
+      }
+      const sort = String(first(query.sort) ?? '')
+      const by = has(sort.replace(/^-/, '')) ? `${quote(sort.replace(/^-/, ''))} ${sort.startsWith('-') ? 'DESC' : 'ASC'}, ${order}` : order
       try {
-        const r = await pool.query(`SELECT * FROM ${quote(name)}${w.sql ? ` WHERE ${w.sql}` : ''} ORDER BY ${order} LIMIT ${limit} OFFSET ${offset}`, w.values)
+        const r = await pool.query(`SELECT * FROM ${quote(name)}${parts.length ? ` WHERE ${parts.join(' AND ')}` : ''} ORDER BY ${by} LIMIT ${limit} OFFSET ${offset}`, values)
         return { status: 200, body: r.rows }
       } catch (e) {
         return rejected(e)
