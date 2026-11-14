@@ -68,6 +68,7 @@
 .tsp-feature { display: flex; flex-direction: column; gap: 4px; padding: 14px; border-radius: var(--tsp-radius); background: var(--tsp-panel); font-size: 12px; }
 .tsp-feature span { color: var(--tsp-muted); }
 .tsp-empty { color: var(--tsp-faint); font-size: 13px; }
+.tsp-wait { display: contents; }
 .tsp-block-state { padding: 20px var(--tsp-gutter); }
 .tsp-skeleton { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; }
 .tsp-skeleton span { display: block; height: 12px; border-radius: 4px; background: linear-gradient(90deg, var(--tsp-line) 25%, color-mix(in srgb, var(--tsp-line) 40%, transparent) 50%, var(--tsp-line) 75%); background-size: 200% 100%; animation: tsp-shimmer 1.4s linear infinite; }

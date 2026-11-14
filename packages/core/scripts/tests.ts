@@ -717,6 +717,12 @@ test('record frames and data blocks show loading, failed and empty states', asyn
   assert.equal(cls(render({ data: { list: [] } }), 'tsp-empty').length, 1)
   assert.equal(cls(render({ data: { list: [{ name: 'Bean' }] } }), 'tsp-failed').length, 0)
 
+  const linked = { ...root, children: [{ ...list, props: { ...list.props, href: '/seeds/all' } }] }
+  const nested = all(expand(Tree({ root: linked as never, theme, blocks: {}, path: '/seeds', data: { list: FAILED } })))
+  assert.ok(!nested.some((n) => n.type === 'a' && all(n.props.children).some((c) => c.type === 'a')), 'a failed frame that is a link does not nest the retry link')
+  const form = { id: 'root', type: 'frame', props: {}, children: [{ id: 'f', type: 'frame', props: { tag: 'form', action: 'svc:createSeed' }, children: [] }, { id: 'b', type: 'block', props: { block: 'form', action: 'svc:createSeed' } }] }
+  const waiting = all(expand(Tree({ root: form as never, theme, blocks: { form: () => ({ type: 'form', props: {} }) }, loading: true })))
+  assert.equal(waiting.filter((n) => n.type === 'fieldset' && n.props.disabled === true).length, 2, 'forms that post to an operation wait on the loading screen')
   list.props = { ...list.props, previewState: 'error' } as typeof list.props
   const preview = cls(render({ editing: true }), 'tsp-retry')[0]
   assert.ok(preview && preview.props.href === undefined, 'the editor previews the failed state without a live link')

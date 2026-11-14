@@ -292,8 +292,8 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
     case 'frame': {
       const tag = FRAME_TAGS.has(String(p.tag)) ? String(p.tag) : 'div'
       let body: any = kids(row, copy)
+      const state = 'source' in p ? dataState(e, t) : 'data'
       if ('source' in p) {
-        const state = dataState(e, t)
         const loaded = state === 'empty' ? [] : t.data[e.id]
         const list = loaded === undefined && t.editing ? Array.from({ length: Math.max(1, Number(p.preview) || 3) }, () => SAMPLE) : records(loaded)
         const shown = list.slice(0, Number(p.limit) || 50)
@@ -312,6 +312,8 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
       if (p.popover && !t.editing) { base.id = popId(e.id, scope); base.popover = 'auto' }
       if (p.popover && t.editing) base['data-popover'] = ''
       if (tag === 'details' && (t.editing || p.open)) base.open = true
+      // On the loading screen, actions are not resolved yet, so a form that posts to one waits for the page.
+      if (t.loading && p.action) body = <fieldset className="tsp-wait" disabled>{body}</fieldset>
       if (tag === 'form') {
         const act = p.action ? (t.actions[e.id] as { service?: string; method?: string; path?: string; params?: Record<string, string> } | undefined) : undefined
         if (act?.service && act.path && act.method) {
@@ -328,7 +330,8 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
         return <form {...base} action={action} method="get" role={p.role === 'search' ? 'search' : undefined}>{body}</form>
       }
       const href = link(p.href)
-      if (href && tag !== 'summary') return <a {...base} href={href}>{body}</a>
+      // A failed frame holds a retry link, and links cannot nest.
+      if (href && tag !== 'summary' && state !== 'error') return <a {...base} href={href}>{body}</a>
       const Tag = tag as any
       return <Tag {...base}>{body}</Tag>
     }
@@ -405,6 +408,7 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
       if (state === 'empty') props.data = []
       else if (e.id in t.data) props.data = t.data[e.id]
       if (e.id in t.actions) props.action = t.actions[e.id]
+      if (t.loading && p.action) return <div {...base}><fieldset className="tsp-wait" disabled><Block {...props} /></fieldset></div>
       return <div {...base}><Block {...props} /></div>
     }
     default:
