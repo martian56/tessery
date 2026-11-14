@@ -13,6 +13,10 @@ import { envCompose } from '../src/codegen/deploy/compose'
 import { yamlDoc } from '../src/codegen/deploy/yaml'
 import { generateAll, parseMigrationState, planMigrations } from '../src/codegen'
 
+function shopDoc() {
+  return shop()
+}
+
 function shop() {
   const doc = blankTemplate('shop', 'self', 'onprem')
   const api = runOp(doc, 'addNode', { techId: 'service', x: 0, y: 0, name: 'orders', config: { language: 'Go' } }) as string
@@ -535,4 +539,31 @@ test('hand-written components become files the pages render', async () => {
   runOp(doc, 'removeComponent', { componentId: chart })
   assert.ok(analyze(doc, undefined, null).some((x) => x.target?.blockId === el && /does not exist/.test(x.message)))
   assert.ok(!Object.keys(generateAll(doc)).some((f) => f.endsWith('/custom/PriceChart.tsx')))
+})
+
+test('releases check each service against its API and database design', async () => {
+  const { contract } = await import('../src/codegen/deploy/contract')
+  const doc = tasksTemplate()
+  const dev = doc.environments[0]
+  const prod = doc.environments[doc.environments.length - 1]
+  const full = contract(doc, dev)!
+  assert.equal(full.mode, 'full')
+  const names = full.checks.map((c) => c.name)
+  assert.ok(names.some((n) => /turns away visitors who are not signed in/.test(n)), 'operations for signed-in users refuse anonymous requests')
+  assert.ok(full.checks.every((c) => c.status.length && c.service && c.port))
+  const read = contract(doc, prod)
+  assert.ok(!read || read.checks.every((c) => c.method === 'GET' || c.status.includes(401)), 'the last environment never writes')
+  runOp(doc, 'updateEnv', { envId: dev.id, patch: { contractTests: 'off' } })
+  assert.equal(contract(doc, dev), null)
+
+  const { doc: shop, api, db, table } = shopDoc()
+  runOp(shop, 'addCrudOperations', { nodeId: api, table: 'orders' })
+  void db; void table
+  const c = contract(shop, shop.environments[0])!
+  const list = c.checks.find((x) => x.method === 'GET' && x.name.includes('lists orders'))!
+  assert.match(list.shape!, /has\("total"\)/, 'the list must carry the designed fields')
+  const create = c.checks.find((x) => x.method === 'POST')!
+  assert.deepEqual(create.body, { total: 1 })
+  assert.deepEqual(create.save, { id: '."id"' })
+  assert.ok(c.checks.some((x) => x.path.includes('{{id}}') && x.status.includes(404)), 'a deleted record is gone')
 })

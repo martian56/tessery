@@ -241,6 +241,67 @@ if [ "$action" != deploy ]; then
   exit 0
 fi
 
+# Runs deploy/<env>/contract.json: HTTP checks made from the API and database design. Each check names the request and
+# what it expects; the first one that fails stops the release with its name. On a remote server the requests run in a
+# short-lived curl container on the stack's network, since the runner cannot join a network on another machine.
+check_contract() {
+  network=$1 remote=$2
+  file="deploy/$TESSERY_ENV/contract.json"
+  [ -f "$file" ] || return 0
+  total=$(jq '.checks | length' "$file")
+  step "Checking the API against its design ($total checks, $(jq -r .mode "$file"))"
+  vars=/tmp/contract-vars.json body=/tmp/contract-body
+  echo '{}' > "$vars"
+  if [ -z "$remote" ]; then
+    docker network connect "$network" "$(hostname)" >/dev/null 2>&1 || true
+  fi
+  i=0
+  while [ "$i" -lt "$total" ]; do
+    check=$(jq -c --slurpfile v "$vars" --argjson i "$i" '.checks[$i] | .path |= (reduce ($v[0] | to_entries[]) as $e (.; gsub("\\{\\{" + $e.key + "\\}\\}"; $e.value)))' "$file")
+    name=$(printf '%s' "$check" | jq -r .name)
+    method=$(printf '%s' "$check" | jq -r .method)
+    url=$(printf '%s' "$check" | jq -r '"http://\(.service):\(.port)\(.path)"')
+    data=$(printf '%s' "$check" | jq -c '.body // empty')
+    if [ -z "$remote" ]; then
+      if [ -n "$data" ]; then
+        code=$(curl -s -o "$body" -w '%{http_code}' --max-time 15 -X "$method" -H 'content-type: application/json' --data "$data" "$url" || echo 000)
+      else
+        code=$(curl -s -o "$body" -w '%{http_code}' --max-time 15 -X "$method" "$url" || echo 000)
+      fi
+    else
+      if [ -n "$data" ]; then
+        out=$(docker run --rm --network "$network" curlimages/curl:8.11.1 -s -w '\n%{http_code}' --max-time 15 -X "$method" -H 'content-type: application/json' --data "$data" "$url" || printf '\n000')
+      else
+        out=$(docker run --rm --network "$network" curlimages/curl:8.11.1 -s -w '\n%{http_code}' --max-time 15 -X "$method" "$url" || printf '\n000')
+      fi
+      code=$(printf '%s\n' "$out" | tail -n 1)
+      printf '%s\n' "$out" | sed '$d' > "$body"
+    fi
+    if ! printf '%s' "$check" | jq -e --argjson c "${code:-0}" 'any(.status[]; . == $c)' >/dev/null; then
+      echo "::error::API check failed: $name. It answered $code, the design expects $(printf '%s' "$check" | jq -r '.status | map(tostring) | join(" or ")')."
+      head -c 600 "$body" 2>/dev/null; echo
+      exit 1
+    fi
+    shape=$(printf '%s' "$check" | jq -r '.shape // empty')
+    if [ -n "$shape" ] && ! jq -e "$shape" "$body" >/dev/null 2>&1; then
+      fields=$(printf '%s' "$check" | jq -c '.fields // []')
+      missing=$(jq -r --argjson f "$fields" '(if type == "array" then ([.[] | select(type == "object")][0] // {}) else . end) as $o | if ($o | type) == "object" then [$f[] | select(. as $k | $o | has($k) | not)] | join(", ") else "" end' "$body" 2>/dev/null || true)
+      echo "::error::API check failed: $name. The response does not have the fields the design gives it${missing:+ (missing: $missing)}."
+      head -c 600 "$body" 2>/dev/null; echo
+      exit 1
+    fi
+    printf '%s' "$check" | jq -r '.save // {} | to_entries[] | "\(.key) \(.value)"' | while read -r key expr; do
+      value=$(jq -r "$expr" "$body")
+      jq --arg k "$key" --arg v "$value" '.[$k] = $v' "$vars" > "$vars.next" && mv "$vars.next" "$vars"
+    done
+    echo "passed: $name"
+    i=$((i + 1))
+  done
+  if [ -z "$remote" ]; then
+    docker network disconnect "$network" "$(hostname)" >/dev/null 2>&1 || true
+  fi
+}
+
 case "$kind" in
   docker)
     use_docker_host
@@ -254,6 +315,7 @@ case "$kind" in
       docker compose -p "$stack" -f "deploy/$TESSERY_ENV/compose.yaml" --env-file "$compose_env" up -d --remove-orphans --wait --wait-timeout 300
     fi
     [ -n "$host" ] || check_http "${stack}_default"
+    check_contract "${stack}_default" "$host"
     check_https "$host"
     prune_images "$TESSERY_IMAGE_PREFIX"
     ;;

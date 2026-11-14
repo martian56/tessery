@@ -480,7 +480,11 @@ async fn stream(cfg: &RunnerConfig, container: &str, log: &Log) -> Result<Vec<Va
         .kill_on_drop(true)
         .spawn()?;
     let endpoints = std::sync::Mutex::new(Vec::new());
+    let reason = std::sync::Mutex::new(None::<String>);
     let status = pump_with(child, log, |line| {
+        if let Some(e) = line.strip_prefix("::error::") {
+            *reason.lock().expect("not poisoned") = Some(e.trim().to_owned());
+        }
         if let Some(e) = line.strip_prefix("::endpoint::") {
             if let Ok(v) = serde_json::from_str::<Value>(e) {
                 endpoints.lock().expect("not poisoned").push(v);
@@ -491,6 +495,9 @@ async fn stream(cfg: &RunnerConfig, container: &str, log: &Log) -> Result<Vec<Va
     })
     .await?;
     if !status.success() {
+        if let Some(reason) = reason.into_inner().expect("not poisoned") {
+            bail!("{reason}");
+        }
         bail!("the runner exited with {}", status.code().map_or("a signal".into(), |c| format!("code {c}")));
     }
     Ok(endpoints.into_inner().expect("not poisoned"))
