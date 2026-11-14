@@ -640,3 +640,21 @@ test('Kotlin services implement designed CRUD with the shared JVM database layer
   assert.ok(files['services/tasks-api/src/main/java/com/example/tasks_api/Db.java'].includes('removeAll(filter.keySet())'), 'scoped columns cannot be moved by an update')
   assert.match(files['services/tasks-api/build.gradle.kts'], /org\.postgresql:postgresql/)
 })
+
+test('C# services implement designed CRUD in SQL with sign-in and per-user rows', () => {
+  const doc = tasksTemplate()
+  const api = doc.nodes.find((n) => n.name === 'tasks-api')!
+  runOp(doc, 'setConfig', { id: api.id, key: 'language', value: 'C#' })
+  runOp(doc, 'setConfig', { id: api.id, key: 'framework', value: 'ASP.NET Core' })
+  const files = generateAll(doc)
+  const program = files['services/tasks-api/Program.cs']
+  assert.match(program, /await Db\.Open\(dependencies\["TASKS_DB_URL"\], app\.Logger\);/)
+  assert.match(program, /Tables\.Tasks\.List\(ctx\.Request\.Query, new Dictionary<string, string\?> \{ \["project_id"\] = \(string\)ctx\.Request\.RouteValues\["projectId"\]!, \["user_id"\] = session\.Sub \}\)/)
+  assert.match(program, /if \(session is null\) return Results\.Json\(new \{ error = "unauthorized" \}, statusCode: 401\);/)
+  assert.doesNotMatch(program, /not_implemented/, 'every designed CRUD route is implemented')
+  assert.match(files['services/tasks-api/Tables.cs'], /public static readonly Table Projects = new\("projects", "id"/)
+  assert.ok(files['services/tasks-api/Db.cs'].includes('pg_advisory_lock') && files['services/tasks-api/Db.cs'].includes('foreach (var k in filter.Keys) row.Remove(k);'))
+  assert.ok(files['services/tasks-api/Session.cs'].includes('HMACSHA256'))
+  assert.ok(files['services/tasks-api/migrations/tasks-db/0001_init.sql'])
+  assert.match(files['services/tasks-api/TasksApi.csproj'], /Include="Npgsql"/)
+})
