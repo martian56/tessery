@@ -242,3 +242,25 @@ test('public nodes with several replicas and no domain still get host ports', ()
   const port = plan(doc, env).endpoints.find((e) => e.name === web.name)!.url.split(':').pop()
   assert.ok(compose.includes(`"${port}-${Number(port) + 1}:${web.port}"`), 'each replica takes a port from a small range starting at the endpoint port')
 })
+
+test('generated web apps render pages with the same blocks and styles as the editor', async () => {
+  const { readFileSync } = await import('node:fs')
+  const BLOCKS_SOURCE = (await import('../src/render/blocks.source.txt')).default
+  const STYLES = (await import('../src/render/styles.txt')).default
+  const tsx = readFileSync(new URL('../src/render/blocks.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  assert.equal(BLOCKS_SOURCE, tsx, 'src/render/blocks.source.txt is stale; run npm run embed')
+
+  const doc = tasksTemplate()
+  const files = generateAll(doc)
+  const app = Object.keys(files).find((f) => f.endsWith('/components/blocks.tsx'))!.replace('/components/blocks.tsx', '')
+  assert.equal(files[`${app}/components/blocks.tsx`], BLOCKS_SOURCE)
+  assert.ok(files[`${app}/app/globals.css`].includes(STYLES))
+  assert.match(files[`${app}/app/layout.tsx`], /className="tsp"/)
+  assert.match(files[`${app}/components/form.tsx`], /<FormView /)
+
+  const page = doc.pages.find((p) => p.blocks.some((b) => b.type === 'navbar'))!
+  const nav = page.blocks.find((b) => b.type === 'navbar')!
+  delete nav.props.links
+  const source = generateAll(doc)[`${app}/app/${page.route === '/' ? '' : page.route.slice(1) + '/'}page.tsx`]
+  assert.match(source, /<Navbar[^>]* links="Product, Pricing, Docs"/, 'defaults the editor shows are passed to the deployed page')
+})

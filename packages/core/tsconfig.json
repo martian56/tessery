@@ -20,5 +20,8 @@
   "include": [
     "src",
     "scripts"
+  ],
+  "exclude": [
+    "src/render/blocks.tsx"
   ]
 }

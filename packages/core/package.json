@@ -6,6 +6,7 @@
   "description": "Design model, technology catalog, design operations and code generators shared by the Tessery web app and server.",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "embed": "node scripts/embed.mjs",
     "build:engine": "esbuild src/engine/main.ts --bundle --platform=node --target=node22 --format=esm --legal-comments=none --loader:.txt=text --outfile=dist/tessery-engine.mjs",
     "verify:migrations": "esbuild scripts/verify-migrations.ts --bundle --platform=node --loader:.txt=text --format=esm --outfile=dist/verify-migrations.mjs --log-level=warning && node dist/verify-migrations.mjs",
     "verify:codegen": "esbuild scripts/verify-codegen.ts --bundle --platform=node --loader:.txt=text --format=esm --outfile=dist/verify-codegen.mjs --log-level=warning && node dist/verify-codegen.mjs",

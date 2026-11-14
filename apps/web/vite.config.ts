@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
       react(),
       { name: 'text', enforce: 'pre', load: (id) => (id.endsWith('.txt') ? `export default ${JSON.stringify(readFileSync(id, 'utf8'))}` : undefined) },
     ],
-    resolve: { alias: { '@tessery/core': fileURLToPath(new URL('../../packages/core/src', import.meta.url)), '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+    resolve: { dedupe: ['react', 'react-dom'], alias: { '@tessery/core': fileURLToPath(new URL('../../packages/core/src', import.meta.url)), '@': fileURLToPath(new URL('./src', import.meta.url)) } },
     server: {
       port: 5173,
       proxy: {
