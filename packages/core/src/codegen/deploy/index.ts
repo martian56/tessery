@@ -2,6 +2,7 @@ import type { SystemNode, DeployTarget, Environment, ProjectDoc } from '../../do
 import { TECH_BY_ID } from '../../catalog/technologies'
 import { devCompose, dockerPublicHost, envCompose, envExample, isHostname, slug } from './compose'
 import { manifests, namespaceOf, publicHost } from './kubernetes'
+import { contract } from './contract'
 import { connection, hostPort, secrets, workloads, type SecretSpec } from './runtime'
 
 export * from './runtime'
@@ -83,6 +84,8 @@ export function deployFiles(doc: ProjectDoc): Record<string, string> {
     const p = plan(doc, env)
     f[`deploy/${env.id}/plan.json`] = JSON.stringify(p, null, 2) + '\n'
     if (p.target.kind === 'docker') f[`deploy/${env.id}/compose.yaml`] = envCompose(doc, env)
+    const checks = p.target.kind === 'docker' ? contract(doc, env) : null
+    if (checks) f[`deploy/${env.id}/contract.json`] = JSON.stringify(checks, null, 2) + '\n'
     if (p.target.kind === 'kubernetes') f[`deploy/${env.id}/k8s.yaml`] = manifests(doc, env)
   }
   return f

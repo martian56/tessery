@@ -125,7 +125,9 @@ Web app pages (for web-app nodes)
   removeBlock { pageId, blockId }
 
 Environments
-  updateEnv { envId, patch: { name?, approval?, scale?, strategy?, target?, traceRetentionDays?, backups?: { integration, bucket?, every: "hourly" | "daily" | "weekly", keep } } }
+  updateEnv { envId, patch: { name?, approval?, scale?, strategy?, target?, traceRetentionDays?, contractTests?, backups?: { integration, bucket?, every: "hourly" | "daily" | "weekly", keep } } }
+      contractTests: "full" (create, change and delete a throwaway record), "read" (no writes; the default for the last
+      environment) or "off". A release fails, naming the check, when a service answers differently from its design.
       target: { kind: "docker", server?, host?, domain?, hosts?: { [node]: hostname } } | { kind: "kubernetes", namespace?, registry?, domain?, ingressClass?, publicPort? } | { kind: "git" }
   addEnv { name, provider, region }
   removeEnv { envId }

@@ -254,6 +254,9 @@ export interface Environment {
   backups?: BackupPolicy
   /** Days traces are kept, from 1 to 90. Unset keeps them for 3 days. */
   traceRetentionDays?: number
+  /** API checks a release runs before it is marked live: full ones write a throwaway record, read ones never write.
+   * By default the last environment runs read checks and the others full ones. */
+  contractTests?: 'full' | 'read' | 'off'
 }
 
 export interface BackupPolicy {
