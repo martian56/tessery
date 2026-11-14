@@ -145,6 +145,7 @@ a.tsp-el-frame { color: inherit; text-decoration: none; }
 .tsp-tree summary.tsp-el-frame::-webkit-details-marker { display: none; }
 :where(.tsp-tree) :where([popover].tsp-el-frame) { border: 0; padding: 0; margin: 0; color: inherit; background: none; overflow: visible; }
 .tsp-tree [popover].tsp-el-frame::backdrop { background: transparent; }
+.tsp-tree [popover].tsp-el-frame:not(:popover-open) { display: none !important; }
 :where(.tsp-tree) :where(.tsp-el-icon) { width: 1em; height: 1em; flex-shrink: 0; }
 .tsp-el-button-icon { width: 1.1em; height: 1.1em; flex-shrink: 0; }
 :where(.tsp-tree) :where(a.tsp-el-text) { color: inherit; }

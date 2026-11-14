@@ -137,6 +137,11 @@ const safeEmbed = (v: unknown) => {
 }
 const safePath = (v: unknown) => String(v ?? '').replace(/[^MLHVCSQTAZmlhvcsqtaz0-9.,\-\se]/g, '')
 
+function walkIds(e: El, out: Set<string>) {
+  out.add(e.id)
+  e.children?.forEach((c) => walkIds(c, out))
+}
+
 /** The records a bound frame repeats over: the response when it is a list, its first list field, or one record for a detail page. */
 export function records(data: unknown): Row[] {
   if (Array.isArray(data)) return data as Row[]
@@ -180,7 +185,11 @@ export function fill(text: unknown, row: Row | undefined, encode = false): strin
   })
 }
 
-function Node({ e, t, row, copy }: { e: El; t: Ctx; row?: Row; copy?: boolean }): any {
+/** Inside a record frame, ids of the template's elements and the record being drawn, so popovers and their buttons pair up per record. */
+type Scope = { ids: Set<string>; key: string }
+const popId = (id: string, scope?: Scope) => cls(id) + (scope?.ids.has(id) ? `-${scope.key}` : '')
+
+function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boolean; scope?: Scope }): any {
   if (e.hidden) return null
   const p = e.props ?? {}
   const base: Record<string, unknown> = { className: `${cls(e.id)} tsp-el tsp-el-${e.type}` }
@@ -192,7 +201,7 @@ function Node({ e, t, row, copy }: { e: El; t: Ctx; row?: Row; copy?: boolean })
     if (href && t.path && href === t.path) base['aria-current'] = 'page'
     return href
   }
-  const kids = (r: Row | undefined, c?: boolean) => e.children?.map((x) => <Node key={x.id} e={x} t={t} row={r} copy={c} />)
+  const kids = (r: Row | undefined, c?: boolean) => e.children?.map((x) => <Node key={x.id} e={x} t={t} row={r} copy={c} scope={scope} />)
   switch (e.type) {
     case 'frame': {
       const tag = FRAME_TAGS.has(String(p.tag)) ? String(p.tag) : 'div'
@@ -202,10 +211,15 @@ function Node({ e, t, row, copy }: { e: El; t: Ctx; row?: Row; copy?: boolean })
         const list = loaded === undefined && t.editing ? Array.from({ length: Math.max(1, Number(p.preview) || 3) }, () => SAMPLE) : records(loaded)
         const shown = list.slice(0, Number(p.limit) || 50)
         body = shown.length
-          ? shown.map((r, i) => e.children?.map((x) => <Node key={`${x.id}:${r === SAMPLE ? i : String(r.id ?? i)}`} e={x} t={t} row={r} copy={copy || i > 0} />))
+          ? shown.map((r, i) => {
+            const ids = new Set<string>()
+            e.children?.forEach((x) => walkIds(x, ids))
+            const inner: Scope = { ids: new Set([...(scope?.ids ?? []), ...ids]), key: `${scope ? `${scope.key}-` : ''}${i}` }
+            return e.children?.map((x) => <Node key={`${x.id}:${r === SAMPLE ? i : String(r.id ?? i)}`} e={x} t={t} row={r} copy={copy || i > 0} scope={inner} />)
+          })
           : <p className="tsp-empty">{String(p.empty ?? 'Nothing here yet.')}</p>
       }
-      if (p.popover && !t.editing) { base.id = cls(e.id); base.popover = 'auto' }
+      if (p.popover && !t.editing) { base.id = popId(e.id, scope); base.popover = 'auto' }
       if (p.popover && t.editing) base['data-popover'] = ''
       if (tag === 'details' && (t.editing || p.open)) base.open = true
       if (tag === 'form') {
@@ -237,7 +251,7 @@ function Node({ e, t, row, copy }: { e: El; t: Ctx; row?: Row; copy?: boolean })
       const text = fill(p.text, row)
       const inner = <>{icon}{text && <span>{text}</span>}</>
       if (p.disabled) base['aria-disabled'] = true
-      if (p.opens) return <button {...base} type="button" disabled={!!p.disabled} popoverTarget={t.editing ? undefined : cls(String(p.opens))}>{inner}</button>
+      if (p.opens) return <button {...base} type="button" disabled={!!p.disabled} popoverTarget={t.editing ? undefined : popId(String(p.opens), scope)}>{inner}</button>
       if (p.submit) return <button {...base} type="submit" disabled={!!p.disabled}>{inner}</button>
       return <a {...base} href={p.disabled ? undefined : link(p.href) ?? '#'}>{inner}</a>
     }

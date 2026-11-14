@@ -199,7 +199,7 @@ export interface Theme {
   /** Exposed as var(--c-<name>). */
   colors: Record<string, string>
   /** Google Fonts family names or CSS font stacks, exposed as var(--font-heading) and var(--font-body). */
-  fonts: { heading: string; body: string }
+  fonts: { heading: string; body: string; mono?: string }
   /** Default corner radius in pixels, exposed as var(--radius). */
   radius: number
   /** Colors that replace `colors` when the visitor's system is in dark mode. */

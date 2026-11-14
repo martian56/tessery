@@ -41,6 +41,7 @@ export function Canvas({ page }: { page: Page }) {
   const theme = themeOf(doc, page.appNodeId)
   const width = DEVICE_WIDTH[device]
   const geoKey: Breakpoint = device === 'desktop' ? 'style' : device
+  const writeKey: Breakpoint = previewState !== 'none' ? previewState : geoKey
 
   const stageRef = useRef<HTMLDivElement>(null)
   const pageRef = useRef<HTMLDivElement>(null)
@@ -301,7 +302,7 @@ export function Canvas({ page }: { page: Page }) {
       case 'resize': {
         const o = over[d.id]
         setOver({})
-        if (o && (d.kind === 'resize' || d.moved)) edit('updateElement', { pageId: page.id, elementId: d.id, patch: { [geoKey]: o.style } })
+        if (o && (d.kind === 'resize' || d.moved)) edit('updateElement', { pageId: page.id, elementId: d.id, patch: { [writeKey]: o.style } })
         return
       }
       case 'move-flow': {
@@ -339,7 +340,7 @@ export function Canvas({ page }: { page: Page }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target
-      if (t instanceof Element && t.closest('input, textarea, select, [contenteditable], [role="dialog"], [role="menu"], [role="listbox"]')) return
+      if (t instanceof Element && t.closest('input, textarea, select, [contenteditable], [role="dialog"], [role="menu"], [role="listbox"], [role="combobox"], [aria-haspopup]')) return
       const stop = () => { e.preventDefault(); e.stopImmediatePropagation() }
       const k = e.key.toLowerCase()
       if (tool === 'pen' && anchors.length && (k === 'enter' || k === 'escape')) { stop(); return k === 'enter' ? finishPen(false) : (setAnchors([]), setCursor(null)) }
@@ -375,7 +376,7 @@ export function Canvas({ page }: { page: Page }) {
         const step = e.shiftKey ? 10 : 1
         const dx = k === 'arrowleft' ? -step : k === 'arrowright' ? step : 0
         const dy = k === 'arrowup' ? -step : k === 'arrowdown' ? step : 0
-        edit('updateElement', { pageId: page.id, elementId: id, patch: { [geoKey]: { left: (px(st.left) ?? 0) + dx, top: (px(st.top) ?? 0) + dy } } }, { coalesce: `nudge:${id}` })
+        edit('updateElement', { pageId: page.id, elementId: id, patch: { [writeKey]: { left: (px(st.left) ?? 0) + dx, top: (px(st.top) ?? 0) + dy } } }, { coalesce: `nudge:${id}` })
       }
     }
     window.addEventListener('keydown', onKey, true)

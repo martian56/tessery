@@ -216,7 +216,7 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
             <Field label="Popover" hint="Hidden until a button opens it: menus, dialogs."><Switch checked={!!p.popover} onChange={(x) => prop('popover', x || null, false)} /></Field>
           </Section>
           <Section title="Records" defaultOpen={!!p.source}>
-            <Field label="Repeat for" hint="Repeats this frame's children once per record; use {field} inside."><Select value={str('source')} onChange={(x) => prop('source', x || null, false)} aria-label="Repeat for" options={[{ value: '', label: 'Not repeated' }, ...ops.map((o) => ({ value: o.key, label: o.label, group: o.style.toUpperCase() }))]} /></Field>
+            <Field label="Repeat for" hint="Repeats this frame's children once per record; use {field} inside."><Select value={str('source')} onChange={(x) => prop('source', x || null, false)} aria-label="Repeat for" options={[{ value: '', label: 'Not repeated' }, ...ops.filter((o) => o.reads).map((o) => ({ value: o.key, label: o.label, group: o.style.toUpperCase() }))]} /></Field>
             {!!p.source && <>
               <Field label="Limit"><NumberInput value={Number(p.limit) || 50} min={1} max={500} onCommit={(x) => prop('limit', x, false)} /></Field>
               <Field label="When empty"><Input value={str('empty')} onChange={(x) => prop('empty', x)} placeholder="Nothing here yet." /></Field>
@@ -252,7 +252,7 @@ function Content({ page, el, prop, pick }: { page: Page; el: UIElement; prop: (k
               {meta.dataKeys.map((k) => (
                 <Field key={k} label={k === 'source' ? 'Reads from' : 'Submits to'}>
                   <Select value={String(p[k] ?? '')} onChange={(x) => { edit('updateElement', { pageId: page.id, elementId: el.id, patch: { props: { [k]: x || null } } }); if (x) fill(k, x) }} aria-label={k === 'source' ? 'Reads from' : 'Submits to'}
-                    options={[{ value: '', label: 'Not bound' }, ...ops.map((o) => ({ value: o.key, label: o.label, group: o.style.toUpperCase() }))]} />
+                    options={[{ value: '', label: 'Not bound' }, ...ops.filter((o) => k === 'action' || o.reads).map((o) => ({ value: o.key, label: o.label, group: o.style.toUpperCase() }))]} />
                 </Field>
               ))}
             </Section>

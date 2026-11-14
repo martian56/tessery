@@ -57,6 +57,13 @@ export function httpRoute(op: Operation): Route | null {
   return { op, name: camel(op.name || `${method.toLowerCase()} ${path}`), method: method as HttpMethod, path, params: [...path.matchAll(/\{(\w+)\}/g)].map((x) => x[1]) }
 }
 
+/** Whether calling the operation only reads, so a page may call it while rendering: GET, a GraphQL query, or a gRPC method named like a read. */
+export function readsOnly(style: string, op: Pick<Operation, 'kind' | 'name'>): boolean {
+  if (style === 'graphql') return op.kind.trim().toLowerCase() === 'query'
+  if (style === 'grpc') return /^(get|list|search|find|read|lookup|count|batchget|watch)/i.test(op.name)
+  return httpRoute(op as Operation)?.method === 'GET'
+}
+
 export function restPrefix(spec?: Pick<ApiSpec, 'style' | 'basePath'>): string {
   if (!spec || ['graphql', 'grpc', 'websocket', 'trpc', 'soap'].includes(spec.style)) return ''
   const p = (spec.basePath ?? '').trim().replace(/\/+$/, '')

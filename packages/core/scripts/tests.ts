@@ -372,9 +372,38 @@ test('record frames, placeholders, states, dark colors and icons render the way 
   assert.ok(page.includes(`${JSON.stringify(list)}: data`), 'the page passes the loaded records to the frame')
   assert.match(page, /icon=\{Icon\} path=\{"\/"\}/)
   assert.match(files[`${app}/components/icon.tsx`], /from 'lucide-react'/)
-  assert.match(files[`${app}/components/icon.tsx`], /name\.split\(\/\[-_ \]\+\/\)/)
+  assert.match(files[`${app}/components/icon.tsx`], /BY_NAME\.get\(squash\(name\)\)/, 'any spelling of an icon name resolves')
   assert.ok(JSON.parse(files[`${app}/package.json`]).dependencies['lucide-react'])
   const detail = Object.keys(files).find((f) => f.startsWith(`${app}/app/`) && f.includes('[') && f.endsWith('page.tsx'))
   if (detail) assert.match(files[detail], /path=\{`\/[^`]*\$\{\w+\}`\}/, 'dynamic pages pass their real path')
   assert.throws(() => runOp(doc, 'addElement', { pageId: home.id, element: { type: 'marquee' as never } }))
+})
+
+test('pages only load from read operations, and popover links survive copies', async () => {
+  const { readsOnly } = await import('../src/codegen/services/model')
+  const { analyze } = await import('../src/analysis')
+  assert.ok(readsOnly('rest', { kind: 'GET /items', name: 'listItems' }))
+  assert.ok(!readsOnly('rest', { kind: 'DELETE /items/{id}', name: 'deleteItem' }))
+  assert.ok(readsOnly('graphql', { kind: 'query', name: 'items' }) && !readsOnly('graphql', { kind: 'mutation', name: 'addItem' }))
+  assert.ok(readsOnly('grpc', { kind: 'unary', name: 'ListItems' }) && !readsOnly('grpc', { kind: 'unary', name: 'RemoveItem' }))
+
+  const doc = tasksTemplate()
+  const home = doc.pages.find((p) => p.route === '/')!
+  const svc = doc.nodes.find((n) => doc.apis[n.id]?.operations.some((o) => o.name === 'deleteTask'))!
+  const bad = runOp(doc, 'addElement', { pageId: home.id, element: { type: 'frame', name: 'Danger', props: { source: `${svc.id}:deleteTask` }, children: [{ type: 'text', props: { text: '{title}' } }] } }) as string
+  const page = Object.entries(generateAll(doc)).find(([f]) => f.endsWith('/app/page.tsx'))![1]
+  assert.ok(!page.includes('.deleteTask('), 'rendering a page never calls an operation that changes data')
+  assert.ok(analyze(doc, undefined, null).some((x) => x.target?.blockId === bad && /changes data/.test(x.message)), 'the design check names the problem')
+
+  const menu = runOp(doc, 'addElement', { pageId: home.id, element: { type: 'frame', name: 'Menu', children: [
+    { type: 'button', name: 'Open', props: { text: 'Options', opens: 'List' } },
+    { type: 'frame', name: 'List', props: { popover: true } },
+  ] } }) as string
+  const { find } = await import('../src/domain/tree')
+  const m = find(home.root, menu)!.el
+  assert.equal(m.children![0].props.opens, m.children![1].id, 'a button can name the popover it opens')
+  const copy = runOp(doc, 'duplicateElement', { pageId: home.id, elementId: menu }) as string
+  const c = find(home.root, copy)!.el
+  assert.equal(c.children![0].props.opens, c.children![1].id, 'a copied button opens the copied popover')
+  assert.notEqual(c.children![1].id, m.children![1].id)
 })

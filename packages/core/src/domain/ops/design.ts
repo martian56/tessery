@@ -1,6 +1,6 @@
 import type { ApiSpec, Block, Column, Environment, Index, Operation, Page, ProjectDoc, Table, TypeDef, AlertRule, SloDef, ObservabilityConfig, ConfigValue, ElementType, StyleKey, Theme, UIElement } from '../types'
 import { STYLE_KEYS } from '../types'
-import { blockElement, find, pageRoot, themeOf } from '../tree'
+import { blockElement, find, pageRoot, themeOf, walk } from '../tree'
 import { block as mkBlock, op as mkOp, table as mkTable, type as mkType, uid } from '../builders'
 
 const spec = (doc: ProjectDoc, nodeId: string) => doc.apis[nodeId]
@@ -138,8 +138,24 @@ function build(e: ElementInput): UIElement {
   return out
 }
 
+/** Copies an element with fresh ids, pointing buttons that open a popover inside the copy at the copied popover. */
 function reid(e: UIElement): UIElement {
-  return { ...structuredClone(e), id: uid('el'), children: e.children?.map(reid) }
+  const ids = new Map<string, string>()
+  const copy = (x: UIElement): UIElement => {
+    const id = uid('el')
+    ids.set(x.id, id)
+    return { ...structuredClone(x), id, children: x.children?.map(copy) }
+  }
+  const out = copy(e)
+  walk(out, (x) => { const to = typeof x.props.opens === 'string' ? ids.get(x.props.opens) : undefined; if (to) x.props.opens = to })
+  return out
+}
+
+/** Lets a new element name its popover: a button whose opens matches the name of a popover frame in the same element gets that frame's id. */
+function linkPopovers(e: UIElement) {
+  const byName = new Map<string, string>()
+  walk(e, (x) => { if (x.type === 'frame' && x.props.popover && x.name) byName.set(x.name, x.id) })
+  walk(e, (x) => { const to = typeof x.props.opens === 'string' ? byName.get(x.props.opens) : undefined; if (to) x.props.opens = to })
 }
 
 const merge = (target: Record<string, unknown> | undefined, patch: Record<string, unknown>) => {
@@ -177,6 +193,7 @@ export const pageOps = {
     const { el: parent } = at(doc, a.pageId, a.parentId)
     if (parent.type !== 'frame') throw new Error('elements can only be added inside a frame')
     const e = build(a.element)
+    linkPopovers(e)
     const list = (parent.children ??= [])
     list.splice(a.index === undefined || a.index < 0 || a.index > list.length ? list.length : a.index, 0, e)
     return e.id

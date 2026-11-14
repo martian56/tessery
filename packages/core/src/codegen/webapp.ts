@@ -4,7 +4,7 @@ import { builtInAuth } from './deploy/runtime'
 import NEXT_AUTH from './runtime/next-auth.txt'
 import NEXT_LOGIN from './runtime/next-login.txt'
 import SESSION_RUNTIME from './runtime/ts-session.txt'
-import { httpRoute, restPrefix } from './services/model'
+import { httpRoute, restPrefix, readsOnly } from './services/model'
 import BLOCKS_SOURCE from '../render/blocks.source.txt'
 import TREE_SOURCE from '../render/tree.source.txt'
 import { blocksOf, themeOf } from '../domain/tree'
@@ -51,6 +51,7 @@ export function pageSource(doc: ProjectDoc, p: Page): string {
     const spec = doc.apis[nid]
     const operation = spec?.operations.find((o) => o.name === op)
     if (!svc || !operation || (spec.style !== 'graphql' && spec.style !== 'grpc' && !httpRoute(operation))) continue
+    if (!readsOnly(spec.style, operation)) continue
     const { params: n, body } = opParams(doc, nid, op)
     const args = [...Array.from({ length: n }, (_, k) => params[k] ?? "''"), ...(body ? ['{}'] : [])]
     if (auth) args.push('{ token }')
@@ -94,10 +95,12 @@ export const BLOCK_DEFAULTS = ${JSON.stringify(Object.fromEntries(BLOCK_CATALOG.
 const ICON = `// Draws page icons by their Lucide name (lucide.dev/icons), such as "git-branch" or "shopping-cart".
 import { icons, type LucideIcon } from 'lucide-react'
 
-const pascal = (name: string) => name.split(/[-_ ]+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('')
+const squash = (name: string) => name.replace(/[^A-Za-z0-9]/g, '').toLowerCase()
+const BY_NAME = new Map(Object.keys(icons).map((key) => [squash(key), key]))
 
 export function Icon({ name, ...rest }: { name: string; className: string; 'aria-hidden'?: boolean; 'aria-label'?: string; 'data-node'?: string }) {
-  const Found = (icons as Record<string, LucideIcon>)[pascal(name)]
+  const key = BY_NAME.get(squash(name))
+  const Found = key ? (icons as Record<string, LucideIcon>)[key] : undefined
   return Found ? <Found {...rest} /> : <span className={rest.className} aria-hidden />
 }
 `
