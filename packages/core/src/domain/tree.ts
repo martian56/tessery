@@ -8,7 +8,7 @@ export const DEFAULT_THEME: Theme = {
 
 export const themeOf = (doc: Pick<ProjectDoc, 'themes'>, appNodeId: string): Theme => {
   const t = doc.themes?.[appNodeId]
-  return t ? { colors: { ...DEFAULT_THEME.colors, ...t.colors }, fonts: { ...DEFAULT_THEME.fonts, ...t.fonts }, radius: t.radius ?? DEFAULT_THEME.radius, ...(t.dark && Object.keys(t.dark).length ? { dark: { ...t.dark } } : {}) } : DEFAULT_THEME
+  return t ? { colors: { ...DEFAULT_THEME.colors, ...t.colors }, fonts: { ...DEFAULT_THEME.fonts, ...t.fonts }, radius: t.radius ?? DEFAULT_THEME.radius, ...(t.dark && Object.keys(t.dark).length ? { dark: { ...t.dark } } : {}), ...(t.logo ? { logo: t.logo } : {}), ...(t.favicon ? { favicon: t.favicon } : {}) } : DEFAULT_THEME
 }
 
 export const blockElement = (b: Block): UIElement => ({ id: b.id, type: 'block', props: { block: b.type, ...b.props } })

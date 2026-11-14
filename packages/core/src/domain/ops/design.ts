@@ -1,6 +1,7 @@
 import type { ApiSpec, Block, Column, Environment, Index, Operation, Page, ProjectDoc, Table, TypeDef, AlertRule, SloDef, ObservabilityConfig, ConfigValue, ElementType, StyleKey, Theme, UIElement } from '../types'
 import { STYLE_KEYS } from '../types'
 import { blockElement, find, pageRoot, themeOf, walk } from '../tree'
+import { THEME_PRESETS } from '../themes'
 import { block as mkBlock, op as mkOp, table as mkTable, type as mkType, uid } from '../builders'
 
 const spec = (doc: ProjectDoc, nodeId: string) => doc.apis[nodeId]
@@ -249,11 +250,18 @@ export const pageOps = {
     parent.children.splice(index, 0, frame)
     return frame.id
   },
-  setTheme(doc: ProjectDoc, a: { appNodeId: string; colors?: Record<string, string | null>; dark?: Record<string, string | null>; fonts?: Partial<Theme['fonts']>; radius?: number }) {
-    const t = themeOf(doc, a.appNodeId)
+  /** Starts from a preset when given one, keeping color tokens the preset does not define, then applies the other fields; a null color, logo or favicon removes it. */
+  setTheme(doc: ProjectDoc, a: { appNodeId: string; preset?: string; colors?: Record<string, string | null>; dark?: Record<string, string | null>; fonts?: Partial<Theme['fonts']>; radius?: number; logo?: string | null; favicon?: string | null }) {
+    const current = themeOf(doc, a.appNodeId)
+    const preset = a.preset ? THEME_PRESETS[a.preset] : undefined
+    if (a.preset && !preset) throw new Error(`unknown theme preset ${a.preset}; use ${Object.keys(THEME_PRESETS).join(', ')}`)
+    const base = preset ? structuredClone(preset.theme) : undefined
+    const t: Theme = base ? { ...base, colors: { ...current.colors, ...base.colors }, dark: { ...current.dark, ...base.dark }, logo: current.logo, favicon: current.favicon } : current
     const colors = merge(t.colors, a.colors ?? {}) as Record<string, string>
     const dark = merge(t.dark, a.dark ?? {}) as Record<string, string>
-    doc.themes = { ...(doc.themes ?? {}), [a.appNodeId]: { colors, fonts: { ...t.fonts, ...(a.fonts ?? {}) }, radius: a.radius ?? t.radius, ...(Object.keys(dark).length ? { dark } : {}) } }
+    const logo = a.logo === undefined ? t.logo : a.logo || undefined
+    const favicon = a.favicon === undefined ? t.favicon : a.favicon || undefined
+    doc.themes = { ...(doc.themes ?? {}), [a.appNodeId]: { colors, fonts: { ...t.fonts, ...(a.fonts ?? {}) }, radius: a.radius ?? t.radius, ...(Object.keys(dark).length ? { dark } : {}), ...(logo ? { logo } : {}), ...(favicon ? { favicon } : {}) } }
   },
 
   addBlock(doc: ProjectDoc, a: { pageId: string; type: string; props: Block['props']; after?: string }) {
