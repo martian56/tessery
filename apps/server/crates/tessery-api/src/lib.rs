@@ -101,8 +101,16 @@ pub fn app(state: AppState) -> Router {
         );
     let mut router = Router::new().merge(uploads).nest("/api", api).nest("/git", git);
     if let Some(dir) = state.config.web_dir.clone() {
-        router = router
-            .fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(dir.join("index.html"))));
+        // The page is revalidated on every load, so after an update it names the new build's files.
+        let cache = |res: &axum::http::Response<_>| {
+            let html = res.headers().get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).is_some_and(|v| v.starts_with("text/html"));
+            html.then(|| HeaderValue::from_static("no-cache"))
+        };
+        router = router.fallback_service(
+            ServiceBuilder::new()
+                .layer(SetResponseHeaderLayer::overriding(header::CACHE_CONTROL, cache))
+                .service(ServeDir::new(&dir).fallback(ServeFile::new(dir.join("index.html")))),
+        );
     }
     let hsts = state.config.cookie_secure.then(|| HeaderValue::from_static("max-age=31536000; includeSubDomains"));
     router.with_state(state).layer(

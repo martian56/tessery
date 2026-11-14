@@ -6,8 +6,10 @@ import '@/styles/global.css'
 import { store } from '@/store'
 import { DialogProvider, Toaster, TooltipProvider } from '@/ui'
 import { App } from '@/app/App'
+import { watchForUpdates } from '@/lib/staleBuild'
 
 function boot() {
+  watchForUpdates()
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <Provider store={store}>
