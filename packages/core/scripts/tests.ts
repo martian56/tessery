@@ -555,3 +555,18 @@ test('Java services implement designed CRUD in SQL with sign-in and per-user row
   assert.equal(files['services/tasks-api/src/main/resources/migrations/tasks-db/index.txt'], '0001_init.sql\n')
   assert.match(files['services/tasks-api/pom.xml'], /<artifactId>postgresql<\/artifactId>/)
 })
+
+test('Kotlin services implement designed CRUD with the shared JVM database layer', () => {
+  const doc = tasksTemplate()
+  const api = doc.nodes.find((n) => n.name === 'tasks-api')!
+  runOp(doc, 'setConfig', { id: api.id, key: 'language', value: 'Kotlin' })
+  runOp(doc, 'setConfig', { id: api.id, key: 'framework', value: 'Ktor' })
+  const files = generateAll(doc)
+  const app = files['services/tasks-api/src/main/kotlin/com/example/tasks_api/Application.kt']
+  assert.match(app, /Db\.open\(dependencies\.getValue\("TASKS_DB_URL"\)\)/)
+  assert.match(app, /Tables\.TASKS\.list\(.+, mapOf\("project_id" to call\.parameters\["projectId"\]!!, "user_id" to session\.sub\(\)\)\)/)
+  assert.match(app, /if \(session == null\) return@get call\.respondText/)
+  assert.doesNotMatch(app, /NotImplemented/, 'every designed CRUD route is implemented')
+  assert.ok(files['services/tasks-api/src/main/java/com/example/tasks_api/Db.java'].includes('removeAll(filter.keySet())'), 'scoped columns cannot be moved by an update')
+  assert.match(files['services/tasks-api/build.gradle.kts'], /org\.postgresql:postgresql/)
+})
