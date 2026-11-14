@@ -1,5 +1,6 @@
 pub mod access;
 pub mod admin;
+pub mod assets;
 pub mod audit_log;
 pub mod auth;
 pub mod backups;
@@ -59,6 +60,9 @@ pub fn api() -> Router<AppState> {
         .route("/integrations/providers", get(integrations::providers))
         .route("/admin/email", get(email::get_settings).put(email::put_settings))
         .route("/admin/github", get(github::settings).delete(github::forget))
+        .route("/projects/{project}/assets", get(assets::list))
+        .route("/projects/{project}/assets/{asset}", delete(assets::delete))
+        .route("/assets/{asset}/{name}", get(assets::serve))
         .route("/github/manifest", get(github::manifest_return))
         .route("/github/webhook", post(github::webhook))
         .route("/projects/{project}/github/repos", get(github::repos))

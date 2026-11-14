@@ -37,6 +37,11 @@ say "Stopping Tessery"
 docker compose stop server worker >/dev/null 2>&1 || true
 docker network inspect tessery-proxy >/dev/null 2>&1 || docker network create tessery-proxy >/dev/null
 docker compose up -d --wait postgres redis rabbitmq
+if [ -f "$work/objects.tar.gz" ]; then
+  say "Restoring uploaded assets"
+  docker compose stop seaweedfs >/dev/null 2>&1 || true
+  docker compose run --rm --no-deps -T --entrypoint sh -v "$work:/restore:ro" seaweedfs -c 'tar -tzf /restore/objects.tar.gz >/dev/null && find /data -mindepth 1 -delete && tar -C /data -xzf /restore/objects.tar.gz'
+fi
 
 say "Restoring the database"
 gunzip -c "$work/database.sql.gz" | docker compose exec -T postgres psql -q -v ON_ERROR_STOP=1 -U tessery -d tessery >/dev/null

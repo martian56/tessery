@@ -90,7 +90,16 @@ pub fn app(state: AppState) -> Router {
                 .layer(TimeoutLayer::with_status_code(axum::http::StatusCode::GATEWAY_TIMEOUT, Duration::from_secs(900)))
                 .layer(RequestBodyLimitLayer::new(256 * 1024 * 1024)),
         );
-    let mut router = Router::new().nest("/api", api).nest("/git", git);
+    let uploads = Router::new()
+        .route("/api/projects/{project}/assets/upload", axum::routing::post(routes::assets::upload))
+        .route_layer(middleware::from_fn(csrf_guard))
+        .layer(
+            ServiceBuilder::new()
+                .layer(axum::extract::DefaultBodyLimit::max(routes::assets::MAX_BYTES))
+                .layer(TimeoutLayer::with_status_code(axum::http::StatusCode::GATEWAY_TIMEOUT, Duration::from_secs(120)))
+                .layer(RequestBodyLimitLayer::new(routes::assets::MAX_BYTES)),
+        );
+    let mut router = Router::new().merge(uploads).nest("/api", api).nest("/git", git);
     if let Some(dir) = state.config.web_dir.clone() {
         router = router
             .fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(dir.join("index.html"))));

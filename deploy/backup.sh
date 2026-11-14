@@ -25,11 +25,14 @@ docker compose exec -T postgres pg_dump -U tessery -d tessery --clean --if-exist
 say "Copying project repositories and data"
 docker compose exec -T server tar -C /var/lib/tessery -czf - . > "$work/data.tar.gz"
 
+say "Copying uploaded assets"
+docker compose exec -T seaweedfs tar -C /data -czf - . > "$work/objects.tar.gz"
+
 cp .env "$work/env"
 printf 'created=%s\nimage_tag=%s\ndomain=%s\n' "$stamp" "${TESSERY_IMAGE_TAG:-latest}" "${TESSERY_DOMAIN:-}" > "$work/manifest"
 
 archive="$OUT/tessery-$stamp.tar.gz"
-tar -C "$work" -czf "$archive" manifest env database.sql.gz data.tar.gz
+tar -C "$work" -czf "$archive" manifest env database.sql.gz data.tar.gz objects.tar.gz
 chmod 600 "$archive"
 say "Wrote $archive ($(du -h "$archive" | cut -f1))"
 

@@ -116,6 +116,23 @@ export interface paths {
         patch: operations["update_user"];
         trace?: never;
     };
+    "/api/assets/{asset}/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Serves an asset to the editor. Generated apps ship their own copies, so deployed sites never call this. */
+        get: operations["serve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/login": {
         parameters: {
             query?: never;
@@ -983,6 +1000,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project}/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project}/assets/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Uploads an image, video or font. Send the file as the raw request body. */
+        post: operations["upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project}/assets/{asset}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project}/checkpoints": {
         parameters: {
             query?: never;
@@ -1284,7 +1350,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Repositories the app is installed on, to pick one for a project. */
+        /**
+         * Repositories the app is installed on, to pick one for a project. The app and its installations belong to the
+         *     instance and can reach repositories of every organization on it, so only instance administrators may list them.
+         */
         get: operations["repos"];
         put?: never;
         post?: never;
@@ -1610,6 +1679,24 @@ export interface components {
             summary: string;
             /** Format: double */
             threshold: number;
+        };
+        AssetDto: {
+            contentType: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: int32 */
+            height?: number | null;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description What a page stores to use this asset, for example as an image source. */
+            reference: string;
+            /** Format: int64 */
+            sizeBytes: number;
+            /** @description Where the editor loads it from. */
+            url: string;
+            /** Format: int32 */
+            width?: number | null;
         };
         AuditEventDto: {
             action: string;
@@ -2770,6 +2857,32 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["UserDto"];
                 };
+            };
+        };
+    };
+    serve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -4535,6 +4648,89 @@ export interface operations {
             };
         };
     };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetDto"][];
+                };
+            };
+        };
+    };
+    upload: {
+        parameters: {
+            query: {
+                /** @description The original file name; it is cleaned and given the extension of the detected type. */
+                name: string;
+            };
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": number[];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetDto"];
+                };
+            };
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+                asset: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+        };
+    };
     list_checkpoints: {
         parameters: {
             query?: never;
@@ -5105,6 +5301,12 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["GithubRepoDto"][];
                 };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             409: {
                 headers: {

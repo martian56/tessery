@@ -3,7 +3,10 @@ import { useAppDispatch, useDoc, useEdit } from '@/store'
 import { primaryKey, tableForOperation } from '@tessery/core/codegen/services/crud'
 import { ui } from '@/store/uiSlice'
 import type { ConfigValue } from '@tessery/core/domain/types'
+import { useState } from 'react'
+import { ImagePlus } from 'lucide-react'
 import { Button, Empty, Field, Input, NumberInput, Section, Select, Switch, Textarea } from '@/ui'
+import { AssetPicker } from '@/features/assets/AssetPicker'
 import { BLOCK_BY_TYPE } from './blocks'
 import { useBindableOps, useCurrentPage } from './usePage'
 import ins from '@/features/design/Inspector.module.css'
@@ -14,6 +17,7 @@ export function PageInspector() {
   const doc = useDoc()
   const { page, block } = useCurrentPage()
   const ops = useBindableOps()
+  const [picking, setPicking] = useState<string | null>(null)
   if (!page) return <Empty title="No page selected" />
 
   if (block) {
@@ -35,6 +39,7 @@ export function PageInspector() {
       }
     }
     const ctl = (k: string, v: ConfigValue) => {
+      if (k === 'image') return <div style={{ display: 'flex', gap: 6, width: '100%' }}><Input mono value={String(v)} onCommit={(x) => set(k, x)} /><Button size="sm" icon={<ImagePlus />} aria-label="Choose an image" onClick={() => setPicking(k)} /></div>
       if (typeof v === 'boolean') return <Switch checked={v} onChange={(x) => set(k, x)} label={v ? 'on' : 'off'} />
       if (typeof v === 'number') return <NumberInput value={v} min={1} max={24} onCommit={(x) => set(k, x)} />
       if (/^#[0-9a-f]{6}$/i.test(String(v))) return <div style={{ display: 'flex', gap: 6, width: '100%' }}><span style={{ width: 24, height: 24, borderRadius: 3, background: String(v), border: '1px solid var(--line-2)', flexShrink: 0 }} /><Input mono value={String(v)} onCommit={(x) => /^#[0-9a-f]{6}$/i.test(x) && set(k, x)} /></div>
@@ -44,6 +49,7 @@ export function PageInspector() {
     return (
       <div className={ins.wrap}>
         <div className={ins.title}><span className={ins.glyph}>blk</span><div><b>{def?.label ?? block.type}</b><span>{page.name} · block {idx + 1} of {page.blocks.length}</span></div></div>
+        <AssetPicker pid={doc.id} open={picking !== null} onClose={() => setPicking(null)} onPick={(a) => picking && set(picking, a.reference)} />
         <Section title="Content">{Object.entries(props).filter(([k]) => k !== 'source' && k !== 'action').map(([k, v]) => <Field key={k} label={k}>{ctl(k, v)}</Field>)}</Section>
         {def?.dataKeys && (
           <Section title="Data binding">

@@ -71,6 +71,10 @@ pub async fn spawn_with(customize: impl FnOnce(&mut Config)) -> TestApp {
         log_json: false,
         trust_proxy: true,
         notify_allow_private: false,
+        object_store: std::env::var("TESSERY_TEST_S3_ENDPOINT").ok().map(|endpoint| tessery_api::config::ObjectStore {
+            s3: tessery_cloud::S3 { endpoint, region: "us-east-1".into(), access_key: "tessery".into(), secret: "tessery-dev-secret".into() },
+            bucket: format!("test-{}", Uuid::new_v4().simple()),
+        }),
         data_dir: std::env::temp_dir().join("tessery-tests").join(&db_name),
         secret_key: Some(tessery_core::SecretKey::parse(&"7".repeat(64)).unwrap()),
         oidc: None,
