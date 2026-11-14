@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE notification_channels SET last_sent_at = now(), last_error = $2 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "95ce3f5b746e5645d9290a69cf5b8b24b0ca0561495767a6d8e1ff6ff6144d16"
+}

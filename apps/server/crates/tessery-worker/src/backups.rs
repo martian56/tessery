@@ -140,6 +140,7 @@ pub async fn backup(ctx: &Ctx, id: Uuid) -> Result<()> {
         Err(e) => {
             tracing::warn!(backup = %id, error = %e, "backup failed");
             db::set_status(&ctx.db, id, "failed", &format!("{e:#}")).await?;
+            crate::notify::send_quietly(ctx, b.project_id, &b.env_key, None, "backup.failed", &format!("Backup of {} failed", b.node), &format!("{e:#}")).await;
         }
     }
     Ok(())

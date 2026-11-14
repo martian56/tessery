@@ -5,10 +5,10 @@ import type { ReactNode } from 'react'
 import { Tooltip } from './Tooltip'
 import s from './Controls.module.css'
 
-export function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label?: ReactNode; disabled?: boolean }) {
+export function Switch({ checked, onChange, label, disabled, ariaLabel }: { checked: boolean; onChange: (v: boolean) => void; label?: ReactNode; disabled?: boolean; ariaLabel?: string }) {
   return (
     <label className={clsx(s.inline, disabled && s.disabled)}>
-      <RSw.Root className={s.switch} checked={checked} onCheckedChange={onChange} disabled={disabled}>
+      <RSw.Root className={s.switch} checked={checked} onCheckedChange={onChange} disabled={disabled} aria-label={ariaLabel}>
         <RSw.Thumb className={s.thumb} />
       </RSw.Root>
       {label && <span>{label}</span>}

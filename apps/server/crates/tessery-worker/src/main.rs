@@ -2,6 +2,7 @@ mod backups;
 mod deploy;
 mod dns;
 mod jobs;
+mod notify;
 mod provision;
 
 use anyhow::Context;

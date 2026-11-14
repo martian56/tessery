@@ -330,6 +330,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/notifications/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/orgs": {
         parameters: {
             query?: never;
@@ -1015,6 +1031,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project}/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project}/notifications/{channel}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update"];
+        post?: never;
+        delete: operations["delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project}/notifications/{channel}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sends a sample message to the channel now and reports what the other side answered. */
+        post: operations["test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project}/pipeline": {
         parameters: {
             query?: never;
@@ -1330,6 +1395,22 @@ export interface components {
             currentPassword: string;
             newPassword: string;
         };
+        ChannelDto: {
+            enabled: boolean;
+            /** @description Empty means every environment. */
+            envs: string[];
+            events: string[];
+            /** Format: uuid */
+            id: string;
+            /** @description `email`, `slack`, `discord`, `telegram` or `webhook`. */
+            kind: string;
+            lastError?: string | null;
+            /** Format: date-time */
+            lastSentAt?: string | null;
+            name: string;
+            /** @description A safe preview of where messages go. The full target is never returned. */
+            targetHint: string;
+        };
         CheckpointDoc: {
             doc: Record<string, never>;
         };
@@ -1459,6 +1540,10 @@ export interface components {
             message: string;
             permission?: string | null;
         };
+        EventDto: {
+            key: string;
+            label: string;
+        };
         ExportDto: {
             /** Format: date-time */
             createdAt: string;
@@ -1587,6 +1672,14 @@ export interface components {
             /** @description True when the caller is an instance administrator and may act beyond `permissions`. */
             bypass: boolean;
             permissions: string[];
+        };
+        NewChannelInput: {
+            envs?: string[];
+            events: string[];
+            kind: string;
+            name: string;
+            /** @description Addresses separated by commas, a webhook URL, or `bot-token@chat-id` for Telegram. */
+            target: string;
         };
         NewIntegrationInput: {
             /** @description The provider's fields, as listed by `/api/integrations/providers`. */
@@ -2029,6 +2122,12 @@ export interface components {
             /** Format: date-time */
             startedAt: string;
             traceId: string;
+        };
+        UpdateChannelInput: {
+            enabled: boolean;
+            envs?: string[];
+            events: string[];
+            name: string;
         };
         UpdateMe: {
             name: string;
@@ -2622,6 +2721,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MyPermissions"];
+                };
+            };
+        };
+    };
+    events: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventDto"][];
                 };
             };
         };
@@ -4108,6 +4226,128 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["GeneratedDto"];
                 };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDto"][];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewChannelInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDto"];
+                };
+            };
+        };
+    };
+    update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+                channel: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateChannelInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDto"];
+                };
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+                channel: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+        };
+    };
+    test: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+                channel: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

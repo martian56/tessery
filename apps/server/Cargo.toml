@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/tessery-core", "crates/tessery-db", "crates/tessery-mq", "crates/tessery-git", "crates/tessery-engine", "crates/tessery-cloud", "crates/tessery-api", "crates/tessery-worker"]
+members = ["crates/tessery-core", "crates/tessery-db", "crates/tessery-mq", "crates/tessery-git", "crates/tessery-engine", "crates/tessery-cloud", "crates/tessery-notify", "crates/tessery-api", "crates/tessery-worker"]
 
 [workspace.package]
 version = "0.1.0"
@@ -16,6 +16,7 @@ tessery-mq = { path = "crates/tessery-mq" }
 tessery-git = { path = "crates/tessery-git" }
 tessery-engine = { path = "crates/tessery-engine" }
 tessery-cloud = { path = "crates/tessery-cloud" }
+tessery-notify = { path = "crates/tessery-notify" }
 
 aes-gcm = "0.10"
 anyhow = "1.0.104"

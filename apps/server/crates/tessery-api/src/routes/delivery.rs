@@ -245,6 +245,13 @@ async fn needs_runner(state: &AppState, project: Uuid, commit: &str, env: &str) 
         .unwrap_or(false)
 }
 
+async fn notify(state: &AppState, project: Uuid, env: &str, release: Uuid, event: &str, title: String, detail: String) {
+    let job = Job::Notify { project_id: project, env: env.to_owned(), event: event.to_owned(), title, detail, release_id: Some(release) };
+    if let Err(e) = state.mq.publish(job).await {
+        tracing::warn!(error = %e, event, "could not queue a notification");
+    }
+}
+
 async fn enqueue_deploy(state: &AppState, release: Uuid) -> ApiResult<()> {
     state.mq.publish(Job::Deploy { release_id: release }).await.map(drop).map_err(|e| ApiError::Internal(anyhow::anyhow!(e)))
 }
@@ -653,8 +660,15 @@ pub async fn create_release(
     let row = db::get_release(&mut *tx, id).await?;
     tx.commit().await.map_err(tx_err)?;
     match status {
-        ReleaseStatus::Released => after_change(&state, project).await,
+        ReleaseStatus::Released => {
+            after_change(&state, project).await;
+            notify(&state, project, &stage.key, id, "release.succeeded", format!("Checkpoint {} is live on {}", checkpoint.seq, stage.name), String::new()).await;
+        }
         ReleaseStatus::Queued => enqueue_deploy(&state, id).await?,
+        ReleaseStatus::Pending => {
+            let detail = format!("{} asked{}", p.user.name, if req.note.trim().is_empty() { ".".to_owned() } else { format!(": {}", req.note.trim()) });
+            notify(&state, project, &stage.key, id, "approval.requested", format!("Checkpoint {} waits for approval to go to {}", checkpoint.seq, stage.name), detail).await;
+        }
         _ => {}
     }
     Ok((StatusCode::CREATED, Json(row.into())))
@@ -718,7 +732,11 @@ async fn decide(state: AppState, p: Principal, release: Uuid, verdict: Verdict, 
     let row = db::get_release(&mut *tx, release).await?;
     tx.commit().await.map_err(tx_err)?;
     match status {
-        ReleaseStatus::Released => after_change(&state, r.project_id).await,
+        ReleaseStatus::Released => {
+            after_change(&state, r.project_id).await;
+            let env_name = tessery_db::projects::get(&state.db, r.project_id).await.ok().and_then(|p| stages(&p.doc).into_iter().find(|s| s.key == r.env_key).map(|s| s.name)).unwrap_or_else(|| r.env_key.clone());
+            notify(&state, r.project_id, &r.env_key, release, "release.succeeded", format!("Checkpoint {} is live on {env_name}", r.checkpoint_seq), String::new()).await;
+        }
         ReleaseStatus::Queued => enqueue_deploy(&state, release).await?,
         _ => {}
     }

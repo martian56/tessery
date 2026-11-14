@@ -1,4 +1,5 @@
-import { Plus } from 'lucide-react'
+import { useState } from 'react'
+import { Bell, Plus } from 'lucide-react'
 import clsx from 'clsx'
 import { useAppDispatch, useDoc, useEdit, useUi } from '@/store'
 import { ui } from '@/store/uiSlice'
@@ -8,6 +9,7 @@ import { projectCost } from '@tessery/core/catalog/placement'
 import { Button, Dot, PanelHeader, useDialogs } from '@/ui'
 import { fmtUsd, timeAgo } from '@/lib/format'
 import { useDockerHostLabel } from './useDockerHostLabel'
+import { NotificationsDialog } from './NotificationsDialog'
 import s from './Deploy.module.css'
 
 export function DeploySidebar() {
@@ -17,6 +19,7 @@ export function DeploySidebar() {
   const doc = useDoc()
   const envId = useUi((u) => u.envId)
   const dialogs = useDialogs()
+  const [notify, setNotify] = useState(false)
   const { data: pipeline } = usePipelineQuery(doc.id, { pollingInterval: 10_000 })
   const add = async () => {
     const v = await dialogs.prompt({ title: 'New environment', body: 'It deploys to Docker until you pick another target in the inspector.', fields: [{ name: 'name', label: 'Name', value: 'Preview' }], ok: 'Create' })
@@ -49,6 +52,10 @@ export function DeploySidebar() {
           )
         })}
       </div>
+      <div style={{ padding: 'var(--sp-3)', borderTop: '1px solid var(--line-2)' }}>
+        <Button size="sm" variant="ghost" icon={<Bell />} onClick={() => setNotify(true)}>Notifications</Button>
+      </div>
+      <NotificationsDialog doc={doc} open={notify} onClose={() => setNotify(false)} />
     </div>
   )
 }

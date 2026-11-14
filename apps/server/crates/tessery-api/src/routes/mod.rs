@@ -6,6 +6,7 @@ pub mod backups;
 pub mod delivery;
 pub mod dto;
 pub mod email;
+pub mod notifications;
 pub mod git;
 pub mod integrations;
 pub mod mcp;
@@ -21,7 +22,7 @@ pub mod tokens;
 
 use crate::state::AppState;
 use axum::Router;
-use axum::routing::{delete, get, patch, post};
+use axum::routing::{delete, get, patch, post, put};
 
 pub fn api() -> Router<AppState> {
     Router::new()
@@ -54,6 +55,10 @@ pub fn api() -> Router<AppState> {
         .route("/orgs/{org}/servers", get(servers::list).post(servers::create))
         .route("/integrations/providers", get(integrations::providers))
         .route("/admin/email", get(email::get_settings).put(email::put_settings))
+        .route("/notifications/events", get(notifications::events))
+        .route("/projects/{project}/notifications", get(notifications::list).post(notifications::create))
+        .route("/projects/{project}/notifications/{channel}", put(notifications::update).delete(notifications::delete))
+        .route("/projects/{project}/notifications/{channel}/test", post(notifications::test))
         .route("/admin/email/test", post(email::test))
         .route("/auth/password/forgot", post(email::forgot))
         .route("/auth/password/token", get(email::token_info))
