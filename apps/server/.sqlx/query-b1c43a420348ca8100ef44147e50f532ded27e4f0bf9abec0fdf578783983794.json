@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT CASE WHEN jsonb_typeof(e -> 'traceRetentionDays') = 'number' THEN (e ->> 'traceRetentionDays')::numeric::int END AS days\n           FROM projects p, jsonb_array_elements(p.doc -> 'environments') e\n           WHERE p.id = $1 AND e ->> 'id' = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "days",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "b1c43a420348ca8100ef44147e50f532ded27e4f0bf9abec0fdf578783983794"
+}

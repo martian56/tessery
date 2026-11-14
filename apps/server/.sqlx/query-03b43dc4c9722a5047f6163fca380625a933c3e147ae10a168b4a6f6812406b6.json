@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM spans WHERE project_id = $1 AND env_key = $2 AND start_at < now() - make_interval(days => $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "03b43dc4c9722a5047f6163fca380625a933c3e147ae10a168b4a6f6812406b6"
+}

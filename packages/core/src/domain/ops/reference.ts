@@ -125,7 +125,7 @@ Web app pages (for web-app nodes)
   removeBlock { pageId, blockId }
 
 Environments
-  updateEnv { envId, patch: { name?, approval?, scale?, strategy?, target?, backups?: { integration, bucket?, every: "hourly" | "daily" | "weekly", keep } } }
+  updateEnv { envId, patch: { name?, approval?, scale?, strategy?, target?, traceRetentionDays?, backups?: { integration, bucket?, every: "hourly" | "daily" | "weekly", keep } } }
       target: { kind: "docker", server?, host?, domain?, hosts?: { [node]: hostname } } | { kind: "kubernetes", namespace?, registry?, domain?, ingressClass?, publicPort? } | { kind: "git" }
   addEnv { name, provider, region }
   removeEnv { envId }

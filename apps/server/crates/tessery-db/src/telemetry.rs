@@ -61,10 +61,32 @@ pub async fn insert(ex: impl PgExecutor<'_> + Copy, project: Uuid, env: &str, sp
     .execute(ex)
     .await?
     .rows_affected();
-    sqlx::query!("DELETE FROM spans WHERE project_id = $1 AND env_key = $2 AND start_at < now() - interval '3 days'", project, env)
-        .execute(ex)
-        .await?;
     Ok(n)
+}
+
+/// How long an environment keeps its spans: its traceRetentionDays setting, from 1 to 90 days, or 3 when unset.
+pub async fn retention_days(ex: impl PgExecutor<'_>, project: Uuid, env: &str) -> DbResult<i32> {
+    let days = sqlx::query_scalar!(
+        r#"SELECT CASE WHEN jsonb_typeof(e -> 'traceRetentionDays') = 'number' THEN (e ->> 'traceRetentionDays')::numeric::int END AS days
+           FROM projects p, jsonb_array_elements(p.doc -> 'environments') e
+           WHERE p.id = $1 AND e ->> 'id' = $2"#,
+        project,
+        env
+    )
+    .fetch_optional(ex)
+    .await?
+    .flatten();
+    Ok(days.unwrap_or(DEFAULT_RETENTION_DAYS).clamp(1, 90))
+}
+
+pub const DEFAULT_RETENTION_DAYS: i32 = 3;
+
+/// Deletes an environment's spans that started more than `days` days ago.
+pub async fn prune(ex: impl PgExecutor<'_>, project: Uuid, env: &str, days: i32) -> DbResult<u64> {
+    Ok(sqlx::query!("DELETE FROM spans WHERE project_id = $1 AND env_key = $2 AND start_at < now() - make_interval(days => $3)", project, env, days)
+        .execute(ex)
+        .await?
+        .rows_affected())
 }
 
 pub async fn traces(ex: impl PgExecutor<'_>, project: Uuid, env: &str, service: Option<&str>, errors_only: bool, limit: i64) -> DbResult<Vec<TraceSummary>> {
