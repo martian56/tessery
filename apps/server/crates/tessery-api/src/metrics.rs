@@ -95,7 +95,7 @@ pub async fn evaluate(state: &AppState, project: Uuid, env: &str, now: OffsetDat
 }
 
 async fn notify(state: &AppState, project: Uuid, env: &str, event: &str, title: String, detail: String) {
-    let job = Job::Notify { project_id: project, env: env.to_owned(), event: event.to_owned(), title, detail };
+    let job = Job::Notify { project_id: project, env: env.to_owned(), event: event.to_owned(), title, detail, release_id: None };
     if let Err(e) = state.mq.publish(job).await {
         tracing::warn!(error = %e, "could not queue an alert notification");
     }
