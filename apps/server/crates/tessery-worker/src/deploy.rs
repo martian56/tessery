@@ -122,7 +122,11 @@ pub async fn deploy(ctx: &Ctx, release_id: Uuid) -> Result<()> {
         Err(_) => release.env_key.clone(),
     };
     let who = release.requester_name.clone().map(|n| format!("Requested by {n}.")).unwrap_or_default();
-    crate::notify::send_quietly(ctx, release.project_id, &release.env_key, "release.started", &format!("Releasing checkpoint {} to {env_name}", release.checkpoint_seq), &who).await;
+    let started_title = format!("Releasing checkpoint {} to {env_name}", release.checkpoint_seq);
+    let started = crate::notify::send_quietly(ctx, release.project_id, &release.env_key, Some(release.id), "release.started", &started_title, &who);
+    if tokio::time::timeout(std::time::Duration::from_secs(10), started).await.is_err() {
+        tracing::warn!(%release_id, "release started notifications took longer than 10 seconds; deploying anyway");
+    }
     let outcome = match tokio::time::timeout(DEPLOY_TIMEOUT, run(ctx, &release, &log)).await {
         Ok(r) => r,
         Err(_) => {
@@ -157,9 +161,9 @@ pub async fn deploy(ctx: &Ctx, release_id: Uuid) -> Result<()> {
     match &error {
         None => {
             let live = endpoints.as_array().into_iter().flatten().filter_map(|e| e["url"].as_str()).collect::<Vec<_>>().join("\n");
-            crate::notify::send_quietly(ctx, release.project_id, &release.env_key, "release.succeeded", &format!("Checkpoint {} is live on {env_name}", release.checkpoint_seq), &live).await;
+            crate::notify::send_quietly(ctx, release.project_id, &release.env_key, Some(release.id), "release.succeeded", &format!("Checkpoint {} is live on {env_name}", release.checkpoint_seq), &live).await;
         }
-        Some(e) => crate::notify::send_quietly(ctx, release.project_id, &release.env_key, "release.failed", &format!("Release of checkpoint {} to {env_name} failed", release.checkpoint_seq), e).await,
+        Some(e) => crate::notify::send_quietly(ctx, release.project_id, &release.env_key, Some(release.id), "release.failed", &format!("Release of checkpoint {} to {env_name} failed", release.checkpoint_seq), e).await,
     }
     Ok(())
 }

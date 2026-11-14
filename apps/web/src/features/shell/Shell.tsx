@@ -60,6 +60,9 @@ export function Shell() {
   const ws = WORKSPACES.find((w) => w.id === workspace)!
   useGlobalShortcuts()
   useLiveSimulation()
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('release')) dispatch(ui.setWorkspace('deploy'))
+  }, [dispatch])
   const vp = useViewport()
 
   const avail = vp.w - (panels.left ? 4 : 0) - (panels.right ? 4 : 0) - MIN_CENTER

@@ -3,6 +3,7 @@ use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 use utoipa::ToSchema;
 
@@ -82,20 +83,62 @@ impl Event {
 pub struct Delivery<'a> {
     pub kind: &'a str,
     pub target: &'a str,
-    pub smtp: Option<(&'a SmtpSettings, Option<&'a str>)>,
+    pub smtp: Result<(&'a SmtpSettings, Option<&'a str>), &'a str>,
+    /// Allow webhooks on loopback and private networks. Off by default so project editors cannot reach internal services.
+    pub allow_private: bool,
 }
 
-fn client() -> reqwest::Client {
-    reqwest::Client::builder().timeout(Duration::from_secs(15)).user_agent("tessery").build().expect("an HTTP client")
+pub fn public(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v) => {
+            let o = v.octets();
+            !(v.is_loopback() || v.is_private() || v.is_link_local() || v.is_unspecified() || v.is_broadcast() || v.is_documentation() || o[0] == 0 || (o[0] == 100 && (o[1] & 0xc0) == 64))
+        }
+        IpAddr::V6(v) => {
+            let first = v.segments()[0];
+            !(v.is_loopback() || v.is_unspecified() || (first & 0xfe00) == 0xfc00 || (first & 0xffc0) == 0xfe80 || v.to_ipv4_mapped().is_some_and(|m| !public(IpAddr::V4(m))))
+        }
+    }
 }
 
-async fn post(url: &str, body: Value) -> Result<(), String> {
-    let r = client().post(url).json(&body).send().await.map_err(|e| format!("could not reach {}: {e}", host_of(url)))?;
+fn host_of(url: &str) -> String {
+    reqwest::Url::parse(url).ok().and_then(|u| u.host_str().map(|h| match u.port() {
+        Some(p) => format!("{h}:{p}"),
+        None => h.to_owned(),
+    })).unwrap_or_else(|| "the webhook".into())
+}
+
+async fn client_for(url: &str, allow_private: bool) -> Result<reqwest::Client, String> {
+    let parsed = reqwest::Url::parse(url).map_err(|_| "the URL is not valid".to_owned())?;
+    let host = parsed.host_str().ok_or("the URL has no host")?.trim_matches(['[', ']']).to_owned();
+    let port = parsed.port_or_known_default().unwrap_or(443);
+    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(15)).user_agent("tessery").redirect(reqwest::redirect::Policy::none());
+    if !allow_private {
+        let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host.as_str(), port)).await.map_err(|_| format!("{} does not resolve", host_of(url)))?.collect();
+        if addrs.is_empty() || addrs.iter().any(|a| !public(a.ip())) {
+            return Err(format!("{} is on a private network; set TESSERY_NOTIFY_ALLOW_PRIVATE=1 on the server and worker to allow that", host_of(url)));
+        }
+        builder = builder.resolve_to_addrs(&host, &addrs);
+    }
+    builder.build().map_err(|e| e.without_url().to_string())
+}
+
+async fn post(url: &str, body: Value, allow_private: bool) -> Result<(), String> {
+    let r = client_for(url, allow_private).await?.post(url).json(&body).send().await.map_err(|e| format!("could not reach {}: {}", host_of(url), e.without_url()))?;
     if r.status().is_success() { Ok(()) } else { Err(format!("{} answered {}", host_of(url), r.status().as_u16())) }
 }
 
-fn host_of(url: &str) -> &str {
-    url.split("://").nth(1).and_then(|r| r.split('/').next()).unwrap_or(url)
+fn recipients(target: &str) -> Vec<&str> {
+    target.split(',').map(str::trim).filter(|t| !t.is_empty()).collect()
+}
+
+/// A short form of the target that is safe to show: the host of a URL, the Telegram chat, or the email addresses.
+pub fn preview(kind: &str, target: &str) -> String {
+    match kind {
+        "email" => recipients(target).join(", "),
+        "telegram" => format!("chat {}", target.trim().rsplit_once('@').map(|(_, c)| c).unwrap_or("?")),
+        _ => format!("{}/…", host_of(target.trim())),
+    }
 }
 
 pub fn payload(kind: &str, target: &str, e: &Event) -> Result<(String, Value), String> {
@@ -113,20 +156,20 @@ pub fn payload(kind: &str, target: &str, e: &Event) -> Result<(String, Value), S
 
 pub async fn deliver(d: &Delivery<'_>, e: &Event) -> Result<(), String> {
     if d.kind == "email" {
-        let (smtp, password) = d.smtp.ok_or("email is not set up on this instance")?;
-        for to in d.target.split(',').map(str::trim).filter(|t| !t.is_empty()) {
+        let (smtp, password) = d.smtp.map_err(str::to_owned)?;
+        for to in recipients(d.target) {
             send_email(smtp, password, to, &format!("[{}] {}", e.project, e.title), &format!("{}\n", e.text())).await?;
         }
         return Ok(());
     }
     let (url, body) = payload(d.kind, d.target, e)?;
-    post(&url, body).await
+    post(&url, body, d.allow_private || d.kind == "telegram").await
 }
 
 pub fn check_target(kind: &str, target: &str) -> Result<(), String> {
     let t = target.trim();
     match kind {
-        "email" if t.split(',').map(str::trim).filter(|x| !x.is_empty()).all(|x| x.parse::<lettre::message::Mailbox>().is_ok()) && !t.is_empty() => Ok(()),
+        "email" if !recipients(t).is_empty() && recipients(t).iter().all(|x| x.parse::<lettre::message::Mailbox>().is_ok()) => Ok(()),
         "email" => Err("use one or more email addresses separated by commas".into()),
         "slack" | "discord" | "webhook" if t.starts_with("https://") || t.starts_with("http://") => Ok(()),
         "slack" | "discord" | "webhook" => Err("use the full webhook URL".into()),
@@ -162,5 +205,24 @@ mod tests {
         assert!(check_target("email", "not an address").is_err());
         assert!(check_target("slack", "hooks.slack.com/x").is_err());
         assert!(check_target("telegram", "123:ABC@-100555").is_ok());
+        assert!(check_target("email", " , ").is_err(), "at least one recipient");
+    }
+
+    #[test]
+    fn previews_hide_credentials_and_paths() {
+        assert_eq!(preview("webhook", "https://user:secret@hooks.example:8443/path?token=abc"), "hooks.example:8443/…");
+        assert_eq!(preview("discord", "https://discord.com/api/webhooks/1/secret"), "discord.com/…");
+        assert_eq!(preview("telegram", "123:SECRET@-100555"), "chat -100555");
+    }
+
+    #[tokio::test]
+    async fn refuses_private_destinations_unless_allowed() {
+        for ip in ["127.0.0.1", "10.0.0.8", "192.168.1.1", "169.254.169.254", "100.64.0.1", "::1", "fd00::1"] {
+            assert!(!public(ip.parse().unwrap()), "{ip}");
+        }
+        assert!(public("1.1.1.1".parse().unwrap()));
+        let err = client_for("http://127.0.0.1:9/hook", false).await.unwrap_err();
+        assert!(err.contains("private network"), "{err}");
+        assert!(client_for("http://127.0.0.1:9/hook", true).await.is_ok());
     }
 }

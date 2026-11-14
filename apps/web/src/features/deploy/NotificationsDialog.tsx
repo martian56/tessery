@@ -22,18 +22,23 @@ export function NotificationsDialog({ doc, open, onClose }: { doc: ProjectDoc; o
   const org = useAppSelector((st) => st.project.orgId) ?? undefined
   const perms = usePermissions({ org, project: doc.id })
   const canEdit = perms.can('project:edit')
-  const { data: events } = useNotificationEventsQuery(undefined, { skip: !open })
-  const { data: channels } = useChannelsQuery(doc.id, { skip: !open })
+  const eventsQ = useNotificationEventsQuery(undefined, { skip: !open })
+  const channelsQ = useChannelsQuery(doc.id, { skip: !open })
+  const events = eventsQ.data
+  const channels = channelsQ.data
   const [adding, setAdding] = useState(false)
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()} width={560} title="Notifications"
       description="Tell people when releases start, go live, fail or wait for approval, and when a backup fails."
       footer={<Button onClick={onClose}>Close</Button>}>
       <div className={s.secretList}>
+        {channelsQ.isLoading && <span className={s.hint}>Loading channels…</span>}
+        {channelsQ.isError && <span className={s.hint} style={{ color: 'var(--err)' }}>Channels could not be loaded: {errorMessage(channelsQ.error)} <Button size="xs" variant="ghost" onClick={() => channelsQ.refetch()}>Retry</Button></span>}
         {(channels ?? []).map((c) => <ChannelRow key={c.id} pid={doc.id} channel={c} canEdit={canEdit} labels={events ?? []} />)}
         {channels && !channels.length && !adding && <span className={s.hint}>No channels yet.</span>}
       </div>
-      {canEdit && (adding
+      {eventsQ.isError && <span className={s.hint} style={{ color: 'var(--err)' }}>The list of events could not be loaded: {errorMessage(eventsQ.error)} <Button size="xs" variant="ghost" onClick={() => eventsQ.refetch()}>Retry</Button></span>}
+      {canEdit && events && (adding
         ? <NewChannel doc={doc} events={events ?? []} onDone={() => setAdding(false)} />
         : <div><Button size="sm" icon={<Bell />} onClick={() => setAdding(true)}>Add channel</Button></div>)}
     </Dialog>
@@ -72,7 +77,7 @@ function ChannelRow({ pid, channel: c, canEdit, labels }: { pid: string; channel
       {!c.enabled && <Badge tone="warn">paused</Badge>}
       {canEdit && (
         <>
-          <Switch checked={c.enabled} onChange={toggle} />
+          <Switch checked={c.enabled} onChange={toggle} ariaLabel={`Send notifications to ${c.name}`} />
           <Button size="xs" variant="ghost" icon={<Send />} disabled={testing} onClick={sendTest} aria-label={`Send a test to ${c.name}`} />
           <Button size="xs" variant="ghost" icon={<Trash2 />} onClick={del} aria-label={`Remove ${c.name}`} />
         </>

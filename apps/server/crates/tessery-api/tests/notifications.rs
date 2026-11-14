@@ -41,7 +41,7 @@ async fn http_sink(status: u16) -> (String, Arc<Mutex<Vec<String>>>) {
 #[tokio::test]
 async fn channels_keep_targets_secret_and_deliver_tests() {
     let (url, seen) = http_sink(200).await;
-    let app = common::spawn().await;
+    let app = common::spawn_with(|c| c.notify_allow_private = true).await;
     let (admin, org) = app.setup().await;
     let project: Value = admin.post(&format!("/api/orgs/{org}/projects"), json!({ "doc": doc("shop") })).await.json().await.unwrap();
     let project = project["id"].as_str().unwrap().to_owned();

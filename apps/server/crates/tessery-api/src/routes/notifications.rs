@@ -58,15 +58,6 @@ pub async fn list(State(state): State<AppState>, p: Principal, Path(project): Pa
     Ok(Json(db::list(&state.db, project).await?.into_iter().map(Into::into).collect()))
 }
 
-fn hint(kind: &str, target: &str) -> String {
-    let t = target.trim();
-    match kind {
-        "email" => t.to_owned(),
-        "telegram" => format!("chat {}", t.rsplit_once('@').map(|(_, c)| c).unwrap_or("?")),
-        _ => t.split("://").nth(1).and_then(|r| r.split('/').next()).map(|h| format!("{h}/…")).unwrap_or_default(),
-    }
-}
-
 fn check_events(events: &[String]) -> ApiResult<()> {
     if events.is_empty() {
         return Err(ApiError::invalid("events", "choose at least one event"));
@@ -105,7 +96,7 @@ pub async fn create(State(state): State<AppState>, p: Principal, Path(project): 
     let cipher = key.encrypt(req.target.trim().as_bytes());
     let c = db::create(
         &state.db,
-        db::NewChannel { project_id: project, name, kind: &req.kind, target: &cipher, target_hint: &hint(&req.kind, &req.target), events: &req.events, envs: &req.envs },
+        db::NewChannel { project_id: project, name, kind: &req.kind, target: &cipher, target_hint: &tessery_notify::preview(&req.kind, &req.target), events: &req.events, envs: &req.envs },
     )
     .await?;
     audit::record(&state.db, &p, Entry::new(Some(target.org().0), "notification.create", "project", project).decision(d).details(json!({ "channel": c.id, "kind": c.kind, "name": c.name }))).await?;
@@ -155,7 +146,13 @@ pub async fn test(State(state): State<AppState>, p: Principal, Path((project, ch
     let saved = tessery_db::projects::get(&state.db, project).await?;
     let e = Event { kind: "test".into(), project: saved.name, env: String::new(), title: format!("Test message for {}", c.name), detail: format!("{} sent this from Tessery to check the channel.", p.user.name), link: None };
     let smtp = if c.kind == "email" { crate::mail::settings(&state).await? } else { None };
-    let outcome = tessery_notify::deliver(&Delivery { kind: &c.kind, target: &to, smtp: smtp.as_ref().map(|(s, pw)| (s, pw.as_deref())) }, &e).await;
+    let delivery = Delivery {
+        kind: &c.kind,
+        target: &to,
+        smtp: smtp.as_ref().map(|(s, pw)| (s, pw.as_deref())).ok_or("email is not set up on this instance"),
+        allow_private: state.config.notify_allow_private,
+    };
+    let outcome = tessery_notify::deliver(&delivery, &e).await;
     db::record(&state.db, c.id, outcome.as_ref().err().map(String::as_str)).await?;
     outcome.map_err(ApiError::Conflict)?;
     Ok(Json(OK))

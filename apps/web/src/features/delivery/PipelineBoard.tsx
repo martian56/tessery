@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowRight, Check, ChevronDown, CircleX, Clock, ExternalLink, GitCommitHorizontal, KeyRound, LoaderCircle, Plus, RotateCw, ScrollText, Square, X } from 'lucide-react'
 import clsx from 'clsx'
 import { useCheckpointsQuery, useCreateReleaseMutation, useDecideReleaseMutation, useLazyReleasePreviewQuery, usePipelineQuery, useReleasesQuery, useStopEnvMutation } from '@/api/endpoints/delivery'
@@ -25,6 +25,18 @@ export function PipelineBoard() {
   const { data: checkpoints } = useCheckpointsQuery(pid)
   const { data: releases } = useReleasesQuery(pid, { pollingInterval: fast ? 2000 : 10_000 })
   const [log, setLog] = useState<Release | null>(null)
+  const dispatch = useAppDispatch()
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const wanted = url.searchParams.get('release')
+    if (!wanted || !releases) return
+    const r = releases.find((x) => x.id === wanted)
+    url.searchParams.delete('release')
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+    if (!r) return toast('That release is no longer in the history', 'err')
+    dispatch(ui.setEnv(r.env))
+    setLog(r)
+  }, [releases, dispatch])
   const busy = !!data?.stages.some((st) => st.active)
   if (busy !== fast) setFast(busy)
 

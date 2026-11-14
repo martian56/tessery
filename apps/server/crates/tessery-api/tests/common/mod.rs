@@ -70,6 +70,7 @@ pub async fn spawn_with(customize: impl FnOnce(&mut Config)) -> TestApp {
         session_ttl: Duration::from_secs(3600),
         log_json: false,
         trust_proxy: true,
+        notify_allow_private: false,
         data_dir: std::env::temp_dir().join("tessery-tests").join(&db_name),
         secret_key: Some(tessery_core::SecretKey::parse(&"7".repeat(64)).unwrap()),
         oidc: None,

@@ -29,7 +29,15 @@ pub enum Job {
     ProvisionServer { server_id: Uuid },
     Backup { backup_id: Uuid },
     RestoreBackup { backup_id: Uuid },
-    Notify { project_id: Uuid, env: String, event: String, title: String, detail: String },
+    Notify {
+        project_id: Uuid,
+        env: String,
+        event: String,
+        title: String,
+        detail: String,
+        #[serde(default)]
+        release_id: Option<Uuid>,
+    },
     Teardown {
         project_id: Uuid,
         env: String,
