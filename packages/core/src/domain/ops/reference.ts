@@ -37,12 +37,13 @@ Web app pages (for web-app nodes)
       element: { type, name?, props?, style?, tablet?, mobile?, hover?, children? } where children are elements (frames only).
       type and its props (every element also takes label, an accessible name, tooltip, and when, which shows it only if
       "?error" is in the query, a record "field" is truthy or "!field" falsy, or "field=value" / "field!=value" holds):
-        frame   { tag?, href?, source?, limit?, empty?, popover? }  lays out children with style.display flex or grid
+        frame   { tag?, href?, source?, limit?, empty?, emptyFiltered?, action?, popover? }  lays out children with style.display flex or grid
                 tag: div|section|header|footer|nav|main|article|aside|ul|ol|li|figure|label|search, form (a GET form; href is
                 its action, e.g. a search bar posting to /search), details and summary (a disclosure: an accordion, a file
                 tree folder; put a summary frame first), and href makes the frame a link (a card, a list row).
                 source "<serviceNodeId>:<operationName>" repeats the frame's children once per record the operation returns,
-                up to limit (default 50), showing empty when there are none. Inside, any text, href, image src, icon name or
+                up to limit (default 50), showing empty when there are none, or emptyFiltered instead when the page has a
+                search or filter in its query ("No packets match. Clear the search" versus "Nothing donated yet"). Inside, any text, href, image src, icon name or
                 label can use {field}, {author.name}, {price|money}, {count|number}, {created_at|date}, {name|initials}.
                 A server-rendered page passes its URL query to the read operations it loads. CRUD list operations read
                 q (search of text columns), any column name as an exact filter (?crop=Bean), sort (name or -created_at)

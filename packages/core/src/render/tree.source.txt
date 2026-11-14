@@ -159,6 +159,10 @@ export function actionPath(path: string, row: Row | undefined, params: Record<st
   })
 }
 
+/** Whether the page shows a search or filter, so an empty list means nothing matched rather than nothing exists. */
+const NOT_FILTERS = new Set(['page', 'sort', 'limit', 'offset', 'error'])
+export const filtered = (query: TreeProps['query']) => Object.entries(query ?? {}).some(([k, v]) => !NOT_FILTERS.has(k) && one(v) !== '')
+
 /** Whether a `?a=b` link describes the query being shown; a bare `?` matches a page with no filters. */
 export function sameQuery(href: string, query: TreeProps['query']): boolean {
   const want = new URLSearchParams(href.slice(1))
@@ -260,7 +264,7 @@ function Node({ e, t, row, copy, scope }: { e: El; t: Ctx; row?: Row; copy?: boo
             const inner: Scope = { ids: new Set([...(scope?.ids ?? []), ...ids]), key: `${scope ? `${scope.key}-` : ''}${i}` }
             return e.children?.map((x) => <Node key={`${x.id}:${r === SAMPLE ? i : String(r.id ?? i)}`} e={x} t={t} row={r} copy={copy || i > 0} scope={inner} />)
           })
-          : <p className="tsp-empty">{String(p.empty ?? 'Nothing here yet.')}</p>
+          : <p className="tsp-empty">{String((p.emptyFiltered && filtered(t.query) ? p.emptyFiltered : p.empty) ?? 'Nothing here yet.')}</p>
       }
       if (p.popover && !t.editing) { base.id = popId(e.id, scope); base.popover = 'auto' }
       if (p.popover && t.editing) base['data-popover'] = ''
