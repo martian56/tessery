@@ -18,6 +18,12 @@ pub fn telemetry_token(key: &crate::SecretKey, project: uuid::Uuid, env: &str) -
     key.derive(&format!("otlp:{project}:{env}"))
 }
 
+/// Tokens the server accepts: the current one, and during a key rotation the one apps deployed before it still send.
+pub fn telemetry_tokens(key: &crate::SecretKey, project: uuid::Uuid, env: &str) -> Vec<String> {
+    let purpose = format!("otlp:{project}:{env}");
+    std::iter::once(key.derive(&purpose)).chain(key.derive_previous(&purpose)).collect()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequiredSecret {
     pub name: String,
@@ -100,6 +106,18 @@ pub fn explain_ssh(stderr: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn apps_deployed_before_a_key_rotation_keep_sending_telemetry() {
+        let old = crate::SecretKey::parse(&"1".repeat(64)).unwrap();
+        let new = crate::SecretKey::parse(&"2".repeat(64)).unwrap();
+        let project = uuid::Uuid::nil();
+        let before = telemetry_token(&old, project, "prod");
+        let rotating = new.clone().with_previous(old);
+        assert!(telemetry_tokens(&rotating, project, "prod").contains(&before));
+        assert_eq!(telemetry_tokens(&new, project, "prod"), vec![telemetry_token(&new, project, "prod")]);
+    }
+
     use super::*;
     use serde_json::json;
 

@@ -10,10 +10,16 @@ pub enum SecretError {
     BadKey,
     #[error("stored secret could not be decrypted; was TESSERY_SECRET_KEY changed?")]
     Decrypt,
+    #[error("TESSERY_SECRET_KEY_PREVIOUS is set but TESSERY_SECRET_KEY is not")]
+    PreviousWithoutCurrent,
 }
 
+/// The key that encrypts stored secrets. During a rotation it also holds the previous key, which is only used to read.
 #[derive(Clone)]
-pub struct SecretKey(Key<Aes256Gcm>);
+pub struct SecretKey {
+    current: Key<Aes256Gcm>,
+    previous: Option<Key<Aes256Gcm>>,
+}
 
 impl std::fmt::Debug for SecretKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -30,35 +36,73 @@ impl SecretKey {
             base64::engine::general_purpose::STANDARD.decode(s).map_err(|_| SecretError::BadKey)?
         };
         let bytes: [u8; 32] = bytes.try_into().map_err(|_| SecretError::BadKey)?;
-        Ok(Self(Key::<Aes256Gcm>::from(bytes)))
+        Ok(Self { current: Key::<Aes256Gcm>::from(bytes), previous: None })
+    }
+
+    /// Reads `TESSERY_SECRET_KEY` and, while rotating, `TESSERY_SECRET_KEY_PREVIOUS`.
+    pub fn from_env() -> Result<Option<Self>, SecretError> {
+        let var = |name: &str| std::env::var(name).ok().filter(|s| !s.trim().is_empty());
+        match (var("TESSERY_SECRET_KEY"), var("TESSERY_SECRET_KEY_PREVIOUS")) {
+            (Some(k), Some(p)) => Ok(Some(Self::parse(&k)?.with_previous(Self::parse(&p)?))),
+            (Some(k), None) => Ok(Some(Self::parse(&k)?)),
+            (None, Some(_)) => Err(SecretError::PreviousWithoutCurrent),
+            (None, None) => Ok(None),
+        }
+    }
+
+    pub fn with_previous(mut self, previous: SecretKey) -> Self {
+        self.previous = Some(previous.current);
+        self
+    }
+
+    pub fn has_previous(&self) -> bool {
+        self.previous.is_some()
     }
 
     pub fn encrypt(&self, plain: &[u8]) -> Vec<u8> {
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
         let mut out = nonce.to_vec();
-        out.extend(Aes256Gcm::new(&self.0).encrypt(&nonce, plain).expect("AES-GCM encryption does not fail for in-memory buffers"));
+        out.extend(Aes256Gcm::new(&self.current).encrypt(&nonce, plain).expect("AES-GCM encryption does not fail for in-memory buffers"));
         out
     }
 
     pub fn decrypt(&self, stored: &[u8]) -> Result<Vec<u8>, SecretError> {
+        self.decrypt_tracked(stored).map(|(plain, _)| plain)
+    }
+
+    /// Decrypts and says whether the previous key was needed, so a rotation knows what it changed.
+    pub fn decrypt_tracked(&self, stored: &[u8]) -> Result<(Vec<u8>, bool), SecretError> {
         if stored.len() < NONCE_LEN {
             return Err(SecretError::Decrypt);
         }
         let (nonce, body) = stored.split_at(NONCE_LEN);
         let nonce: [u8; NONCE_LEN] = nonce.try_into().map_err(|_| SecretError::Decrypt)?;
-        Aes256Gcm::new(&self.0).decrypt(&Nonce::from(nonce), body).map_err(|_| SecretError::Decrypt)
+        let open = |k: &Key<Aes256Gcm>| Aes256Gcm::new(k).decrypt(&Nonce::from(nonce), body).ok();
+        if let Some(plain) = open(&self.current) {
+            return Ok((plain, false));
+        }
+        self.previous.as_ref().and_then(open).map(|plain| (plain, true)).ok_or(SecretError::Decrypt)
     }
 
     pub fn derive(&self, purpose: &str) -> String {
-        use sha2::{Digest, Sha256};
-        let key: &[u8] = &self.0;
-        let mut block = [0u8; 64];
-        block[..key.len()].copy_from_slice(key);
-        let pad = |b: u8| block.map(|k| k ^ b);
-        let inner = Sha256::new().chain_update(pad(0x36)).chain_update(purpose.as_bytes()).finalize();
-        let outer = Sha256::new().chain_update(pad(0x5c)).chain_update(inner).finalize();
-        hex::encode(outer)
+        derive_with(&self.current, purpose)
     }
+
+    /// The value `derive` gave under the previous key, accepted until clients are updated.
+    pub fn derive_previous(&self, purpose: &str) -> Option<String> {
+        self.previous.as_ref().map(|k| derive_with(k, purpose))
+    }
+}
+
+fn derive_with(key: &Key<Aes256Gcm>, purpose: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let key: &[u8] = key;
+    let mut block = [0u8; 64];
+    block[..key.len()].copy_from_slice(key);
+    let pad = |b: u8| block.map(|k| k ^ b);
+    let inner = Sha256::new().chain_update(pad(0x36)).chain_update(purpose.as_bytes()).finalize();
+    let outer = Sha256::new().chain_update(pad(0x5c)).chain_update(inner).finalize();
+    hex::encode(outer)
 }
 
 #[cfg(test)]
@@ -93,5 +137,19 @@ mod tests {
         assert!(SecretKey::parse(HEX).is_ok());
         assert!(SecretKey::parse("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=").is_ok());
         assert!(SecretKey::parse("short").is_err());
+    }
+
+    #[test]
+    fn reads_with_the_previous_key_while_rotating() {
+        let old = SecretKey::parse(HEX).unwrap();
+        let new = SecretKey::parse(&"ab".repeat(32)).unwrap();
+        let stored = old.encrypt(b"db password");
+        assert!(new.decrypt(&stored).is_err());
+        let rotating = new.clone().with_previous(old.clone());
+        assert_eq!(rotating.decrypt_tracked(&stored).unwrap(), (b"db password".to_vec(), true));
+        let again = rotating.encrypt(b"db password");
+        assert_eq!(new.decrypt_tracked(&again).unwrap(), (b"db password".to_vec(), false));
+        assert_eq!(rotating.derive_previous("otlp:p:dev").as_deref(), Some(old.derive("otlp:p:dev").as_str()));
+        assert_eq!(rotating.derive("otlp:p:dev"), new.derive("otlp:p:dev"));
     }
 }

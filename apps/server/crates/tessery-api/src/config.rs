@@ -58,10 +58,7 @@ impl Config {
                 processes: var("TESSERY_ENGINE_PROCESSES", "2").parse().context("TESSERY_ENGINE_PROCESSES must be a number")?,
                 timeout: Duration::from_secs(30),
             },
-            secret_key: match std::env::var("TESSERY_SECRET_KEY").ok().filter(|s| !s.is_empty()) {
-                Some(k) => Some(tessery_core::SecretKey::parse(&k)?),
-                None => None,
-            },
+            secret_key: tessery_core::SecretKey::from_env()?,
         })
     }
 }

@@ -7,6 +7,7 @@ pub mod metrics;
 pub mod openapi;
 pub mod otlp;
 pub mod rbac;
+pub mod rotate;
 pub mod routes;
 pub mod runtime;
 pub mod state;
