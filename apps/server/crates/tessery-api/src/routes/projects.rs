@@ -34,6 +34,8 @@ pub struct ProjectSummaryDto {
     pub running: Vec<RunningDto>,
     /// The technology of each node, in design order (at most 48), for drawing the project at a glance.
     pub tech_ids: Vec<String>,
+    /// The design's environment keys, in pipeline order.
+    pub env_keys: Vec<String>,
     /// The newest release of each environment, in no particular order.
     pub latest: Vec<LatestReleaseDto>,
 }
@@ -199,6 +201,7 @@ pub async fn list(
                 updated_at: r.updated_at,
                 running: running.remove(&r.id).unwrap_or_default(),
                 tech_ids: r.tech_ids,
+                env_keys: r.env_keys,
                 latest: latest.remove(&r.id).unwrap_or_default(),
             })
             .collect(),

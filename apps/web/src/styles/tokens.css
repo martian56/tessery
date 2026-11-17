@@ -1,53 +1,55 @@
-/* Tessery's interface tokens. Neutrals are tinted toward ink blue rather than grey, and colour always has a job:
-   orange is the brand and the primary action, each environment has its own hue wherever it appears, and node
-   categories match the canvas. */
+/* Tessery's interface tokens. The chrome is a quiet, low-chroma graphite so content carries the colour: node
+   categories match the canvas, each environment keeps one hue wherever it appears, and status uses green, amber and
+   red. Orange is the brand and the primary action only. */
 :root {
-  --bg-0: #0e1018;
-  --bg-1: #141826;
-  --bg-2: #1a1f30;
-  --bg-3: #232a3f;
-  --bg-4: #2d354e;
-  --bg-5: #39425f;
-  --line-1: #262d44;
-  --line-2: #323a55;
-  --line-3: #444e6e;
+  /* Behind everything: the sidebar sits here, and content floats above it. */
+  --bg-app: #08090c;
+  --bg-0: #0c0e12;
+  --bg-1: #111318;
+  --bg-2: #171a21;
+  --bg-3: #1e222b;
+  --bg-4: #272c37;
+  --bg-5: #323845;
+  --line-1: #23272f;
+  --line-2: #2e333d;
+  --line-3: #3c4250;
 
-  --tx-1: #e9ecf6;
-  --tx-2: #a2a9c4;
-  --tx-3: #6a7291;
+  --tx-1: #eceef2;
+  --tx-2: #9ba1ad;
+  --tx-3: #646a76;
   /* Text on the brand and danger colours. */
   --tx-inv: #1b0c02;
 
   --acc: #ff7a2e;
   --acc-hi: #ff944f;
-  --acc-lo: #ff7a2e24;
+  --acc-lo: #ff7a2e1f;
   --acc-ring: #ff7a2e80;
 
-  --ok: #3ddc97;
-  --warn: #ffc247;
-  --err: #ff5d6c;
+  --ok: #3ecf8e;
+  --warn: #f5b84a;
+  --err: #f2555a;
   --info: #5b9cff;
 
   /* Environments, by role in the pipeline. */
-  --env-dev: #3ccfe8;
-  --env-staging: #a48bff;
-  --env-prod: #3ddc97;
-  --env-other: #8d96b5;
+  --env-dev: #38c7e0;
+  --env-staging: #a08cff;
+  --env-prod: #3ecf8e;
+  --env-other: #8b92a0;
 
   --c-compute: #5b9cff;
-  --c-data: #3ddc97;
-  --c-cache: #ff5d6c;
-  --c-messaging: #ffc247;
-  --c-network: #b18cff;
-  --c-client: #3ccfe8;
-  --c-external: #8d96b5;
-  --c-ai: #ff6fb5;
-  --c-observability: #ff9a52;
-  --c-security: #d8e05a;
-  --c-storage: #34c3b0;
+  --c-data: #3ecf8e;
+  --c-cache: #f2555a;
+  --c-messaging: #f5b84a;
+  --c-network: #ad8bff;
+  --c-client: #38c7e0;
+  --c-external: #8b92a0;
+  --c-ai: #f472b6;
+  --c-observability: #fb923c;
+  --c-security: #cddc5a;
+  --c-storage: #2dd4bf;
 
   --font-ui: 'Inter Variable', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-display: 'Bricolage Grotesque Variable', 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-display: var(--font-ui);
   --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Cascadia Code', 'SF Mono', Consolas, monospace;
   --fs-10: 10px;
   --fs-11: 11px;
@@ -61,7 +63,7 @@
   --r-1: 4px;
   --r-2: 6px;
   --r-3: 8px;
-  --r-4: 12px;
+  --r-4: 10px;
   --h-xs: 20px;
   --h-sm: 24px;
   --h-md: 28px;
@@ -75,8 +77,9 @@
   --sp-7: 24px;
   --sp-8: 32px;
 
-  --shadow-pop: 0 12px 32px #04060dcc, 0 0 0 1px var(--line-2);
-  --shadow-node: 0 2px 12px #04060d99;
+  --shadow-pop: 0 12px 32px #000000b3, 0 0 0 1px var(--line-2);
+  --shadow-node: 0 2px 12px #00000080;
+  --shadow-panel: 0 1px 0 #ffffff08 inset, 0 0 0 1px var(--line-1), 0 8px 24px #00000059;
   --ease: cubic-bezier(.2, .7, .2, 1);
   --z-modal: 200;
   --z-pop: 250;

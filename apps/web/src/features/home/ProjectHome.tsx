@@ -1,63 +1,60 @@
-import { useState } from 'react'
-import { AlertTriangle, Clock3, MoreHorizontal, Plus, Search, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Check, Clock3, LayoutGrid, List, LoaderCircle, MoreHorizontal, Plus, Search, Trash2, X } from 'lucide-react'
+import clsx from 'clsx'
 import { useCreateProjectMutation, useDeleteProjectMutation, useListProjectsQuery } from '@/api/endpoints/projects'
 import { useListTeamsQuery } from '@/api/endpoints/orgs'
 import { errorMessage, type ProjectSummary } from '@/api/types'
-import { Button, Dialog, DropdownMenu, Empty, Field, Input, Select, toast, useDialogs } from '@/ui'
+import { Button, Dialog, DropdownMenu, Empty, Field, Input, Select, Skeleton, SkeletonText, Tooltip, toast, useDialogs } from '@/ui'
 import { PROVIDERS, PROVIDER_BY_ID } from '@tessery/core/catalog/providers'
 import { TEMPLATES } from '@tessery/core/templates'
 import { blankTemplate } from '@tessery/core/templates/blank'
 import { useCurrentOrg } from '@/app/currentOrg'
 import { usePermissions } from '@/app/usePermissions'
 import { navigate } from '@/app/router'
-import { AppHeader } from '@/features/chrome/AppHeader'
+import { AppShell } from '@/features/chrome/AppShell'
 import { timeAgo } from '@/lib/format'
-import { envColor, envName, envRank } from '@/lib/envColor'
+import { envName } from '@/lib/envColor'
 import { Mosaic } from './Mosaic'
+import { Pipeline } from './Pipeline'
+import { activity, headline, releaseWords, stages, type Latest } from './status'
 import s from './ProjectHome.module.css'
 
-type Latest = ProjectSummary['latest'][number]
-const IN_FLIGHT = ['queued', 'deploying']
-
-/** One pill per environment: what runs there, or what its newest release is doing when that is not live yet. */
-function envStates(p: ProjectSummary) {
-  const keys = [...new Set([...p.running.map((r) => r.env), ...p.latest.map((l) => l.env)])].sort((a, b) => envRank(a) - envRank(b) || a.localeCompare(b))
-  return keys.map((env) => {
-    const running = p.running.find((r) => r.env === env)
-    const latest = p.latest.find((l) => l.env === env)
-    const state = latest?.status === 'pending' ? 'waiting' : latest?.status === 'failed' ? 'failed' : latest && IN_FLIGHT.includes(latest.status) ? 'deploying' : running ? 'live' : 'stopped'
-    return { env, running, latest, state }
-  })
-}
-
-/** Releases across the organization that someone should look at: waiting for approval, or failed. */
-function attention(projects: ProjectSummary[]) {
-  return projects.flatMap((p) => p.latest
-    .filter((l) => l.status === 'pending' || l.status === 'failed')
-    .map((l) => ({ project: p, release: l })))
-    .sort((a, b) => b.release.at.localeCompare(a.release.at))
-}
-
-const describe = (l: Latest) => l.status === 'pending'
-  ? `Checkpoint ${l.checkpoint} is waiting for approval to go to ${envName(l.env)}`
-  : `Release of checkpoint ${l.checkpoint} to ${envName(l.env)} failed${l.error ? `: ${l.error}` : ''}`
+type View = 'grid' | 'list'
+const VIEW_KEY = 'tessery.projects.view'
+const readView = (): View => { try { return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid' } catch { return 'grid' } }
+const ago = (iso: string) => timeAgo(new Date(iso).getTime())
+const open = (p: ProjectSummary, release?: Latest) => navigate(`/projects/${p.id}${release ? `?release=${release.id}` : ''}`)
 
 export function ProjectHome() {
   const { org, isLoading: orgLoading } = useCurrentOrg()
   const perms = usePermissions({ org: org?.id })
-  const { data: projects, isLoading, error } = useListProjectsQuery(org?.id ?? '', { skip: !org })
+  const { data: projects, isLoading, error, refetch } = useListProjectsQuery(org?.id ?? '', { skip: !org, pollingInterval: 15000, skipPollingIfUnfocused: true })
   const { data: teams } = useListTeamsQuery(org?.id ?? '', { skip: !org || !perms.can('team:read') })
   const [create, { isLoading: creating }] = useCreateProjectMutation()
   const [remove] = useDeleteProjectMutation()
   const dialogs = useDialogs()
   const [q, setQ] = useState('')
+  const [view, setView] = useState<View>(readView)
   const [choosing, setChoosing] = useState(false)
   const [tpl, setTpl] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [teamId, setTeamId] = useState('')
   const [provider, setProvider] = useState('aws')
   const [region, setRegion] = useState(PROVIDER_BY_ID.aws.regions[0].id)
+  const search = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target
+      if (e.key !== '/' || (t instanceof Element && t.closest('input, textarea, [contenteditable="true"]'))) return
+      e.preventDefault()
+      search.current?.querySelector('input')?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const pickView = (v: View) => { setView(v); try { localStorage.setItem(VIEW_KEY, v) } catch { /* storage may be blocked */ } }
   const pick = (id: string) => { setChoosing(false); setTpl(id); setName(id === 'blank' ? 'my-system' : ''); setTeamId('') }
   const start = async () => {
     if (!tpl || !org) return
@@ -67,126 +64,120 @@ export function ProjectHome() {
     const r = await create({ org: org.id, doc, teamId: teamId || null })
     if ('data' in r && r.data) { setTpl(null); navigate(`/projects/${r.data.id}`) } else toast(errorMessage(r.error, 'Could not create the project'), 'err')
   }
-  const all = projects ?? []
-  const list = all.filter((p) => !q || `${p.name} ${p.description}`.toLowerCase().includes(q.toLowerCase()))
-  const canCreate = perms.can('project:create') || (teams?.length ?? 0) > 0
-  const needs = attention(all)
-  const live = all.filter((p) => p.running.length > 0).length
-
   const del = async (p: ProjectSummary) => {
     if (!(await dialogs.confirm({ title: `Delete ${p.name}?`, body: 'This removes the design and its version history.', ok: 'Delete', danger: true }))) return
     const r = await remove(p.id)
     toast('error' in r ? errorMessage(r.error) : `Deleted ${p.name}`, 'error' in r ? 'err' : 'ok')
   }
 
+  const all = projects ?? []
+  const list = all.filter((p) => !q || `${p.name} ${p.description}`.toLowerCase().includes(q.toLowerCase()))
+  const canCreate = perms.can('project:create') || (teams?.length ?? 0) > 0
+  const loading = !org ? orgLoading : isLoading
+  const team = (p: ProjectSummary) => teams?.find((t) => t.id === p.teamId)?.name
+  const menu = (p: ProjectSummary) => (
+    <DropdownMenu align="end" trigger={<Button variant="ghost" size="xs" icon={<MoreHorizontal />} aria-label={`Actions for ${p.name}`} />} items={[
+      { label: 'Open', onSelect: () => open(p) },
+      { kind: 'separator' },
+      { label: 'Delete…', icon: <Trash2 />, danger: true, onSelect: () => del(p) },
+    ]} />
+  )
+
+  if (!org && !orgLoading) {
+    return <AppShell><Empty title="You are not in any organization yet">Ask an administrator to add you, or create one from the organization menu in the sidebar.</Empty></AppShell>
+  }
+
   return (
-    <div className={s.shell}>
-      <AppHeader />
-      <div className={s.page}>
-        {!org && !orgLoading ? <Empty title="You are not in any organization yet">Ask an administrator to add you, or create one from the organization menu.</Empty> : (
-          <main className={s.main}>
-            <header className={s.head}>
-              <div>
-                <h1 className={s.title}>Projects</h1>
-                {org && projects && <p className={s.sub}>{all.length === 1 ? '1 project' : `${all.length} projects`} in {org.name}{live > 0 && `, ${live} running`}</p>}
-              </div>
-              <div className={s.headActions}>
-                {all.length > 3 && <div className={s.filter}><Input icon={<Search />} placeholder="Filter projects" value={q} onChange={setQ} aria-label="Filter projects" /></div>}
-                {canCreate && <Button variant="primary" size="md" icon={<Plus />} onClick={() => setChoosing(true)}>New project</Button>}
-              </div>
-            </header>
+    <AppShell busy={loading}>
+      <header className={s.bar}>
+        <h1 className={s.title}>Projects{projects && <span className={s.count}>{all.length}</span>}</h1>
+        <div className={s.tools}>
+          <div className={s.search} ref={search}>
+            <Input icon={<Search />} placeholder="Search projects" value={q} onChange={setQ} aria-label="Search projects" />
+            {!q && <kbd className={s.kbd} aria-hidden="true">/</kbd>}
+          </div>
+          <div className={s.views} role="group" aria-label="View">
+            <Tooltip content="Grid"><button className={clsx(s.viewBtn, view === 'grid' && s.viewOn)} aria-pressed={view === 'grid'} aria-label="Grid" onClick={() => pickView('grid')}><LayoutGrid /></button></Tooltip>
+            <Tooltip content="List"><button className={clsx(s.viewBtn, view === 'list' && s.viewOn)} aria-pressed={view === 'list'} aria-label="List" onClick={() => pickView('list')}><List /></button></Tooltip>
+          </div>
+          {canCreate && <Button variant="primary" size="sm" icon={<Plus />} onClick={() => setChoosing(true)}>New project</Button>}
+        </div>
+      </header>
 
-            {needs.length > 0 && (
-              <section className={s.attention} aria-labelledby="needs-attention">
-                <h2 id="needs-attention" className={s.h2}>Needs attention</h2>
-                <ul>
-                  {needs.map(({ project, release }) => (
-                    <li key={`${project.id}:${release.env}`} className={s.alert} data-kind={release.status}>
-                      {release.status === 'pending' ? <Clock3 aria-hidden="true" /> : <AlertTriangle aria-hidden="true" />}
-                      <div className={s.alertText}>
-                        <b>{project.name}</b>
-                        <span>{describe(release)}</span>
+      <div className={s.body}>
+        <div className={s.main}>
+          {loading ? (
+            view === 'grid'
+              ? <div className={s.grid}>{[0, 1, 2, 3].map((i) => <CardSkeleton key={i} />)}</div>
+              : <div className={s.rows}>{[0, 1, 2, 3].map((i) => <div key={i} className={s.row}><SkeletonText lines={2} /><Skeleton w={60} h={10} /><Skeleton w={70} h={10} /></div>)}</div>
+          ) : error ? (
+            <Empty title="Projects could not be loaded" action={<Button onClick={() => refetch()}>Try again</Button>}>{errorMessage(error)}</Empty>
+          ) : all.length === 0 ? (
+            <section className={s.first}>
+              <h2 className={s.firstTitle}>Design your first system</h2>
+              <p>Draw the services, databases and pages; Tessery generates the code and takes it from development to production. Pick a starting point.</p>
+              {canCreate && <Templates pick={pick} wide />}
+            </section>
+          ) : list.length === 0 ? (
+            <Empty title={`No project matches "${q}"`} action={<Button onClick={() => setQ('')}>Clear the search</Button>} />
+          ) : view === 'grid' ? (
+            <div className={s.grid}>
+              {list.map((p) => {
+                const st = stages(p)
+                const h = headline(st)
+                return (
+                  <article key={p.id} className={s.card}>
+                    <button className={s.cardLink} onClick={() => open(p)} aria-label={`Open ${p.name}`} />
+                    <Mosaic techIds={p.techIds} />
+                    <div className={s.cardBody}>
+                      <div className={s.cardHead}>
+                        <h3 className={s.name}>{p.name}</h3>
+                        <span className={s.menu}>{menu(p)}</span>
                       </div>
-                      <span className={s.alertWhen}>{timeAgo(new Date(release.at).getTime())}</span>
-                      <Button size="sm" onClick={() => navigate(`/projects/${project.id}?release=${release.id}`)}>{release.status === 'pending' ? 'Review' : 'See the log'}</Button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
+                      <p className={s.desc}>{p.description || 'No description'}</p>
+                    </div>
+                    <footer className={s.cardFoot}>
+                      <Pipeline stages={st} />
+                      <span className={s.headline} data-tone={h.tone}>{h.text}</span>
+                      <span className={s.when}>{ago(p.updatedAt)}</span>
+                    </footer>
+                  </article>
+                )
+              })}
+            </div>
+          ) : (
+            <div className={s.rows} role="list">
+              {list.map((p) => {
+                const st = stages(p)
+                const h = headline(st)
+                return (
+                  <div key={p.id} className={s.row} role="listitem">
+                    <button className={s.cardLink} onClick={() => open(p)} aria-label={`Open ${p.name}`} />
+                    <div className={s.rowMain}><b>{p.name}</b><span>{p.description || 'No description'}</span></div>
+                    <div className={s.rowPipe}><Pipeline stages={st} /><span className={s.headline} data-tone={h.tone}>{h.text}</span></div>
+                    <span className={s.rowMeta}>{p.nodes} {p.nodes === 1 ? 'node' : 'nodes'}</span>
+                    <span className={s.rowMeta}>{team(p) ?? ''}</span>
+                    <span className={s.rowMeta}>{ago(p.updatedAt)}</span>
+                    <span className={s.menu}>{menu(p)}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
-            {isLoading ? <div className={s.grid}>{[0, 1, 2].map((i) => <div key={i} className={s.skeleton} />)}</div>
-              : error ? <Empty title="Projects could not be loaded">{errorMessage(error)}</Empty>
-              : all.length === 0 ? (
-                <div className={s.firstRun}>
-                  <h2 className={s.firstTitle}>Design your first system</h2>
-                  <p>Draw the services, databases and pages, and Tessery generates the code and deploys it from development to production. Start from a template or a blank canvas.</p>
-                </div>
-              ) : list.length === 0 ? <Empty title={`No project matches "${q}"`}>Clear the filter to see every project.</Empty> : (
-                <div className={s.grid}>
-                  {list.map((p) => (
-                    <article key={p.id} className={s.card}>
-                      <button className={s.cardLink} onClick={() => navigate(`/projects/${p.id}`)} aria-label={`Open ${p.name}`} />
-                      <Mosaic techIds={p.techIds} />
-                      <div className={s.cardBody}>
-                        <div className={s.cardHead}>
-                          <h3 className={s.cardTitle}>{p.name}</h3>
-                          <span className={s.cardMenu}>
-                            <DropdownMenu align="end" trigger={<Button variant="ghost" size="xs" icon={<MoreHorizontal />} aria-label={`Actions for ${p.name}`} />} items={[
-                              { label: 'Open', onSelect: () => navigate(`/projects/${p.id}`) },
-                              { kind: 'separator' },
-                              { label: 'Delete…', icon: <Trash2 />, danger: true, onSelect: () => del(p) },
-                            ]} />
-                          </span>
-                        </div>
-                        {p.description && <p className={s.cardDesc}>{p.description}</p>}
-                        <div className={s.envs}>
-                          {envStates(p).map((e) => (
-                            <span key={e.env} className={s.env} data-state={e.state} style={{ '--env': envColor(e.env) } as React.CSSProperties}
-                              title={e.state === 'failed' ? describe(e.latest!) : e.state === 'waiting' ? describe(e.latest!) : undefined}>
-                              <i aria-hidden="true" />
-                              {envName(e.env)}
-                              <em>{e.state === 'live' ? `#${e.running!.checkpoint}` : e.state === 'stopped' ? 'stopped' : e.state}</em>
-                            </span>
-                          ))}
-                          {p.running.length === 0 && p.latest.length === 0 && <span className={s.notDeployed}>Not deployed yet</span>}
-                        </div>
-                        <p className={s.cardMeta}>
-                          <span>Edited {timeAgo(new Date(p.updatedAt).getTime())}</span>
-                          {teams?.find((t) => t.id === p.teamId) && <span>{teams.find((t) => t.id === p.teamId)!.name}</span>}
-                        </p>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
+          {canCreate && all.length > 0 && (
+            <section className={s.start} aria-labelledby="start-new">
+              <h2 id="start-new" className={s.h2}>Start from a template</h2>
+              <Templates pick={pick} />
+            </section>
+          )}
+        </div>
 
-            {canCreate && (
-              <section aria-labelledby="start-new">
-                <h2 id="start-new" className={s.h2}>Start something new</h2>
-                <div className={s.templates}>
-                  {TEMPLATES.map((t) => (
-                    <button key={t.id} className={s.tpl} onClick={() => pick(t.id)}>
-                      <b>{t.id === 'blank' ? 'Blank canvas' : t.name}</b>
-                      <span>{t.description}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-          </main>
-        )}
+        <Activity projects={projects} loading={loading} />
       </div>
 
-      <Dialog open={choosing} onOpenChange={setChoosing} title="New project" description="Start from a template or a blank canvas. You can change everything afterwards." width={620}>
-        <div className={s.chooser}>
-          {TEMPLATES.map((t) => (
-            <button key={t.id} className={s.tpl} onClick={() => pick(t.id)}>
-              <b>{t.id === 'blank' ? 'Blank canvas' : t.name}</b>
-              <span>{t.description}</span>
-            </button>
-          ))}
-        </div>
+      <Dialog open={choosing} onOpenChange={setChoosing} title="New project" description="Start from a template or a blank canvas. You can change everything afterwards." width={640}>
+        <Templates pick={pick} wide />
       </Dialog>
 
       <Dialog open={!!tpl} onOpenChange={(o) => !o && setTpl(null)} title={`New project: ${TEMPLATES.find((t) => t.id === tpl)?.name ?? ''}`}
@@ -204,6 +195,72 @@ export function ProjectHome() {
           <Field label="Region" wide><Select value={region} onChange={setRegion} options={PROVIDER_BY_ID[provider].regions.map((r) => ({ value: r.id, label: r.name, hint: r.id }))} /></Field>
         </>}
       </Dialog>
+    </AppShell>
+  )
+}
+
+function CardSkeleton() {
+  return (
+    <div className={s.card} aria-hidden="true">
+      <div className={s.preview}><div className={s.chips}>{[0, 1, 2].map((i) => <Skeleton key={i} w={38} h={38} r={8} />)}</div></div>
+      <div className={s.cardBody}><Skeleton h={14} w="45%" /><SkeletonText lines={1} /></div>
+      <div className={s.cardFoot}><Skeleton h={9} w={52} r={4} /><Skeleton h={10} w="40%" /></div>
     </div>
+  )
+}
+
+function Templates({ pick, wide }: { pick: (id: string) => void; wide?: boolean }) {
+  return (
+    <div className={clsx(s.templates, wide && s.templatesWide)}>
+      {TEMPLATES.map((t) => (
+        <button key={t.id} className={s.tpl} onClick={() => pick(t.id)}>
+          <b>{t.id === 'blank' ? 'Blank canvas' : t.name}</b>
+          <span>{t.description}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const ICON = { pending: Clock3, failed: X, released: Check, queued: LoaderCircle, deploying: LoaderCircle } as Record<string, typeof Check>
+
+/** Releases across the organization: anything waiting for approval first, then the newest. */
+function Activity({ projects, loading }: { projects?: ProjectSummary[]; loading: boolean }) {
+  const items = activity(projects ?? []).slice(0, 12)
+  const waiting = items.filter((x) => x.release.status === 'pending')
+  const rest = items.filter((x) => x.release.status !== 'pending')
+  const entry = ({ project, release }: (typeof items)[number]) => {
+    const Icon = ICON[release.status] ?? Clock3
+    return (
+      <li key={release.id}>
+        <button className={s.event} data-status={release.status} onClick={() => open(project, release)}>
+          <Icon className={s.eventIcon} aria-hidden="true" />
+          <span className={s.eventText}>
+            <b>{project.name}<span className={s.arrow}> to </span>{envName(release.env)}</b>
+            <span>Checkpoint {release.checkpoint}, {releaseWords(release)}</span>
+            {release.status === 'failed' && release.error && <span className={s.eventError}>{release.error}</span>}
+          </span>
+          <time className={s.eventWhen} dateTime={release.at}>{ago(release.at)}</time>
+        </button>
+      </li>
+    )
+  }
+  return (
+    <aside className={s.rail} aria-label="Activity" aria-busy={loading || undefined}>
+      {loading ? (
+        <>
+          <Skeleton h={12} w={110} />
+          {[0, 1, 2, 3].map((i) => <div key={i} className={s.eventSkeleton}><Skeleton w={16} h={16} r={8} /><SkeletonText lines={2} size={11} gap={6} /></div>)}
+        </>
+      ) : (
+        <>
+          {waiting.length > 0 && <section><h2 className={s.railTitle}>Waiting for you</h2><ul className={s.events}>{waiting.map(entry)}</ul></section>}
+          <section>
+            <h2 className={s.railTitle}>Recent releases</h2>
+            {rest.length > 0 ? <ul className={s.events}>{rest.map(entry)}</ul> : <p className={s.railEmpty}>Releases from every project show up here. Open a project and choose Deploy to make the first one.</p>}
+          </section>
+        </>
+      )}
+    </aside>
   )
 }

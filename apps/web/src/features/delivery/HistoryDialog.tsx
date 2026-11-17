@@ -8,7 +8,7 @@ import { bus } from '@/lib/bus'
 import { timeAgo } from '@/lib/format'
 import { useAppDispatch, useAppSelector } from '@/store'
 import { projectActions } from '@/store/projectSlice'
-import { Badge, Button, Dialog, Empty, Field, Input, TabStrip, Textarea, toast, useDialogs } from '@/ui'
+import { Badge, Button, Dialog, Empty, Field, Input, TabStrip, Textarea, toast, useDialogs, Skeleton } from '@/ui'
 import { useCreateCheckpoint } from './useCheckpoint'
 import s from './Delivery.module.css'
 
@@ -78,7 +78,7 @@ function CheckpointList({ onClose }: { onClose: () => void }) {
   const [open, setOpen] = useState<string | null>(null)
   const restore = useRestore(onClose)
 
-  if (isLoading) return <p className={s.muted}>Loading…</p>
+  if (isLoading) return <div aria-busy="true" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={34} r={6} />)}</div>
   if (error) return <p>{errorMessage(error)}</p>
   if (!data?.length) return <Empty title="No checkpoints yet">Create one to commit the design and generated code to git.</Empty>
   const runningIn = (c: Checkpoint) => (pipeline?.stages ?? []).filter((st) => st.head?.id === c.id)
@@ -135,7 +135,7 @@ function AutosaveList({ onClose }: { onClose: () => void }) {
   const [fetchVersion, { isFetching }] = useLazyProjectVersionQuery()
   const restore = useRestore(onClose)
 
-  if (isLoading) return <p className={s.muted}>Loading…</p>
+  if (isLoading) return <div aria-busy="true" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={34} r={6} />)}</div>
   if (error) return <p>{errorMessage(error)}</p>
   return (
     <div className={s.list}>

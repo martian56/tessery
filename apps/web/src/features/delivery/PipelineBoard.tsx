@@ -36,7 +36,8 @@ export function PipelineBoard() {
     window.history.replaceState(null, '', url.pathname + url.search + url.hash)
     if (!r) return toast('That release is no longer in the history', 'err')
     dispatch(ui.setEnv(r.env))
-    setLog(r)
+    // A release waiting for approval has no log yet; the pipeline card with its approve button is what to show.
+    if (r.status !== 'pending') setLog(r)
   }, [releases, dispatch])
   const busy = !!data?.stages.some((st) => st.active)
   if (busy !== fast) setFast(busy)

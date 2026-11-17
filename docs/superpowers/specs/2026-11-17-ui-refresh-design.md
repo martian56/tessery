@@ -1,78 +1,83 @@
 # Tessery UI refresh
 
-Issue #108. A first pass on a branch for review, not a final redesign.
+Issue #108. Built on the `feat/ui-refresh` branch for review.
 
 ## Why
 
-Tessery's own interface looks dated next to the apps its page builder now produces. The home page leads with templates, so people scroll past seven cards to reach their own work, and it says nothing about whether anything is running or broken. The palette is a flat grey with one orange for every purpose. The user wants it livelier, more professional and friendlier to developers, and liked how alive the Seed library felt: several confident colours that each had a job, on tinted rather than grey neutrals.
+Tessery's own interface looks dated next to the apps its builder produces. The home page leads with templates and says nothing about what runs or what needs attention, the palette is one orange on flat grey, and loading shows a bare "Loading…" or briefly an empty table. The user wants it professional, friendly to developers and alive, with nothing Tessery does today going missing.
 
-## Subject and audience
+## Research
 
-A developer or small team that designs systems, generates code and deploys it through dev, staging and production, often self-hosted. They come back to check on their projects and to continue editing one. The name comes from *tessera*, a mosaic tile, and every project already is a mosaic of coloured parts: the canvas gives each kind of node its own colour.
+The leading platforms converged on the same shape (sources in the PR):
 
-## Direction
+- **Navigation:** a persistent left sidebar with the workspace switcher at the top (Vercel 2025, Railway 2026, Render, Coolify 4.3, Dokploy). Linear dims the sidebar so content leads.
+- **Home:** your projects plus what just happened. Vercel pairs project cards with recent previews; Coolify and Dokploy lead with recent deployments; Railway shows each project as a small canvas of its services with one status line, "production · 13/13 services online".
+- **Colour:** chrome stays near-monochrome; colour comes from content (service logos, status dots). Linear: "attention should be earned", fewer icons, softer separators.
+- **Status as one plain line** rather than badges.
 
-**One memorable thing: each project shows its own mosaic.** Project cards on the home page draw the project's real nodes as coloured tiles, using the same category colours as the canvas. Two projects never look alike, and you recognise yours at a glance. Everything around it stays quiet.
+What Tessery has that none of them do: every project is a design, and every release travels a development → staging → production pipeline with approvals. The home page shows both.
 
-**Colour.** Keep the dark, editor-first look, but tint the neutrals toward ink blue instead of flat grey, and give colour jobs:
-- Brand and primary action: a clearer, hotter orange `#FF7A2E` (the old `#E8833A` sat close to a clay tone that reads as generic).
-- Environments get identity colours used everywhere they appear: Development cyan `#3CCFE8`, Staging violet `#A48BFF`, Production green `#3DDC97`.
-- States: running green, waiting amber `#FFC247`, failed red `#FF5D6C`.
-- Node categories keep their hues, tuned a little brighter so they hold up on the new background.
+## Direction (chosen by the user: sidebar + floating content, Linear style)
 
-Neutrals: `#0E1018` page, `#141826` panels, `#1A1F30` raised, `#232A3F` hover, lines `#262D44` and `#323A55`, text `#E9ECF6`, secondary `#A2A9C4`, faint `#6A7291`.
-
-**Type.** Headings (page titles, project names, section titles) in Bricolage Grotesque, which gives the product a voice. Interface text stays in Inter for legibility at small sizes, code in JetBrains Mono. Fonts are bundled with the app, not loaded from Google, because Tessery is self-hosted. Section labels become sentence case instead of tracked capitals.
-
-## Home page
+### Shell, for every page outside the project editor
 
 ```
-[tiles] Tessery   Martian v   Projects  Organization  Admin                 Admin v
---------------------------------------------------------------------------------
-Projects in Martian                                      [Filter]  [New project]
-
-Needs attention                       (only when something does)
-  ! Seed library   Production waiting for approval              Review
-  ! todo           Staging release failed: API check failed      Open
-
-+-------------------------------+  +-------------------------------+
-| [mosaic of the project's nodes]|  | [mosaic]                      |
-| Seed library                  |  | todo                          |
-| A neighbourhood seed library  |  | Projects and tasks...         |
-| (dev #3) (staging #3) (prod #3)|  | (dev #26)                     |
-| Edited 2 hours ago            |  | Edited yesterday              |
-+-------------------------------+  +-------------------------------+
-
-Start something new
-  [Blank] [Task tracker] [B2B SaaS] [Realtime chat] [IoT] [AI assistant] [Store]
+ app background (darkest)
+┌─────────────────────┐┌──────────────────────────────────────────────────┐
+│ [■] Martian      v «││ Page title                     actions           │
+│ [Search…        ⌘K] ││──────────────────────────────────────────────────│
+│ Projects            ││                                                  │
+│                     ││   content, scrolls inside the panel              │
+│ Organization        ││                                                  │
+│   General           ││                                                  │
+│   Members  Teams …  ││                                                  │
+│ Instance            ││                                                  │
+│   Users  Email …    ││                                                  │
+│ [A] Admin         ⋯ ││                                                  │
+└─────────────────────┘└──────────────────────────────────────────────────┘
 ```
 
-- Your projects come first, as cards in a responsive grid. Each card shows the mosaic, name, description, one pill per environment in its colour with the running checkpoint, and when it was edited.
-- A pill also shows the latest release's state when it differs from running: waiting for approval (amber) or failed (red).
-- "Needs attention" lists pending approvals and failed latest releases across the organization, and is hidden when there are none.
-- Templates move below as a compact row; "New project" in the header opens the same choice.
-- An empty organization shows the templates as the main call to action.
+- The sidebar sits on the app background, dimmer than the content. The content is a floating panel: inset 8px, rounded, hairline border, its own scroll.
+- Collapsing (the « button, or `[`) turns the sidebar into a 52px rail of icons with tooltips; the panel takes the width. The choice is remembered per browser. Narrow windows start collapsed.
+- Every destination that exists today stays: projects; organization general, members, teams, servers, integrations, roles, access and audit log (filtered by permission); instance users, organizations, email, GitHub and settings (instance admins only); account; organization switching and creation; sign out.
+- `⌘K` / `Ctrl+K` opens a quick switcher for projects and pages.
 
-The server adds two fields to the project list for this: the node types of each design (for the mosaic) and the latest release per environment (for states and attention). Both come from the existing list query, with no extra request per project.
+### Home
 
-## Project page
+```
+│ Projects  2                    [Search projects  /]  [▦|≡]  [New project] │
+│ ┌───────────────────────┐ ┌───────────────────────┐  │ Waiting for you    │
+│ │  web ── svc ── pg     │ │  web  svc  pg  idp    │  │ ◐ Seed library     │
+│ │                       │ │                       │  │   to Production    │
+│ │ Seed library      ⋯   │ │ todo              ⋯   │  │ Recent releases    │
+│ │ A neighbourhood seed… │ │ Projects and tasks…   │  │ ✕ todo  Staging    │
+│ │ ●─●─◐ Production is   │ │ ●─✕─○ Staging failed  │  │ ● Seed  Staging    │
+│ │ waiting for approval  │ │                  12m  │  │ ● Seed  Development│
+│ └───────────────────────┘ └───────────────────────┘  │                    │
+│ Start from a template:  Blank  Task tracker  B2B SaaS  …                   │
+```
 
-The editor layout stays (left library and outliner, canvas, inspector, bottom panel); it works and people know it. This pass changes how it looks, not where things are:
-- The new tokens and type throughout.
-- The workspace tabs read as tabs: clearer active state in the brand colour, quieter inactive ones.
-- The environment switcher shows the environment's colour.
-- Panel section titles in sentence case.
+- Cards show the design as its tech icons on a dotted ground, in the canvas's own category colours, then name, one line of description, and one status line: the pipeline as connected dots in environment colours plus a sentence about the most important state.
+- A list view (remembered) shows the same as dense rows.
+- The right rail lists releases waiting for approval first, then recent releases across projects; each opens that project on its Deploy tab at that release.
+- Templates stay on the home page as a compact row and in the New project dialog.
 
-A deeper rework of the workspace (header layout, small screens) is left for a follow-up once this direction is agreed.
+### Loading
+
+A `Skeleton` primitive replaces every "Loading…": the app boot shows the shell with placeholder blocks, cards and rows show their own shapes, tables show placeholder rows instead of "Nothing here yet", and the rail shows placeholder entries. Shimmer stops under reduced motion.
+
+### Colour and type
+
+- Neutrals: graphite with a hint of cool, low chroma. App `#0a0b0e`, panel `#111318`, raised `#171a21`, hover `#1e222b`, lines `#23272f` and `#2e333d`, text `#eceef2`, secondary `#9ba1ad`, faint `#646a76`.
+- Brand orange `#ff7a2e` only for primary actions and focus. Environments: development cyan, staging violet, production green. States: green, amber, red. Node categories keep their vivid hues; they are the colour of the product.
+- Inter with its optical-size axis (display cut at heading sizes, as Linear does), JetBrains Mono for code; both bundled, nothing loaded from Google.
+- Sentence case everywhere, no tracked capitals.
+
+## Phases
+
+1. Shell, home, settings, admin and account pages, skeletons. (This pass.)
+2. The project editor inside the same shell, with the rail collapsed by default.
 
 ## Non-goals
 
-- No light theme yet; tokens are organised so one can be added.
-- No new navigation model or command palette changes.
-- No change to what any screen does, beyond the home page's new information.
-
-## Approaches considered
-
-1. **Token refresh only:** fast and low risk, but the home page would still not show what's running or needs attention.
-2. **Tokens plus a rebuilt home page plus a polish pass on the workspace (chosen):** the home page is where "dated" and "doesn't help me" were felt most, and the tokens lift every other screen at once.
-3. **Full redesign of every screen:** too big to review as one change, and better done after the direction is agreed.
+No light theme yet (tokens allow it), no new product features beyond the home page's activity rail and the quick switcher.

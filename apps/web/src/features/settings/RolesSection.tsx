@@ -25,7 +25,7 @@ export function RolesSection({ org, perms }: { org: string; perms: Perms }) {
     <>
       <PageTitle title="Roles" description="A role is a named set of permissions. Built-in roles cannot be changed; create custom roles for anything in between."
         actions={canManage && <Button variant="primary" icon={<Plus />} onClick={() => setEditing('new')}>New role</Button>} />
-      <Table head={['Role', 'Key', 'Permissions', '']}>
+      <Table loading={!roles} head={['Role', 'Key', 'Permissions', '']}>
         {(roles ?? []).map((r) => (
           <tr key={r.id}>
             <td><b>{r.name}</b> {r.builtin && <Badge><Lock size={9} /> built-in</Badge>}{r.description && <div className={muted}>{r.description}</div>}</td>

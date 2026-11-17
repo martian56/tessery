@@ -52,7 +52,7 @@ export function MembersSection({ org, perms }: { org: string; perms: Perms }) {
           </p>
         </Card>
       )}
-      <Table head={['Name', 'Email', 'Organization roles', 'Joined', '']}>
+      <Table loading={!members} head={['Name', 'Email', 'Organization roles', 'Joined', '']}>
         {(members ?? []).map((m) => (
           <tr key={m.userId}>
             <td>

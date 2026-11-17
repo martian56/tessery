@@ -51,7 +51,7 @@ export function AccessSection({ org, perms }: { org: string; perms: Perms }) {
     <>
       <PageTitle title="Access" description="Grants give a person or team a role at a scope. Grants flow downward: organization, then team, then project, then environment. Time-limited grants are removed automatically when they expire."
         actions={canManage && <Button variant="primary" icon={<Plus />} onClick={() => setOpen(true)}>Grant access</Button>} />
-      <Table head={['Subject', 'Role', 'Scope', 'Expires', '']} empty="No grants yet">
+      <Table loading={!bindings} head={['Subject', 'Role', 'Scope', 'Expires', '']} empty="No grants yet">
         {(bindings ?? []).map((b) => (
           <tr key={b.id}>
             <td>{b.subjectName ?? b.subject.id} <Badge>{b.subject.kind}</Badge></td>

@@ -9,7 +9,7 @@ import { bus } from '@/lib/bus'
 import { timeAgo } from '@/lib/format'
 import { useAppSelector } from '@/store'
 import { useMeQuery } from '@/api/endpoints/identity'
-import { Button, Dialog, Dot, Field, Input, Select, Switch, toast, useDialogs } from '@/ui'
+import { Button, Dialog, Dot, Field, Input, Select, Switch, toast, useDialogs, Skeleton } from '@/ui'
 import s from './Delivery.module.css'
 
 export function RepositoryDialog() {
@@ -63,7 +63,7 @@ function Repository({ onClose }: { onClose: () => void }) {
       <h3 style={{ fontSize: 'var(--fs-13)', marginTop: 8 }}>Remote</h3>
       {remote?.githubRepo ? <GithubLinked repo={remote.githubRepo} remote={remote} canConfigure={canConfigure} onSync={pushNow} syncing={pushing} onUnlink={disconnect} />
         : canConfigure && <GithubLink pid={doc.id} />}
-      {!remote?.githubRepo && (isLoading ? <p className={s.muted}>Loading…</p> : <>
+      {!remote?.githubRepo && (isLoading ? <div aria-busy="true" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={34} r={6} />)}</div> : <>
         <p className={s.muted}>Or push to any git host with a URL and token:</p>
         {remote && (
           <div className={s.status}>

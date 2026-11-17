@@ -2024,6 +2024,8 @@ export interface components {
             checkpoint: number;
             env: string;
             error?: string | null;
+            /** Format: uuid */
+            id: string;
             /** @description pending, queued, deploying, released, rejected, cancelled or failed. */
             status: string;
         };
@@ -2180,6 +2182,8 @@ export interface components {
         };
         ProjectSummaryDto: {
             description: string;
+            /** @description The design's environment keys, in pipeline order. */
+            envKeys: string[];
             icon: string;
             /** Format: uuid */
             id: string;
