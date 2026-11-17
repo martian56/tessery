@@ -7,20 +7,39 @@ use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 use utoipa::ToSchema;
 
+/// How the instance sends email. The secret stored beside it is the SMTP password, or the API key for Resend.
 #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct SmtpSettings {
+pub struct MailSettings {
+    /// `smtp` or `resend`. Settings saved before providers existed are SMTP.
+    #[serde(default = "smtp")]
+    pub provider: String,
+    /// SMTP only.
+    #[serde(default)]
     pub host: String,
+    /// SMTP only.
+    #[serde(default)]
     pub port: u16,
+    /// SMTP only.
     #[serde(default)]
     pub username: String,
-    /// The sender, such as `Tessery <tessery@example.com>`.
+    /// The sender, such as `Tessery <tessery@example.com>`. With Resend its domain must be verified there.
     pub from: String,
-    /// `starttls` (port 587), `tls` (port 465) or `none` (only for a local relay).
+    /// SMTP only: `starttls` (port 587), `tls` (port 465) or `none` (only for a local relay).
+    #[serde(default)]
     pub security: String,
+    /// Where Resend's API lives, filled in from the server config before sending. Never stored.
+    #[serde(skip)]
+    pub resend_url: Option<String>,
 }
 
-fn transport(s: &SmtpSettings, password: Option<&str>) -> Result<AsyncSmtpTransport<Tokio1Executor>, String> {
+fn smtp() -> String {
+    "smtp".to_owned()
+}
+
+pub const PROVIDERS: &[&str] = &["smtp", "resend"];
+
+fn transport(s: &MailSettings, password: Option<&str>) -> Result<AsyncSmtpTransport<Tokio1Executor>, String> {
     let builder = match s.security.as_str() {
         "tls" => AsyncSmtpTransport::<Tokio1Executor>::relay(&s.host).map_err(|e| e.to_string())?,
         "starttls" => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&s.host).map_err(|e| e.to_string())?,
@@ -31,7 +50,38 @@ fn transport(s: &SmtpSettings, password: Option<&str>) -> Result<AsyncSmtpTransp
     Ok(builder.build())
 }
 
-pub async fn send_email(s: &SmtpSettings, password: Option<&str>, to: &str, subject: &str, body: &str) -> Result<(), String> {
+pub const RESEND_URL: &str = "https://api.resend.com";
+
+/// `TESSERY_RESEND_URL`, for a proxy in front of Resend or a stand-in during tests.
+pub fn resend_url_from_env() -> Option<String> {
+    std::env::var("TESSERY_RESEND_URL").ok().map(|u| u.trim().trim_end_matches('/').to_owned()).filter(|u| !u.is_empty())
+}
+
+async fn send_resend(s: &MailSettings, key: Option<&str>, to: &str, subject: &str, body: &str) -> Result<(), String> {
+    let key = key.filter(|k| !k.is_empty()).ok_or("no Resend API key is saved")?;
+    to.parse::<lettre::message::Mailbox>().map_err(|e| format!("{to} is not a valid address: {e}"))?;
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(15)).user_agent("tessery").build().map_err(|e| e.to_string())?;
+    let res = client
+        .post(format!("{}/emails", s.resend_url.as_deref().unwrap_or(RESEND_URL)))
+        .bearer_auth(key)
+        .json(&json!({ "from": s.from, "to": [to], "subject": subject, "text": body }))
+        .send()
+        .await
+        .map_err(|e| format!("Resend could not be reached: {e}"))?;
+    if res.status().is_success() {
+        return Ok(());
+    }
+    let status = res.status();
+    let reason = res.json::<Value>().await.ok().and_then(|v| v["message"].as_str().map(str::to_owned)).unwrap_or_else(|| status.to_string());
+    Err(format!("Resend refused the message: {reason}"))
+}
+
+/// Sends a plain-text email with the instance's provider. `secret` is the SMTP password or the Resend API key.
+pub async fn send_email(s: &MailSettings, secret: Option<&str>, to: &str, subject: &str, body: &str) -> Result<(), String> {
+    if s.provider == "resend" {
+        return send_resend(s, secret, to, subject, body).await;
+    }
+    let password = secret;
     let message = Message::builder()
         .from(s.from.parse().map_err(|e| format!("the sender address is not valid: {e}"))?)
         .to(to.parse().map_err(|e| format!("{to} is not a valid address: {e}"))?)
@@ -85,7 +135,7 @@ impl Event {
 pub struct Delivery<'a> {
     pub kind: &'a str,
     pub target: &'a str,
-    pub smtp: Result<(&'a SmtpSettings, Option<&'a str>), &'a str>,
+    pub smtp: Result<(&'a MailSettings, Option<&'a str>), &'a str>,
     /// Allow webhooks on loopback and private networks. Off by default so project editors cannot reach internal services.
     pub allow_private: bool,
 }

@@ -1877,12 +1877,12 @@ export interface components {
         EmailSettingsDto: {
             configured: boolean;
             hasPassword: boolean;
-            settings?: components["schemas"]["SmtpSettings"] | null;
+            settings?: components["schemas"]["MailSettings"] | null;
         };
         EmailSettingsInput: {
-            /** @description Leave out to keep the stored password. */
+            /** @description The SMTP password or the Resend API key. Leave out to keep the stored one. */
             password?: string | null;
-            settings?: components["schemas"]["SmtpSettings"] | null;
+            settings?: components["schemas"]["MailSettings"] | null;
         };
         EnvLogLineDto: {
             level: string;
@@ -2043,6 +2043,24 @@ export interface components {
         LoginRequest: {
             email: string;
             password: string;
+        };
+        /** @description How the instance sends email. The secret stored beside it is the SMTP password, or the API key for Resend. */
+        MailSettings: {
+            /** @description The sender, such as `Tessery <tessery@example.com>`. With Resend its domain must be verified there. */
+            from: string;
+            /** @description SMTP only. */
+            host?: string;
+            /**
+             * Format: int32
+             * @description SMTP only.
+             */
+            port?: number;
+            /** @description `smtp` or `resend`. Settings saved before providers existed are SMTP. */
+            provider?: string;
+            /** @description SMTP only: `starttls` (port 587), `tls` (port 465) or `none` (only for a local relay). */
+            security?: string;
+            /** @description SMTP only. */
+            username?: string;
         };
         MemberDto: {
             disabled: boolean;
@@ -2465,16 +2483,6 @@ export interface components {
             regionPrices: components["schemas"]["RegionPrice"][];
             /** @description Regions that offer this size. */
             regions: string[];
-        };
-        SmtpSettings: {
-            /** @description The sender, such as `Tessery <tessery@example.com>`. */
-            from: string;
-            host: string;
-            /** Format: int32 */
-            port: number;
-            /** @description `starttls` (port 587), `tls` (port 465) or `none` (only for a local relay). */
-            security: string;
-            username?: string;
         };
         SpanDto: {
             attributes: Record<string, never>;

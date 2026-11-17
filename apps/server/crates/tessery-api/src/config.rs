@@ -16,6 +16,8 @@ pub struct Config {
     pub log_json: bool,
     pub trust_proxy: bool,
     pub notify_allow_private: bool,
+    /// Resend's API address; `None` means Resend itself.
+    pub resend_url: Option<String>,
     pub data_dir: PathBuf,
     pub secret_key: Option<tessery_core::SecretKey>,
     pub engine: tessery_engine::EngineConfig,
@@ -71,6 +73,7 @@ impl Config {
             log_json: flag("TESSERY_LOG_JSON", false),
             trust_proxy: flag("TESSERY_TRUST_PROXY", false),
             notify_allow_private: flag("TESSERY_NOTIFY_ALLOW_PRIVATE", false),
+            resend_url: tessery_notify::resend_url_from_env(),
             data_dir: PathBuf::from(var("TESSERY_DATA_DIR", "./data")),
             oidc: crate::routes::sso::OidcConfig::from_env(),
             provider_apis: tessery_cloud::endpoints_from_env(),

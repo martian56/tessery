@@ -95,3 +95,69 @@ async fn reset_and_invitation_links_arrive_by_email() {
     assert_eq!(anon.post("/api/auth/password/reset", json!({ "token": token, "password": "invitee-password-1" })).await.status(), StatusCode::OK);
     assert_eq!(app.session().login("invitee@example.com", "invitee-password-1").await, StatusCode::OK);
 }
+
+async fn resend_sink() -> (String, Arc<Mutex<Vec<(String, Value)>>>) {
+    use axum::Json;
+    use axum::http::HeaderMap;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let sent = Arc::new(Mutex::new(Vec::new()));
+    let store = sent.clone();
+    let app = axum::Router::new().route(
+        "/emails",
+        axum::routing::post(move |headers: HeaderMap, Json(body): Json<Value>| {
+            let store = store.clone();
+            async move {
+                let auth = headers.get("authorization").and_then(|v| v.to_str().ok()).unwrap_or_default().to_owned();
+                if auth != "Bearer re_test_key" {
+                    return (StatusCode::UNAUTHORIZED, Json(json!({ "message": "API key is invalid" })));
+                }
+                store.lock().unwrap().push((auth, body));
+                (StatusCode::OK, Json(json!({ "id": "sent-1" })))
+            }
+        }),
+    );
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (url, sent)
+}
+
+#[tokio::test]
+async fn sends_through_resend_with_a_saved_api_key() {
+    let (url, sent) = resend_sink().await;
+    let app = common::spawn_with(|c| c.resend_url = Some(url)).await;
+    let (admin, _) = app.setup().await;
+    let resend = json!({ "provider": "resend", "from": "Tessery <tessery@example.com>" });
+
+    let no_key = admin.put("/api/admin/email", json!({ "settings": resend })).await;
+    assert_eq!(no_key.status(), StatusCode::UNPROCESSABLE_ENTITY, "Resend needs an API key");
+
+    let saved: Value = admin.put("/api/admin/email", json!({ "settings": resend, "password": "re_test_key" })).await.json().await.unwrap();
+    assert_eq!(saved["settings"]["provider"], "resend");
+    assert_eq!(saved["hasPassword"], true);
+    assert!(saved.to_string().find("re_test_key").is_none(), "the key is never sent back");
+
+    assert_eq!(admin.post("/api/admin/email/test", json!({ "to": "admin@example.com" })).await.status(), StatusCode::OK);
+    let (_, body) = sent.lock().unwrap().last().unwrap().clone();
+    assert_eq!(body["to"], json!(["admin@example.com"]));
+    assert_eq!(body["from"], "Tessery <tessery@example.com>");
+    assert!(body["text"].as_str().unwrap().contains("Email from your Tessery instance works"));
+
+    let kept = admin.put("/api/admin/email", json!({ "settings": { "provider": "resend", "from": "Ops <ops@example.com>" } })).await;
+    assert_eq!(kept.status(), StatusCode::OK, "the saved key stays when only the sender changes");
+    assert_eq!(admin.post("/api/admin/email/test", json!({ "to": "admin@example.com" })).await.status(), StatusCode::OK);
+    assert_eq!(sent.lock().unwrap().last().unwrap().1["from"], "Ops <ops@example.com>");
+
+    let blank = admin.put("/api/admin/email", json!({ "settings": resend, "password": "  " })).await;
+    assert_eq!(blank.status(), StatusCode::UNPROCESSABLE_ENTITY, "a blank key is refused rather than wiping the saved one");
+    assert_eq!(admin.json("/api/admin/email").await["hasPassword"], true);
+
+    let wrong = admin.put("/api/admin/email", json!({ "settings": resend, "password": "re_wrong" })).await;
+    assert_eq!(wrong.status(), StatusCode::OK);
+    let refused = admin.post("/api/admin/email/test", json!({ "to": "admin@example.com" })).await;
+    assert_eq!(refused.status(), StatusCode::CONFLICT);
+    assert!(refused.text().await.unwrap().contains("API key is invalid"), "Resend's reason reaches the admin");
+
+    let smtp = admin.put("/api/admin/email", json!({ "settings": { "provider": "smtp", "host": "127.0.0.1", "port": 2525, "from": "Tessery <tessery@example.com>", "security": "none" } })).await;
+    let smtp: Value = smtp.json().await.unwrap();
+    assert_eq!(smtp["hasPassword"], false, "a Resend key is not reused as an SMTP password");
+}
