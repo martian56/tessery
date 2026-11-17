@@ -15,6 +15,10 @@ pub struct ProjectSummary {
     pub icon: String,
     pub version: i32,
     pub node_count: i32,
+    /// The technology of each node, in design order, so a list can sketch the project without loading it.
+    pub tech_ids: Vec<String>,
+    /// The design's environment keys in pipeline order.
+    pub env_keys: Vec<String>,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,
 }
@@ -57,7 +61,12 @@ pub struct NewProject<'a> {
 pub async fn list(ex: impl PgExecutor<'_>, org_id: Uuid) -> DbResult<Vec<ProjectSummary>> {
     Ok(sqlx::query_as!(
         ProjectSummary,
-        r#"SELECT id, org_id, team_id, slug, name, description, icon, version, node_count AS "node_count!", created_at, updated_at
+        r#"SELECT id, org_id, team_id, slug, name, description, icon, version, node_count AS "node_count!",
+                  ARRAY(SELECT n->>'techId' FROM jsonb_array_elements(CASE WHEN jsonb_typeof(doc->'nodes') = 'array' THEN doc->'nodes' ELSE '[]'::jsonb END) n
+                        WHERE n->>'techId' IS NOT NULL LIMIT 48) AS "tech_ids!",
+                  ARRAY(SELECT e->>'id' FROM jsonb_array_elements(CASE WHEN jsonb_typeof(doc->'environments') = 'array' THEN doc->'environments' ELSE '[]'::jsonb END) e
+                        WHERE e->>'id' IS NOT NULL) AS "env_keys!",
+                  created_at, updated_at
            FROM projects WHERE org_id = $1 ORDER BY updated_at DESC"#,
         org_id
     )
