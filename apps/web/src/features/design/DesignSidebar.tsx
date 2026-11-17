@@ -10,6 +10,7 @@ import { Input, PanelHeader, Tooltip } from '@/ui'
 import { useLiveResult } from '@/features/live/useLiveSimulation'
 import { bus } from '@/lib/bus'
 import s from './DesignSidebar.module.css'
+import { TechIcon } from '@/ui/icons/Icon'
 
 export function DesignSidebar() {
   return (
@@ -34,8 +35,7 @@ function Palette() {
   }, [q])
   return (
     <div className={s.palette}>
-      <PanelHeader title="Add" meta={`${TECHNOLOGIES.length} technologies`} />
-      <div className={s.search}><Input icon={<Search />} placeholder="Search: kafka, graphql, vector…" value={q} onChange={setQ} onKeyDown={(e) => { if (e.key === 'Enter' && groups[0]) bus.emit('add-at-center', groups[0][1][0].id) }} /></div>
+      <div className={s.search}><Input icon={<Search />} placeholder="Add a technology: kafka, graphql…" value={q} onChange={setQ} onKeyDown={(e) => { if (e.key === 'Enter' && groups[0]) bus.emit('add-at-center', groups[0][1][0].id) }} /></div>
       <div className={s.scroll}>
         {groups.map(([cat, items]) => {
           const closed = !q && collapsed.has(cat)
@@ -49,7 +49,7 @@ function Palette() {
               {!closed && items.map((t) => (
                 <Tooltip key={t.id} side="right" content={<span style={{ maxWidth: 220 }}>{t.description}{t.saas ? ' · SaaS' : ''}{t.image && t.image !== 'build' ? ' · self-hostable' : ''}</span>}>
                   <div className={s.item} draggable onDragStart={(e) => { e.dataTransfer.setData('application/tessery-tech', t.id); e.dataTransfer.effectAllowed = 'copy' }} onDoubleClick={() => bus.emit('add-at-center', t.id)}>
-                    <span className={s.glyph} style={{ color: CATEGORY_META[cat].color }}>{t.glyph}</span>
+                    <span className={s.glyph} style={{ color: CATEGORY_META[cat].color }}><TechIcon id={t.id} size={16} /></span>
                     <span className={s.label}>{t.name}</span>
                   </div>
                 </Tooltip>

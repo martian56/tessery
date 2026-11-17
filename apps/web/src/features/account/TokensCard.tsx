@@ -38,7 +38,7 @@ export function TokensCard() {
     <Card title="API tokens" actions={<Button size="sm" icon={<Plus />} onClick={() => setForm({ name: '', scope: 'code', days: '90' })}>New token</Button>}>
       <p className={muted}>Use a token as the password for git over HTTPS, as a bearer token for the API, or to connect an AI agent over MCP. A token can never do more than you can.</p>
       {tokens?.length ? (
-        <Table head={['Name', 'Token', 'Can', 'Last used', 'Expires', '']}>
+        <Table loading={!tokens} head={['Name', 'Token', 'Can', 'Last used', 'Expires', '']}>
           {tokens.map((t) => (
             <tr key={t.id}>
               <td>{t.name}</td>

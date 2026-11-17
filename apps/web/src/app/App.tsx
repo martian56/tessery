@@ -10,6 +10,7 @@ import { Button, Empty, ErrorBoundary } from '@/ui'
 import { navigate, useRoute } from './router'
 import { usePermissions } from './usePermissions'
 import { ProjectHome } from '@/features/home/ProjectHome'
+import { AppSkeleton, WorkspaceSkeleton } from '@/features/chrome/BootSkeleton'
 import { SetupPage } from '@/features/auth/SetupPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
@@ -23,13 +24,13 @@ export function App() {
   const route = useRoute()
   const setup = useSetupStatusQuery()
   const me = useMeQuery(undefined, { skip: !setup.data || setup.data.required })
-  if (setup.isLoading) return <Empty title="Loading…" />
+  if (setup.isLoading) return <AppSkeleton />
   if (setup.error) return <Empty title="Cannot reach the Tessery server" action={<Button onClick={() => setup.refetch()}>Retry</Button>}>{errorMessage(setup.error)}</Empty>
   if (setup.data?.required) return <SetupPage />
   if (window.location.pathname === '/reset-password') return <ResetPasswordPage />
-  if (me.isLoading) return <Empty title="Loading…" />
+  if (me.isLoading) return <AppSkeleton />
   if (!me.data) return <LoginPage />
-  return <ErrorBoundary label="Tessery" resetKey={JSON.stringify(route)}><Suspense fallback={<Empty title="Loading…" />}><Routes /></Suspense></ErrorBoundary>
+  return <ErrorBoundary label="Tessery" resetKey={JSON.stringify(route)}><Suspense fallback={route.name === 'project' ? <WorkspaceSkeleton /> : <AppSkeleton />}><Routes /></Suspense></ErrorBoundary>
 }
 
 function Routes() {
@@ -73,6 +74,6 @@ function ProjectLoader({ id }: { id: string }) {
   useEffect(() => () => { dispatch(projectActions.closed()) }, [dispatch])
 
   if (error) return <Empty title="Project not found" action={<Button variant="primary" onClick={() => navigate('/')}>Back to projects</Button>}>It may have been deleted, or you no longer have access.</Empty>
-  if (isLoading || loadedId !== id) return <Empty title="Loading project…" />
+  if (isLoading || loadedId !== id) return <WorkspaceSkeleton />
   return shell
 }

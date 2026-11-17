@@ -7,7 +7,7 @@
 .dim { opacity: .2; }
 .down { border-style: dashed; border-color: var(--err); }
 .head { display: flex; align-items: center; gap: var(--sp-3); padding: 8px 10px 0; min-width: 0; }
-.glyph { font: 600 9.5px var(--font-mono); color: var(--cat); background: color-mix(in srgb, var(--cat) 16%, transparent); border-radius: 3px; padding: 1px 4px; flex-shrink: 0; text-transform: lowercase; }
+.glyph { display: grid; place-items: center; width: 22px; height: 22px; flex-shrink: 0; color: var(--cat); background: color-mix(in srgb, var(--cat) 15%, transparent); border-radius: 6px; }
 .name { font-weight: 600; font-size: var(--fs-12); color: var(--tx-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
 .rep { font: var(--fs-10) var(--font-mono); color: var(--tx-2); }
 .style { font: 600 9.5px var(--font-mono); flex-shrink: 0; }

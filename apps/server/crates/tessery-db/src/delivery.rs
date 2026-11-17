@@ -238,6 +238,31 @@ pub struct Running {
     pub checkpoint_seq: i32,
 }
 
+/// The newest release of each environment of each project, for showing what is waiting or failed.
+#[derive(Debug, Clone)]
+pub struct LatestRelease {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub env_key: String,
+    pub status: String,
+    pub checkpoint_seq: i32,
+    pub requested_at: OffsetDateTime,
+    pub error: Option<String>,
+}
+
+pub async fn latest_in_org(ex: impl PgExecutor<'_>, org_id: Uuid) -> DbResult<Vec<LatestRelease>> {
+    Ok(sqlx::query_as!(
+        LatestRelease,
+        r#"SELECT DISTINCT ON (r.project_id, r.env_key) r.id, r.project_id, r.env_key, r.status::text AS "status!", c.seq AS checkpoint_seq, r.requested_at, r.error
+           FROM releases r JOIN checkpoints c ON c.id = r.checkpoint_id JOIN projects p ON p.id = r.project_id
+           WHERE p.org_id = $1
+           ORDER BY r.project_id, r.env_key, r.requested_at DESC"#,
+        org_id
+    )
+    .fetch_all(ex)
+    .await?)
+}
+
 pub async fn running_in_org(ex: impl PgExecutor<'_>, org_id: Uuid) -> DbResult<Vec<Running>> {
     Ok(sqlx::query_as!(
         Running,

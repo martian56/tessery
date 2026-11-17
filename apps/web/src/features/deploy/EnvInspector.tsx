@@ -7,6 +7,7 @@ import { Badge, Button, Empty, Field, Input, NumberInput, Section, Select, Switc
 import ins from '@/features/design/Inspector.module.css'
 import { SecretsSection, TargetSection } from './EnvTarget'
 import { BackupsSection } from './BackupsSection'
+import { NavIcon } from '@/ui/icons/Icon'
 
 export function EnvInspector() {
   const dispatch = useAppDispatch()
@@ -20,7 +21,7 @@ export function EnvInspector() {
   const p = PROVIDER_BY_ID[env.defaultProvider]
   return (
     <div className={ins.wrap}>
-      <div className={ins.title}><span className={ins.glyph}>env</span><div><b>{env.name}</b><span>{p?.name} · {env.defaultRegion}</span></div></div>
+      <div className={ins.title}><span className={ins.glyph}><NavIcon name="deploy" size={20} /></span><div><b>{env.name}</b><span>{p?.name} · {env.defaultRegion}</span></div></div>
       <Section title="Environment">
         <Field label="Name"><Input value={env.name} onCommit={(v) => up({ name: v })} /></Field>
         <Field label="Default provider"><Select value={env.defaultProvider} onChange={(v) => up({ defaultProvider: v, defaultRegion: PROVIDER_BY_ID[v].regions[0].id })} options={PROVIDERS.filter((x) => x.id !== 'saas').map((x) => ({ value: x.id, label: x.name, hint: x.kind }))} /></Field>

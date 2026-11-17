@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, org_id, team_id, slug, name, description, icon, version, node_count AS \"node_count!\", created_at, updated_at\n           FROM projects WHERE org_id = $1 ORDER BY updated_at DESC",
+  "query": "SELECT id, org_id, team_id, slug, name, description, icon, version, node_count AS \"node_count!\",\n                  ARRAY(SELECT n->>'techId' FROM jsonb_array_elements(CASE WHEN jsonb_typeof(doc->'nodes') = 'array' THEN doc->'nodes' ELSE '[]'::jsonb END) n\n                        WHERE n->>'techId' IS NOT NULL LIMIT 48) AS \"tech_ids!\",\n                  ARRAY(SELECT e->>'id' FROM jsonb_array_elements(CASE WHEN jsonb_typeof(doc->'environments') = 'array' THEN doc->'environments' ELSE '[]'::jsonb END) e\n                        WHERE e->>'id' IS NOT NULL) AS \"env_keys!\",\n                  created_at, updated_at\n           FROM projects WHERE org_id = $1 ORDER BY updated_at DESC",
   "describe": {
     "columns": [
       {
@@ -104,6 +104,18 @@
       },
       {
         "ordinal": 9,
+        "name": "tech_ids!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "env_keys!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -114,7 +126,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 12,
         "name": "updated_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -140,9 +152,11 @@
       false,
       false,
       true,
+      null,
+      null,
       false,
       false
     ]
   },
-  "hash": "f3a28e59918be567d837f840edd3db223a7e581dc36817b2ba78964ba52617c8"
+  "hash": "0b0203044183a2b22fdf53611ae2f03e3a107464fb0f42cca7f4c661715ba3f7"
 }

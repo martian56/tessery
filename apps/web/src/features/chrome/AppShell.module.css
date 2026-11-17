@@ -1,0 +1,66 @@
+.shell { --side: 244px; height: 100%; display: grid; grid-template-columns: var(--side) minmax(0, 1fr); background: var(--bg-app); transition: grid-template-columns .2s var(--ease); }
+.shell[data-rail] { --side: 56px; }
+
+/* Sidebar: on the app background, quieter than the page. */
+.side { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 14px 12px 12px; color: var(--tx-2); }
+.top { display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px; }
+.scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; margin-right: -6px; padding-right: 6px; }
+.list { list-style: none; display: flex; flex-direction: column; gap: 1px; }
+.group { margin-top: 18px; }
+.groupTitle { height: 28px; display: flex; align-items: center; padding: 0 9px; font-size: var(--fs-12); font-weight: 500; color: var(--tx-2); white-space: nowrap; }
+.shell[data-rail] .groupTitle { display: none; }
+.shell[data-rail] .group { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-1); }
+
+.item, .search, .org, .me, .fold { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; border-radius: var(--r-3); color: var(--tx-2); text-align: left; transition: background .1s var(--ease), color .1s var(--ease); }
+.item { height: 28px; padding: 0 9px 0 8px; font-size: var(--fs-13); font-weight: 500; }
+.item svg, .search svg, .fold svg { width: 15px; height: 15px; flex-shrink: 0; }
+.item:hover, .org:hover, .me:hover, .fold:hover { background: var(--bg-2); color: var(--tx-1); }
+.item.on { background: var(--bg-3); color: var(--tx-1); }
+.label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity .15s var(--ease); }
+.shell[data-rail] .label { opacity: 0; width: 0; flex: 0 0 0; }
+
+.org { height: 28px; padding: 0 8px 0 4px; width: auto; max-width: 100%; align-self: flex-start; }
+.orgMark { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; flex-shrink: 0; }
+.org .label { font-size: var(--fs-13); font-weight: 550; color: var(--tx-1); }
+.org > svg { width: 12px; height: 12px; color: var(--tx-2); flex-shrink: 0; }
+
+.search { height: 28px; padding: 0 8px; background: var(--bg-band); border: 1px solid var(--line-2); color: var(--tx-3); font-size: var(--fs-13); font-weight: 500; }
+.search:hover { border-color: var(--line-3); color: var(--tx-2); }
+.searchText { flex: 1; }
+.kbd { flex: none; font: 500 var(--fs-11) var(--font-ui); color: var(--tx-3); line-height: 16px; }
+.shell[data-rail] .search { justify-content: center; padding: 0; gap: 0; }
+.shell[data-rail] .item, .shell[data-rail] .fold { justify-content: center; padding: 0; gap: 0; }
+.shell[data-rail] .org { justify-content: center; padding: 0; gap: 0; align-self: stretch; }
+
+.bottom { display: flex; align-items: center; gap: 4px; padding-top: 10px; }
+.shell[data-rail] .bottom { flex-direction: column; }
+.me { height: 32px; padding: 0 8px 0 4px; flex: 1; }
+.me .label { display: flex; flex-direction: column; line-height: 1.2; }
+.me b { font-size: var(--fs-12); font-weight: 500; color: var(--tx-1); overflow: hidden; text-overflow: ellipsis; }
+.me small { font-size: var(--fs-11); color: var(--tx-3); overflow: hidden; text-overflow: ellipsis; }
+.me.on { background: var(--bg-3); }
+.shell[data-rail] .me { justify-content: center; padding: 0; gap: 0; flex: none; width: 32px; }
+.avatar { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; font-size: 10px; font-weight: 600; color: #fff; background: var(--acc); }
+.fold { width: 28px; height: 28px; justify-content: center; flex-shrink: 0; color: var(--tx-3); }
+
+/* The page floats above the app background. */
+.panel { margin: 8px 8px 8px 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: auto; background: var(--bg-1); border-radius: var(--r-5); box-shadow: var(--shadow-panel); user-select: text; }
+
+/* Quick switcher */
+.finder { display: flex; flex-direction: column; gap: var(--sp-4); }
+.finderInput { height: 36px; padding: 0 12px; border-radius: var(--r-3); background: var(--bg-2); border: 1px solid var(--line-2); font-size: var(--fs-14); outline: none; }
+.finderInput:focus { border-color: var(--acc-ring); }
+.finderList { list-style: none; max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.finderHit { display: flex; align-items: center; gap: var(--sp-5); width: 100%; height: 32px; padding: 0 10px; border-radius: var(--r-3); font-size: var(--fs-13); font-weight: 500; text-align: left; color: var(--tx-1); }
+.finderHit span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.finderHit small { color: var(--tx-2); font-size: var(--fs-12); }
+.finderHit svg { width: 14px; height: 14px; color: var(--tx-3); }
+.finderOn { background: var(--bg-3); }
+.finderEmpty { color: var(--tx-2); font-size: var(--fs-13); padding: 12px 10px; }
+
+@media (max-width: 640px) {
+  .panel { margin: 6px 6px 6px 0; border-radius: var(--r-4); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shell, .label { transition: none; }
+}

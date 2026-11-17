@@ -1,12 +1,16 @@
 .bar { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3) 0 var(--sp-4); background: var(--bg-1); border-bottom: 1px solid var(--line-1); min-width: 0; }
-.logo { display: flex; align-items: center; gap: var(--sp-4); height: 26px; padding: 0 var(--sp-4); border-radius: var(--r-1); font-weight: 600; max-width: 200px; flex-shrink: 0; }
+.logo { display: flex; align-items: center; gap: var(--sp-4); height: 28px; padding: 0 var(--sp-4); border-radius: var(--r-2); font: 600 var(--fs-14) var(--font-display); max-width: 220px; flex-shrink: 0; }
 .logo span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .logo:hover { background: var(--bg-3); }
-.tabs { display: flex; gap: 1px; margin-left: var(--sp-5); align-self: stretch; align-items: flex-end; min-width: 0; overflow: hidden; }
-.tab { display: flex; align-items: center; gap: var(--sp-3); height: 28px; padding: 0 var(--sp-5); border-radius: var(--r-2) var(--r-2) 0 0; color: var(--tx-2); border: 1px solid transparent; border-bottom: 0; position: relative; top: 1px; white-space: nowrap; }
+.tabs { display: flex; gap: 2px; margin-left: var(--sp-5); align-self: stretch; align-items: stretch; min-width: 0; overflow: hidden; }
+.tab { display: flex; align-items: center; gap: var(--sp-3); height: 100%; padding: 0 var(--sp-5); color: var(--tx-2); position: relative; white-space: nowrap; font-weight: 500; }
+.tab svg { width: 15px; height: 15px; }
 .tab:hover { color: var(--tx-1); }
-.tab[data-on] { background: var(--bg-0); color: var(--tx-1); border-color: var(--line-1); }
+.tab::after { content: ''; position: absolute; left: var(--sp-4); right: var(--sp-4); bottom: -1px; height: 2px; border-radius: 2px 2px 0 0; background: transparent; }
+.tab[data-on] { color: var(--tx-1); font-weight: 600; }
+.tab[data-on]::after { background: var(--acc); }
 .tab[data-on] svg { color: var(--acc); }
+.envDot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-right: 2px; }
 .right { margin-left: auto; display: flex; align-items: center; gap: var(--sp-3); flex-shrink: 0; }
 .save { color: var(--tx-3); font-size: var(--fs-11); min-width: 64px; text-align: right; }
 .load { display: flex; align-items: center; gap: var(--sp-3); color: var(--tx-2); font-size: var(--fs-11); padding: 0 var(--sp-3); }

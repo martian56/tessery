@@ -10,7 +10,7 @@
 .pageRow:hover { background: var(--bg-3); }
 .pageRow.on { background: var(--acc-lo); box-shadow: inset 2px 0 var(--acc); }
 .route { margin-left: auto; font: var(--fs-10) var(--font-mono); }
-.group { padding: var(--sp-4) var(--sp-5) 2px; color: var(--tx-3); font-size: var(--fs-10); text-transform: uppercase; letter-spacing: .6px; }
+.group { font-weight: 600; padding: var(--sp-4) var(--sp-5) 2px; color: var(--tx-3); font-size: var(--fs-11); }
 .blockItem { margin: 0 var(--sp-3); padding: 5px var(--sp-4); border-radius: var(--r-1); cursor: grab; }
 .blockItem:hover { background: var(--bg-3); }
 
@@ -22,7 +22,7 @@
 .chrome span { margin-left: 10px; background: #fff; border-radius: 3px; padding: 2px 10px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page { min-height: 240px; padding-bottom: 2px; }
 .blk { position: relative; outline: 1px dashed transparent; outline-offset: -1px; cursor: pointer; }
-.blk:hover { outline-color: #e8833a88; }
+.blk:hover { outline-color: var(--acc-ring); }
 .blk.sel { outline: 2px solid var(--acc); z-index: 2; }
 .blk.dragging { opacity: .4; }
 .tag { display: none; position: absolute; top: -18px; left: -2px; background: var(--acc); color: #fff; font: 10px var(--font-mono); padding: 1px 6px; border-radius: 2px 2px 0 0; z-index: 3; white-space: nowrap; }

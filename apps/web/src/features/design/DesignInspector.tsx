@@ -14,6 +14,7 @@ import { bus } from '@/lib/bus'
 import { ConfigEditor } from './ConfigEditor'
 import { PlacementEditor } from './PlacementEditor'
 import s from './Inspector.module.css'
+import { TechIcon } from '@/ui/icons/Icon'
 
 export function DesignInspector() {
   const doc = useDoc()
@@ -45,7 +46,7 @@ function NodeInspector({ node }: { node: SystemNode }) {
   return (
     <div className={s.wrap}>
       <div className={s.title}>
-        <span className={s.glyph} style={{ color: CATEGORY_META[tech.category].color }}>{tech.glyph}</span>
+        <span className={s.glyph} style={{ color: CATEGORY_META[tech.category].color, background: `color-mix(in srgb, ${CATEGORY_META[tech.category].color} 13%, transparent)` }}><TechIcon id={tech.id} size={20} /></span>
         <div><b>{node.name}</b><span>{tech.name} · {CATEGORY_META[tech.category].label}</span></div>
       </div>
       <Section title="Identity">

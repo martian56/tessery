@@ -8,6 +8,7 @@ import { Badge, Button, Checkbox, Empty, Field, Input, Section, Select, Textarea
 import { useCurrentDb } from './useDb'
 import ins from '@/features/design/Inspector.module.css'
 import s from './Database.module.css'
+import { NavIcon } from '@/ui/icons/Icon'
 
 const TYPES: ColumnType[] = ['uuid', 'text', 'varchar', 'int', 'bigint', 'serial', 'numeric', 'float', 'boolean', 'timestamptz', 'date', 'jsonb', 'bytea', 'enum', 'text[]', 'vector']
 
@@ -21,7 +22,7 @@ export function TableInspector() {
   if (!schema || !nodeId) return <Empty title="No database" />
   if (!t) return (
     <div className={ins.wrap}>
-      <div className={ins.title}><span className={ins.glyph}>db</span><div><b>{node?.name}</b><span>{schema.tables.length} tables</span></div></div>
+      <div className={ins.title}><span className={ins.glyph}><NavIcon name="database" size={20} /></span><div><b>{node?.name}</b><span>{schema.tables.length} tables</span></div></div>
       <Section title="Tables">{schema.tables.map((x) => <button key={x.id} className={ins.link} onClick={() => dispatch(ui.setDatabase({ tableId: x.id }))}><span>{x.name}</span><Badge mono>{x.columns.length} cols</Badge></button>)}</Section>
       <div className={ins.actions}><Button size="sm" icon={<Plus />} onClick={() => { const id = edit('addTable', { nodeId, name: `table_${schema.tables.length + 1}` }); dispatch(ui.setDatabase({ tableId: id ?? null })) }}>New table</Button></div>
     </div>
@@ -32,7 +33,7 @@ export function TableInspector() {
 
   return (
     <div className={ins.wrap}>
-      <div className={ins.title}><span className={ins.glyph}>tbl</span><div><b>{t.name}</b><span>{node?.name} · {t.columns.length} columns</span></div></div>
+      <div className={ins.title}><span className={ins.glyph}><NavIcon name="pages" size={20} /></span><div><b>{t.name}</b><span>{node?.name} · {t.columns.length} columns</span></div></div>
       <Section title="REST API">
         {services.length ? services.map((svc) => {
           const has = doc.apis[svc.id].operations.filter((o) => new RegExp(`^[A-Z]+ .*/${t.name}(/\\{\\w+\\})?$`).test(o.kind)).length

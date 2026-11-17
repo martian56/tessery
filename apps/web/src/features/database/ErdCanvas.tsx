@@ -73,7 +73,7 @@ function Erd({ schema }: { schema: DbSchema }) {
             setDragging(null)
           }} onPaneClick={() => dispatch(ui.setDatabase({ tableId: null }))}
           proOptions={{ hideAttribution: true }} nodesConnectable={false} deleteKeyCode={null} panOnDrag={[1, 2]} selectionOnDrag minZoom={0.2} snapToGrid snapGrid={[10, 10]}>
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#2a2a30" />
+          <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#2b2c2e" />
         </ReactFlow>
       </div>
     </ContextMenu>

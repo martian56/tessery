@@ -6,7 +6,7 @@ import { ui } from '@/store/uiSlice'
 import { useAddLiveAlertMutation, useDeleteLiveAlertMutation, useEnvLogsQuery, useEnvMetricsQuery, useEnvTraceQuery, useEnvTracesQuery, useLiveAlertsQuery, type TraceSpan } from '@/api/endpoints/runtime'
 import { errorMessage } from '@/api/types'
 import type { AlertRule, SloDef } from '@tessery/core/domain/types'
-import { Badge, Button, Dot, Empty, Input, LineChart, Segmented, Select, Spacer, Sparkline, Switch, TabStrip, Toolbar, NumberInput, toast } from '@/ui'
+import { Badge, Button, Dot, Empty, Input, LineChart, Segmented, Select, Spacer, Sparkline, Switch, TabStrip, Toolbar, NumberInput, toast, Skeleton } from '@/ui'
 import { cpuOf, health, limitOf, memoryOf, useEnvStatus } from './useObserve'
 import s from './Observe.module.css'
 
@@ -251,7 +251,7 @@ function Waterfall({ pid, env, trace, colors }: { pid: string; env: string; trac
   const { data, error } = useEnvTraceQuery({ pid, env, trace })
   const [open, setOpen] = useState<string | null>(null)
   if (error) return <Empty title="Trace not found">{errorMessage(error)}</Empty>
-  if (!data) return <Empty title="Loading…" />
+  if (!data) return <div aria-busy="true" style={{ padding: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>{[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} h={140} r={8} />)}</div>
   const at = (x: TraceSpan) => Date.parse(x.startAt) * 1000 + Number((x.startAt.match(/\.(\d+)/)?.[1] ?? '').padEnd(6, '0').slice(3, 6))
   const t0 = Math.min(...data.map(at))
   const total = Math.max(1, ...data.map((x) => at(x) - t0 + x.durationUs))

@@ -1,6 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Provider } from 'react-redux'
+import '@fontsource-variable/inter/opsz.css'
+import '@fontsource-variable/jetbrains-mono'
 import '@xyflow/react/dist/style.css'
 import '@/styles/global.css'
 import { store } from '@/store'
