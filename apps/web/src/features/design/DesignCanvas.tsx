@@ -175,8 +175,8 @@ function Canvas() {
             snapToGrid snapGrid={[10, 10]} minZoom={0.05} maxZoom={2.5} onlyRenderVisibleElements={doc.nodes.length > 60}
             proOptions={{ hideAttribution: true }} defaultEdgeOptions={{ type: 'tessery' }} connectionLineStyle={{ stroke: 'var(--acc)', strokeWidth: 2 }}
           >
-            <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#323a55" />
-            <MiniMap pannable zoomable className={s.minimap} nodeColor={(n) => CATEGORY_META[TECH_BY_ID[(n.data as CanvasNode['data']).node.techId].category].color} maskColor="#0e101899" />
+            <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#2b2c2e" />
+            <MiniMap pannable zoomable className={s.minimap} nodeColor={(n) => CATEGORY_META[TECH_BY_ID[(n.data as CanvasNode['data']).node.techId].category].color} maskColor="#09090a99" />
           </ReactFlow>
         </div>
       </ContextMenu>

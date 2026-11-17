@@ -1,4 +1,4 @@
-/** Tessery's mark: four mosaic tiles in the brand colour and the three environment colours. */
+/** Tessery's mark: four mosaic tiles in the brand indigo and the three environment colours. */
 export function TesseryMark({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">

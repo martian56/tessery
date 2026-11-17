@@ -10,7 +10,7 @@
 :global(.react-flow__node) { border-radius: var(--r-3); }
 :global(.react-flow__node.selectable:focus-visible) { outline: none; }
 :global(.react-flow__edge-path) { transition: stroke .2s; }
-:global(.react-flow__minimap-mask) { fill: #0e101899; }
+:global(.react-flow__minimap-mask) { fill: #09090a99; }
 :global(.react-flow__attribution) { background: transparent; opacity: .45; }
 :global(.react-flow__attribution a) { color: var(--tx-3); }
 :global(.react-flow__minimap) { bottom: 18px; }

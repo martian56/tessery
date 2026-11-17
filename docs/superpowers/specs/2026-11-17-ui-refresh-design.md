@@ -8,16 +8,16 @@ Tessery's own interface looks dated next to the apps its builder produces. The h
 
 ## Research
 
-The leading platforms converged on the same shape (sources in the PR):
+Developer platforms have converged on the same shape:
 
-- **Navigation:** a persistent left sidebar with the workspace switcher at the top (Vercel 2025, Railway 2026, Render, Coolify 4.3, Dokploy). Linear dims the sidebar so content leads.
-- **Home:** your projects plus what just happened. Vercel pairs project cards with recent previews; Coolify and Dokploy lead with recent deployments; Railway shows each project as a small canvas of its services with one status line, "production · 13/13 services online".
-- **Colour:** chrome stays near-monochrome; colour comes from content (service logos, status dots). Linear: "attention should be earned", fewer icons, softer separators.
+- **Navigation:** a persistent left sidebar with the workspace switcher at the top, kept dimmer than the content so the page leads.
+- **Home:** your projects plus what just happened, with each project shown as a small picture of its services and one plain status line.
+- **Colour:** chrome stays near-monochrome; colour comes from content such as status dots and service icons. Attention is earned: few icons, soft separators.
 - **Status as one plain line** rather than badges.
 
-What Tessery has that none of them do: every project is a design, and every release travels a development → staging → production pipeline with approvals. The home page shows both.
+What Tessery has that general deployment platforms don't: every project is a design, and every release travels a development → staging → production pipeline with approvals. The home page shows both.
 
-## Direction (chosen by the user: sidebar + floating content, Linear style)
+## Direction (chosen by the user: sidebar with the content on a floating panel)
 
 ### Shell, for every page outside the project editor
 
@@ -68,9 +68,9 @@ A `Skeleton` primitive replaces every "Loading…": the app boot shows the shell
 
 ### Colour and type
 
-- Neutrals: graphite with a hint of cool, low chroma. App `#0a0b0e`, panel `#111318`, raised `#171a21`, hover `#1e222b`, lines `#23272f` and `#2e333d`, text `#eceef2`, secondary `#9ba1ad`, faint `#646a76`.
-- Brand orange `#ff7a2e` only for primary actions and focus. Environments: development cyan, staging violet, production green. States: green, amber, red. Node categories keep their vivid hues; they are the colour of the product.
-- Inter with its optical-size axis (display cut at heading sizes, as Linear does), JetBrains Mono for code; both bundled, nothing loaded from Google.
+- Neutrals: untinted greys. App `#09090a`, panel `#121213`, raised `#1b1b1c`, hover `#232425`, lines `#212224` and `#27282a`, text `#e2e3e5`, secondary `#949597`, faint `#6b6f76`.
+- Brand indigo `#5f62e6` only for primary actions, focus and selection (white text on it is 4.8:1). Environments: development cyan, staging violet, production green. States: green, amber, red. Node categories keep their vivid hues; they are the colour of the product.
+- Inter with its optical-size axis (display cut at heading sizes), JetBrains Mono for code; both bundled, nothing loaded from Google.
 - Sentence case everywhere, no tracked capitals.
 
 ## Phases
