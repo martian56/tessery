@@ -3,12 +3,12 @@ import type { components } from '../schema'
 
 type S = components['schemas']
 export type EmailSettings = S['EmailSettingsDto']
-export type SmtpSettings = S['SmtpSettings']
+export type MailSettings = S['MailSettings']
 
 export const emailApi = baseApi.injectEndpoints({
   endpoints: (b) => ({
     emailSettings: b.query<EmailSettings, void>({ query: () => '/admin/email', providesTags: ['AdminSettings'] }),
-    saveEmailSettings: b.mutation<EmailSettings, { settings: SmtpSettings | null; password?: string }>({
+    saveEmailSettings: b.mutation<EmailSettings, { settings: MailSettings | null; password?: string }>({
       query: (body) => ({ url: '/admin/email', method: 'PUT', body }),
       invalidatesTags: ['AdminSettings'],
     }),

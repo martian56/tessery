@@ -1,7 +1,7 @@
 use crate::audit::{self, Entry};
 use crate::auth::{Principal, RequestMeta, password, rate_limit, session};
 use crate::error::{ApiError, ApiResult};
-use crate::mail::{self, SmtpSettings};
+use crate::mail::{self, MailSettings};
 use crate::routes::dto::{OK, Ok};
 use crate::state::AppState;
 use axum::Json;
@@ -19,7 +19,7 @@ use uuid::Uuid;
 #[serde(rename_all = "camelCase")]
 pub struct EmailSettingsDto {
     pub configured: bool,
-    pub settings: Option<SmtpSettings>,
+    pub settings: Option<MailSettings>,
     pub has_password: bool,
 }
 
@@ -34,32 +34,51 @@ pub async fn get_settings(State(state): State<AppState>, p: Principal) -> ApiRes
 #[serde(rename_all = "camelCase")]
 pub struct EmailSettingsInput {
     /// Leave out to turn email off.
-    pub settings: Option<SmtpSettings>,
-    /// Leave out to keep the stored password.
+    pub settings: Option<MailSettings>,
+    /// The SMTP password or the Resend API key. Leave out to keep the stored one.
     pub password: Option<String>,
 }
 
 #[utoipa::path(put, path = "/api/admin/email", tag = "admin", request_body = EmailSettingsInput, responses((status = 200, body = EmailSettingsDto)))]
 pub async fn put_settings(State(state): State<AppState>, p: Principal, Json(req): Json<EmailSettingsInput>) -> ApiResult<Json<EmailSettingsDto>> {
     p.require_instance_admin()?;
-    if let Some(s) = &req.settings {
-        if s.host.trim().is_empty() || s.port == 0 {
-            return Err(ApiError::invalid("settings", "host and port are required"));
-        }
-        if !["starttls", "tls", "none"].contains(&s.security.as_str()) {
-            return Err(ApiError::invalid("security", "use starttls, tls or none"));
+    let before = mail::settings(&state).await?;
+    let mut settings = req.settings;
+    // A secret saved for one provider is no use to the other, so switching providers needs a new one.
+    let switched = matches!((&before, &settings), (Some((old, _)), Some(new)) if old.provider != new.provider);
+    if let Some(s) = &mut settings {
+        if !tessery_notify::PROVIDERS.contains(&s.provider.as_str()) {
+            return Err(ApiError::invalid("provider", "use smtp or resend"));
         }
         if !tessery_notify::valid_sender(&s.from) {
             return Err(ApiError::invalid("from", "use an address like Tessery <tessery@example.com>"));
         }
+        if s.provider == "resend" {
+            let has_key = req.password.as_deref().is_some_and(|k| !k.trim().is_empty()) || (!switched && before.as_ref().is_some_and(|(_, k)| k.is_some()));
+            if !has_key {
+                return Err(ApiError::invalid("password", "paste a Resend API key"));
+            }
+            (s.host, s.port, s.username, s.security) = (String::new(), 0, String::new(), String::new());
+        } else {
+            if s.host.trim().is_empty() || s.port == 0 {
+                return Err(ApiError::invalid("settings", "host and port are required"));
+            }
+            if !["starttls", "tls", "none"].contains(&s.security.as_str()) {
+                return Err(ApiError::invalid("security", "use starttls, tls or none"));
+            }
+        }
     }
-    let cipher = match &req.password {
-        Some(pw) if !pw.is_empty() => Some(state.config.secret_key.as_ref().ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY to store the SMTP password".into()))?.encrypt(pw.as_bytes())),
+    let secret = req.password.as_deref().map(str::trim);
+    let cipher = match secret {
+        Some(pw) if !pw.is_empty() => Some(state.config.secret_key.as_ref().ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY to store the password or API key".into()))?.encrypt(pw.as_bytes())),
         _ => None,
     };
-    let value = req.settings.as_ref().map(|s| serde_json::to_value(s).expect("settings serialize"));
-    tessery_db::settings::set_smtp(&state.db, value.as_ref(), cipher.as_deref(), req.password.is_none() && req.settings.is_some()).await?;
-    audit::record(&state.db, &p, Entry::new(None, "instance.email", "instance", p.user.id).details(json!({ "configured": req.settings.is_some(), "host": req.settings.as_ref().map(|s| s.host.clone()) }))).await?;
+    let keep = secret.is_none() && settings.is_some() && !switched;
+    let value = settings.as_ref().map(|s| serde_json::to_value(s).expect("settings serialize"));
+    tessery_db::settings::set_smtp(&state.db, value.as_ref(), cipher.as_deref(), keep).await?;
+    let provider = settings.as_ref().map(|s| s.provider.clone());
+    let host = settings.as_ref().filter(|s| s.provider == "smtp").map(|s| s.host.clone());
+    audit::record(&state.db, &p, Entry::new(None, "instance.email", "instance", p.user.id).details(json!({ "configured": settings.is_some(), "provider": provider, "host": host }))).await?;
     get_settings(State(state), p).await
 }
 

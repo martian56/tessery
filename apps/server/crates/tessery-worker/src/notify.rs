@@ -1,17 +1,18 @@
 use crate::jobs::Ctx;
 use anyhow::{Result, anyhow};
 use serde_json::Value;
-use tessery_notify::{Delivery, Event, SmtpSettings};
+use tessery_notify::{Delivery, Event, MailSettings};
 use uuid::Uuid;
 
 pub fn env_name(doc: &Value, env: &str) -> String {
     doc["environments"].as_array().into_iter().flatten().find(|e| e["id"] == env).and_then(|e| e["name"].as_str()).unwrap_or(env).to_owned()
 }
 
-async fn smtp(ctx: &Ctx) -> Result<Option<(SmtpSettings, Option<String>)>> {
+async fn smtp(ctx: &Ctx) -> Result<Option<(MailSettings, Option<String>)>> {
     let row = tessery_db::settings::smtp(&ctx.db).await?;
     let Some(raw) = row.smtp else { return Ok(None) };
-    let settings: SmtpSettings = serde_json::from_value(raw)?;
+    let mut settings: MailSettings = serde_json::from_value(raw)?;
+    settings.resend_url = tessery_notify::resend_url_from_env();
     let password = match (row.smtp_password, ctx.secret_key.as_ref()) {
         (Some(cipher), Some(key)) => Some(String::from_utf8(key.decrypt(&cipher)?)?),
         _ => None,

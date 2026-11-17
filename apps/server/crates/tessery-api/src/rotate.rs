@@ -10,7 +10,7 @@ pub const ENCRYPTED: &[(&str, &str, &str)] = &[
     ("integrations", "secret", "provider credentials"),
     ("notification_channels", "target", "notification targets"),
     ("users", "totp_secret", "two-factor secrets"),
-    ("instance_settings", "smtp_password", "the SMTP password"),
+    ("instance_settings", "smtp_password", "the SMTP password or Resend API key"),
 ];
 
 #[derive(Debug, Default, PartialEq, Eq)]

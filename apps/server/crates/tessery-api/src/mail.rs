@@ -1,12 +1,13 @@
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 
-pub use tessery_notify::SmtpSettings;
+pub use tessery_notify::MailSettings;
 
-pub async fn settings(state: &AppState) -> ApiResult<Option<(SmtpSettings, Option<String>)>> {
+pub async fn settings(state: &AppState) -> ApiResult<Option<(MailSettings, Option<String>)>> {
     let row = tessery_db::settings::smtp(&state.db).await?;
     let Some(raw) = row.smtp else { return Ok(None) };
-    let settings: SmtpSettings = serde_json::from_value(raw).map_err(|e| ApiError::Internal(e.into()))?;
+    let mut settings: MailSettings = serde_json::from_value(raw).map_err(|e| ApiError::Internal(e.into()))?;
+    settings.resend_url = state.config.resend_url.clone();
     let password = match (row.smtp_password, state.config.secret_key.as_ref()) {
         (Some(cipher), Some(key)) => Some(String::from_utf8(key.decrypt(&cipher).map_err(|e| ApiError::Internal(e.into()))?).map_err(|e| ApiError::Internal(e.into()))?),
         _ => None,
