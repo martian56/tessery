@@ -10,7 +10,7 @@
 .pageRow:hover { background: var(--bg-3); }
 .pageRow.on { background: var(--acc-lo); box-shadow: inset 2px 0 var(--acc); }
 .route { margin-left: auto; font: var(--fs-10) var(--font-mono); }
-.group { padding: var(--sp-4) var(--sp-5) 2px; color: var(--tx-3); font-size: var(--fs-10); text-transform: uppercase; letter-spacing: .6px; }
+.group { font-weight: 600; padding: var(--sp-4) var(--sp-5) 2px; color: var(--tx-3); font-size: var(--fs-11); }
 .blockItem { margin: 0 var(--sp-3); padding: 5px var(--sp-4); border-radius: var(--r-1); cursor: grab; }
 .blockItem:hover { background: var(--bg-3); }
 

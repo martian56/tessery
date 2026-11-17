@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { envColor } from '@/lib/envColor'
 import { Bell, Plus } from 'lucide-react'
 import clsx from 'clsx'
 import { useAppDispatch, useDoc, useEdit, useUi } from '@/store'
@@ -37,7 +38,7 @@ export function DeploySidebar() {
           const color = stage?.active ? 'var(--info)' : stage?.pending ? 'var(--warn)' : stage?.head ? 'var(--ok)' : 'var(--tx-3)'
           const kind = e.target?.kind ?? 'git'
           return (
-            <button key={e.id} className={clsx(s.env, envId === e.id && s.on)} onClick={() => dispatch(ui.setEnv(e.id))}>
+            <button key={e.id} className={clsx(s.env, envId === e.id && s.on)} style={{ '--env': envColor(e.id) } as React.CSSProperties} onClick={() => dispatch(ui.setEnv(e.id))}>
               <div className={s.envTop}><Dot color={color} pulse={!!stage?.pending || !!stage?.active} /><b>{e.name}</b>{kind === 'git' && <span className={s.cost}>{fmtUsd(projectCost(doc.nodes, e))}</span>}</div>
               <div className={s.envMeta}>
                 {kind === 'git'

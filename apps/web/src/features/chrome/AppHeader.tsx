@@ -1,5 +1,6 @@
 import { Building2, Check, ChevronDown, LogOut, Plus, Settings, Shield, User } from 'lucide-react'
 import clsx from 'clsx'
+import { TesseryMark } from '@/ui/TesseryMark'
 import { useLogoutMutation, useMeQuery } from '@/api/endpoints/identity'
 import { useCreateOrgMutation } from '@/api/endpoints/orgs'
 import { restartSignedOut } from '@/api/base'
@@ -38,7 +39,7 @@ export function AppHeader() {
   return (
     <header className={s.bar}>
       <button className={s.logo} onClick={() => navigate('/')} aria-label="Projects">
-        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 14 L8 2 L14 14" fill="none" stroke="var(--acc)" strokeWidth="2" /><path d="M5 10 H11" stroke="var(--tx-1)" strokeWidth="1.6" /></svg>
+        <TesseryMark size={16} />
         Tessery
       </button>
       <DropdownMenu trigger={<button className={s.org}><Building2 size={13} /><span>{org?.name ?? 'No organization'}</span><ChevronDown size={12} /></button>} items={orgItems} />

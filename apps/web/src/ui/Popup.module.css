@@ -9,20 +9,20 @@
   border-radius: var(--r-1); outline: 0; cursor: default; color: var(--tx-1); font-size: var(--fs-12);
   position: relative;
 }
-.item[data-highlighted] { background: var(--acc); color: var(--tx-inv); }
+.item[data-highlighted] { background: var(--bg-4); color: var(--tx-1); }
 .item[data-disabled] { opacity: .4; }
 .item.danger { color: var(--err); }
 .item.danger[data-highlighted] { background: var(--err); color: var(--tx-inv); }
 .itemIcon { width: 16px; display: inline-flex; justify-content: center; color: var(--tx-2); flex-shrink: 0; }
 .itemIcon svg { width: 14px; height: 14px; }
-.item[data-highlighted] .itemIcon, .item[data-highlighted] .hint, .item[data-highlighted] .shortcut { color: var(--tx-inv); }
+.item[data-highlighted] .itemIcon { color: var(--acc); }
 .itemLabel { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hint { color: var(--tx-3); font-size: var(--fs-11); white-space: nowrap; }
 .shortcut { margin-left: var(--sp-6); color: var(--tx-3); font: var(--fs-11) var(--font-mono); }
 .sep { height: 1px; background: var(--line-1); margin: var(--sp-2) 0; }
-.heading { padding: var(--sp-3) var(--sp-4) var(--sp-1); color: var(--tx-3); font-size: var(--fs-10); text-transform: uppercase; letter-spacing: .6px; }
+.heading { font-weight: 600; padding: var(--sp-3) var(--sp-4) var(--sp-1); color: var(--tx-3); font-size: var(--fs-11); }
 .check { width: 16px; display: inline-flex; justify-content: center; color: var(--acc); }
-.item[data-highlighted] .check { color: var(--tx-inv); }
+.item[data-highlighted] .check { color: var(--acc); }
 .check svg { width: 13px; height: 13px; }
 .subArrow { color: var(--tx-3); display: inline-flex; }
 .subArrow svg { width: 12px; height: 12px; }

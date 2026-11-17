@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { envColor } from '@/lib/envColor'
 import { ArrowRight, Check, ChevronDown, CircleX, Clock, ExternalLink, GitCommitHorizontal, KeyRound, LoaderCircle, Plus, RotateCw, ScrollText, Square, X } from 'lucide-react'
 import clsx from 'clsx'
 import { useCheckpointsQuery, useCreateReleaseMutation, useDecideReleaseMutation, useLazyReleasePreviewQuery, usePipelineQuery, useReleasesQuery, useStopEnvMutation } from '@/api/endpoints/delivery'
@@ -140,7 +141,7 @@ function StageCard({ pid, stage, first, previous, checkpoints, latest, onLog }: 
   const others = first ? checkpoints.filter((c) => c.id !== head?.id && c.id !== stage.candidate?.id) : []
 
   return (
-    <div className={clsx(s.card, selected && s.selected)} onClick={() => dispatch(ui.setEnv(stage.key))}>
+    <div className={clsx(s.card, selected && s.selected)} style={{ '--env': envColor(stage.key) } as React.CSSProperties} onClick={() => dispatch(ui.setEnv(stage.key))}>
       <div className={s.cardHead}>
         <button className={s.cardTitle} aria-pressed={selected} onClick={(e) => { e.stopPropagation(); dispatch(ui.setEnv(stage.key)) }}>{stage.name}</button>
         <Badge mono>{TARGET[stage.target] ?? stage.target}</Badge>

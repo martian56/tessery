@@ -32,6 +32,23 @@ pub struct ProjectSummaryDto {
     pub updated_at: OffsetDateTime,
     /// Environments that run a checkpoint, in no particular order.
     pub running: Vec<RunningDto>,
+    /// The technology of each node, in design order (at most 48), for drawing the project at a glance.
+    pub tech_ids: Vec<String>,
+    /// The newest release of each environment, in no particular order.
+    pub latest: Vec<LatestReleaseDto>,
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LatestReleaseDto {
+    pub id: Uuid,
+    pub env: String,
+    /// pending, queued, deploying, released, rejected, cancelled or failed.
+    pub status: String,
+    pub checkpoint: i32,
+    #[serde(with = "time::serde::rfc3339")]
+    pub at: OffsetDateTime,
+    pub error: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -143,6 +160,17 @@ pub async fn list(
     for r in tessery_db::delivery::running_in_org(&state.db, org).await? {
         running.entry(r.project_id).or_default().push(RunningDto { env: r.env_key, checkpoint: r.checkpoint_seq });
     }
+    let mut latest: std::collections::HashMap<Uuid, Vec<LatestReleaseDto>> = std::collections::HashMap::new();
+    for r in tessery_db::delivery::latest_in_org(&state.db, org).await? {
+        latest.entry(r.project_id).or_default().push(LatestReleaseDto {
+            id: r.id,
+            env: r.env_key,
+            status: r.status,
+            checkpoint: r.checkpoint_seq,
+            at: r.requested_at,
+            error: r.error.map(|e| e.chars().take(300).collect()),
+        });
+    }
     Ok(Json(
         rows.into_iter()
             .filter(|r| {
@@ -170,6 +198,8 @@ pub async fn list(
                 version: r.version,
                 updated_at: r.updated_at,
                 running: running.remove(&r.id).unwrap_or_default(),
+                tech_ids: r.tech_ids,
+                latest: latest.remove(&r.id).unwrap_or_default(),
             })
             .collect(),
     ))

@@ -61,6 +61,6 @@
 .typeEdit { padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-5); overflow: auto; }
 .typeHead { display: grid; grid-template-columns: 1fr 120px auto; gap: var(--sp-4); }
 .fieldGrid { display: grid; grid-template-columns: 1fr 1fr 60px 40px 24px; gap: var(--sp-3) var(--sp-4); align-items: center; }
-.fieldGrid > span { color: var(--tx-3); font-size: var(--fs-10); text-transform: uppercase; letter-spacing: .5px; }
+.fieldGrid > span { font-weight: 600; color: var(--tx-3); font-size: var(--fs-11); }
 .fieldRow { display: contents; }
 .contract { min-height: 100%; }

@@ -6,6 +6,7 @@ body {
   background: var(--bg-0);
   color: var(--tx-1);
   font: var(--fs-12)/1.45 var(--font-ui);
+  font-feature-settings: 'cv11', 'ss01';
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
   user-select: none;

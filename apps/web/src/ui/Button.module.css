@@ -22,7 +22,7 @@
 .subtle { background: var(--bg-2); border-color: var(--line-1); color: var(--tx-2); }
 .subtle:hover:not(:disabled) { color: var(--tx-1); }
 .danger:hover:not(:disabled) { background: var(--err); border-color: var(--err); color: var(--tx-inv); }
-.active, .active:hover:not(:disabled) { background: var(--acc); border-color: var(--acc); color: var(--tx-inv); }
+.active, .active:hover:not(:disabled) { background: var(--acc-lo); border-color: var(--acc-ring); color: var(--acc-hi); }
 .ghost.active { background: var(--bg-4); color: var(--tx-1); border-color: transparent; }
 .icon { display: inline-flex; }
 .icon svg { width: 14px; height: 14px; }

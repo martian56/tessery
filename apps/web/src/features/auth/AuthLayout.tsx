@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react'
 import s from './Auth.module.css'
+import { TesseryMark } from '@/ui/TesseryMark'
 
 export function AuthLayout({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   return (
     <div className={s.page}>
       <div className={s.card}>
         <div className={s.brand}>
-          <svg width="22" height="22" viewBox="0 0 16 16"><path d="M2 14 L8 2 L14 14" fill="none" stroke="var(--acc)" strokeWidth="2" /><path d="M5 10 H11" stroke="var(--tx-1)" strokeWidth="1.6" /></svg>
+          <TesseryMark size={22} />
           Tessery
         </div>
         <h1 className={s.title}>{title}</h1>

@@ -2,9 +2,9 @@
 .board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); gap: var(--sp-5); overflow-x: auto; padding-bottom: 2px; }
 .column { position: relative; display: flex; }
 .arrow { position: absolute; left: calc(-1 * var(--sp-5) + 1px); top: 22px; color: var(--tx-3); }
-.card { flex: 1; display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-5); border: 1px solid var(--line-2); border-radius: var(--r-3); background: var(--bg-1); cursor: pointer; min-width: 0; }
+.card { flex: 1; display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-5); border: 1px solid var(--line-2); border-top: 3px solid var(--env, var(--line-2)); border-radius: var(--r-3); background: var(--bg-1); cursor: pointer; min-width: 0; }
 .card:hover { border-color: var(--line-3); }
-.card.selected { border-color: var(--acc); }
+.card.selected { border-color: var(--line-3); border-top-color: var(--env, var(--acc)); background: color-mix(in srgb, var(--env, var(--acc)) 6%, var(--bg-1)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--env, var(--acc)) 45%, transparent); }
 .cardHead { display: flex; align-items: center; gap: var(--sp-3); }
 .cardTitle { flex: 1; text-align: left; font-weight: 600; }
 .cardTitle:hover { color: var(--acc); }
