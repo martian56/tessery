@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { envColor } from '@/lib/envColor'
 import { ArrowRight, Check, ChevronDown, CircleX, Clock, ExternalLink, GitCommitHorizontal, KeyRound, LoaderCircle, Plus, RotateCw, ScrollText, Square, X } from 'lucide-react'
 import clsx from 'clsx'
 import { useCheckpointsQuery, useCreateReleaseMutation, useDecideReleaseMutation, useLazyReleasePreviewQuery, usePipelineQuery, useReleasesQuery, useStopEnvMutation } from '@/api/endpoints/delivery'
@@ -35,7 +36,8 @@ export function PipelineBoard() {
     window.history.replaceState(null, '', url.pathname + url.search + url.hash)
     if (!r) return toast('That release is no longer in the history', 'err')
     dispatch(ui.setEnv(r.env))
-    setLog(r)
+    // A release waiting for approval has no log yet; the pipeline card with its approve button is what to show.
+    if (r.status !== 'pending') setLog(r)
   }, [releases, dispatch])
   const busy = !!data?.stages.some((st) => st.active)
   if (busy !== fast) setFast(busy)
@@ -140,7 +142,7 @@ function StageCard({ pid, stage, first, previous, checkpoints, latest, onLog }: 
   const others = first ? checkpoints.filter((c) => c.id !== head?.id && c.id !== stage.candidate?.id) : []
 
   return (
-    <div className={clsx(s.card, selected && s.selected)} onClick={() => dispatch(ui.setEnv(stage.key))}>
+    <div className={clsx(s.card, selected && s.selected)} style={{ '--env': envColor(stage.key) } as React.CSSProperties} onClick={() => dispatch(ui.setEnv(stage.key))}>
       <div className={s.cardHead}>
         <button className={s.cardTitle} aria-pressed={selected} onClick={(e) => { e.stopPropagation(); dispatch(ui.setEnv(stage.key)) }}>{stage.name}</button>
         <Badge mono>{TARGET[stage.target] ?? stage.target}</Badge>

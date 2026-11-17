@@ -1,28 +1,30 @@
-.shell { height: 100%; display: flex; flex-direction: column; background: var(--bg-0); }
-.body { flex: 1; min-height: 0; display: flex; }
-.side { width: 220px; flex-shrink: 0; border-right: 1px solid var(--line-1); background: var(--bg-1); padding: var(--sp-6) var(--sp-4); display: flex; flex-direction: column; gap: 2px; overflow: auto; }
-.sideTitle { font-size: var(--fs-11); text-transform: uppercase; letter-spacing: .8px; color: var(--tx-3); font-weight: 600; padding: 0 var(--sp-4) var(--sp-4); }
-.navItem { display: flex; align-items: center; gap: var(--sp-4); height: 30px; padding: 0 var(--sp-4); border-radius: var(--r-2); color: var(--tx-2); text-align: left; }
-.navItem svg { width: 14px; height: 14px; color: var(--tx-3); }
-.navItem:hover { background: var(--bg-2); color: var(--tx-1); }
-.navItem.on { background: var(--bg-3); color: var(--tx-1); }
-.navItem.on svg { color: var(--acc); }
-.main { flex: 1; min-width: 0; overflow: auto; }
-.content { max-width: 1040px; margin: 0 auto; padding: var(--sp-7); display: flex; flex-direction: column; gap: var(--sp-7); }
+.content { width: 100%; max-width: 960px; margin: 0 auto; padding: 64px 56px 72px; display: flex; flex-direction: column; gap: 32px; }
 .titleRow { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-6); }
-.h1 { font-size: 18px; font-weight: 650; }
-.desc { color: var(--tx-3); margin-top: var(--sp-3); line-height: 1.5; max-width: 640px; }
-.actions { display: flex; gap: var(--sp-3); flex-shrink: 0; }
-.card { border: 1px solid var(--line-2); border-radius: var(--r-3); background: var(--bg-1); }
-.cardHead { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-5) var(--sp-6); border-bottom: 1px solid var(--line-1); }
-.cardHead h2 { font-size: var(--fs-13); font-weight: 600; }
-.cardBody { padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-5); }
-.tableWrap { border: 1px solid var(--line-2); border-radius: var(--r-3); overflow: auto; background: var(--bg-1); }
-.table { width: 100%; border-collapse: collapse; }
-.table th { text-align: left; font-weight: 600; font-size: var(--fs-11); text-transform: uppercase; letter-spacing: .6px; color: var(--tx-3); padding: var(--sp-4) var(--sp-5); border-bottom: 1px solid var(--line-2); background: var(--bg-1); white-space: nowrap; }
-.table td { padding: var(--sp-4) var(--sp-5); border-bottom: 1px solid var(--line-1); vertical-align: middle; }
-.table tr:last-child td { border-bottom: 0; }
-.table tbody tr:hover td { background: var(--bg-2); }
-.emptyCell { text-align: center; color: var(--tx-3); padding: var(--sp-7) !important; }
-.muted { color: var(--tx-3); }
-.mono { font-family: var(--font-mono); font-size: var(--fs-11); }
+.h1 { font: 500 24px/32px var(--font-display); letter-spacing: -.16px; color: #fff; }
+.desc { color: var(--tx-2); margin-top: 6px; line-height: 1.55; max-width: 640px; font-size: var(--fs-13); }
+.actions { display: flex; gap: var(--sp-4); flex-shrink: 0; padding-top: 2px; }
+
+/* A section: a quiet title, then its rows on a soft card. */
+.card { border-radius: var(--r-4); background: var(--bg-card); box-shadow: var(--shadow-card); }
+.cardHead { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); padding: 14px 16px; border-bottom: 1px solid var(--line-1); }
+.cardHead h2 { font-size: var(--fs-13); font-weight: 500; color: var(--tx-1); }
+.cardBody { padding: 16px; display: flex; flex-direction: column; gap: 14px; font-size: var(--fs-13); }
+
+/* Tables sit on the page without a box; rows are separated by space, not lines. */
+.tableWrap { overflow: auto; margin: 0 -8px; }
+.table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-13); }
+.table th { text-align: left; font-weight: 450; font-size: var(--fs-12); color: var(--tx-2); padding: 8px; white-space: nowrap; }
+.table td { padding: 12px 8px; vertical-align: middle; color: var(--tx-1); }
+.table tbody tr td:first-child { border-radius: var(--r-3) 0 0 var(--r-3); }
+.table tbody tr td:last-child { border-radius: 0 var(--r-3) var(--r-3) 0; }
+.table tbody tr:hover td { background: var(--bg-band); }
+.emptyCell { text-align: center; color: var(--tx-2); padding: 32px 8px !important; }
+.muted { color: var(--tx-2); }
+.mono { font-family: var(--font-mono); font-size: var(--fs-12); }
+.skeleton { display: flex; flex-direction: column; gap: var(--sp-5); }
+.skeletonRows { display: flex; flex-direction: column; gap: var(--sp-3); margin-top: var(--sp-5); }
+
+@media (max-width: 720px) {
+  .content { padding: 32px 20px 48px; }
+  .titleRow { flex-direction: column; }
+}

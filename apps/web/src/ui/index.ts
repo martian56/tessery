@@ -1,4 +1,5 @@
 export * from './Button'
+export * from './Skeleton'
 export * from './Input'
 export * from './Select'
 export * from './Menu'

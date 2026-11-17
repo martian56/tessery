@@ -1,43 +1,60 @@
+/* Tessery's interface tokens. The chrome is neutral grey with no tint, so content carries the colour: node
+   categories match the canvas, each environment keeps one hue wherever it appears, and status uses green, amber and
+   red. Indigo is the brand, used sparingly: primary buttons, focus and selection. */
 :root {
-  --bg-0: #131315;
-  --bg-1: #1a1a1d;
-  --bg-2: #212125;
-  --bg-3: #29292e;
-  --bg-4: #323238;
-  --bg-5: #3c3c43;
-  --line-1: #2b2b31;
-  --line-2: #393941;
-  --line-3: #4a4a53;
+  /* Behind everything: the sidebar sits here, and content floats above it. */
+  --bg-app: #09090a;
+  --bg-0: #0e0e0f;
+  --bg-1: #121213;
+  --bg-2: #1b1c1d;
+  --bg-3: #232325;
+  --bg-4: #29292b;
+  --bg-5: #34353a;
+  /* Card and band fills used on settings pages and grouped lists. */
+  --bg-card: #1a1a1b;
+  --bg-band: #161617;
+  --line-panel: #1a1b1d;
+  --line-1: #1f2022;
+  --line-2: #28282b;
+  --line-3: #2f3033;
 
-  --tx-1: #e2e2e7;
-  --tx-2: #a2a2ac;
-  --tx-3: #6c6c76;
+  --tx-1: #e3e4e6;
+  --tx-2: #959597;
+  --tx-3: #6b6f76;
+  /* Text on the brand and danger colours. */
   --tx-inv: #ffffff;
 
-  --acc: #e8833a;
-  --acc-hi: #f29a55;
-  --acc-lo: #e8833a26;
-  --acc-ring: #e8833a66;
+  --acc: #5f62e6;
+  --acc-hi: #8b8ef5;
+  --acc-lo: #5f62e626;
+  --acc-ring: #7c7ff080;
 
-  --ok: #4fb57a;
-  --warn: #d6a23a;
-  --err: #e05a55;
-  --info: #5b8def;
+  --ok: #3ecf8e;
+  --warn: #f5b84a;
+  --err: #f2555a;
+  --info: #5b9cff;
 
-  --c-compute: #5b8def;
-  --c-data: #4fb57a;
-  --c-cache: #e05a55;
-  --c-messaging: #d6a23a;
-  --c-network: #a374db;
-  --c-client: #3fb3c4;
-  --c-external: #8a8a94;
-  --c-ai: #e06aa8;
-  --c-observability: #d98b4e;
-  --c-security: #c4c46a;
-  --c-storage: #45a39a;
+  /* Environments, by role in the pipeline. */
+  --env-dev: #38c7e0;
+  --env-staging: #a08cff;
+  --env-prod: #3ecf8e;
+  --env-other: #8b92a0;
 
-  --font-ui: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'SF Mono', Consolas, monospace;
+  --c-compute: #5b9cff;
+  --c-data: #3ecf8e;
+  --c-cache: #f2555a;
+  --c-messaging: #f5b84a;
+  --c-network: #ad8bff;
+  --c-client: #38c7e0;
+  --c-external: #8b92a0;
+  --c-ai: #f472b6;
+  --c-observability: #fb923c;
+  --c-security: #cddc5a;
+  --c-storage: #2dd4bf;
+
+  --font-ui: 'Inter Variable', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-ui);
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Cascadia Code', 'SF Mono', Consolas, monospace;
   --fs-10: 10px;
   --fs-11: 11px;
   --fs-12: 12px;
@@ -45,13 +62,17 @@
   --fs-14: 14px;
   --fs-16: 16px;
   --fs-20: 20px;
+  --fs-28: 28px;
 
-  --r-1: 3px;
-  --r-2: 4px;
-  --r-3: 6px;
+  --r-1: 4px;
+  --r-2: 6px;
+  --r-3: 8px;
+  --r-4: 10px;
+  --r-5: 12px;
+  --r-pill: 9999px;
   --h-xs: 20px;
-  --h-sm: 24px;
-  --h-md: 28px;
+  --h-sm: 26px;
+  --h-md: 32px;
   --h-lg: 32px;
   --sp-1: 2px;
   --sp-2: 4px;
@@ -60,9 +81,13 @@
   --sp-5: 12px;
   --sp-6: 16px;
   --sp-7: 24px;
+  --sp-8: 32px;
 
-  --shadow-pop: 0 10px 30px #000a, 0 0 0 1px var(--line-2);
-  --shadow-node: 0 2px 10px #0007;
+  --shadow-pop: 0 12px 32px #000000b3, 0 0 0 1px var(--line-2);
+  --shadow-node: 0 2px 12px #00000080;
+  --shadow-panel: 0 0 0 1px var(--line-panel), 0 .5px 1px 1px #0000004d;
+  --shadow-card: 0 0 0 1px #ffffff0c, 0 .5px 1px 1px #0000004d;
+  --shadow-btn: 0 .5px 1px 1px #0000004d;
   --ease: cubic-bezier(.2, .7, .2, 1);
   --z-modal: 200;
   --z-pop: 250;

@@ -15,7 +15,7 @@
 .item:active { cursor: grabbing; }
 .glyph { width: 34px; font: 600 9.5px var(--font-mono); flex-shrink: 0; }
 .label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
-.group { padding: var(--sp-4) var(--sp-5) 2px; color: var(--tx-3); font-size: var(--fs-10); text-transform: uppercase; letter-spacing: .6px; }
+.group { font-weight: 600; padding: var(--sp-4) var(--sp-5) 2px; color: var(--tx-3); font-size: var(--fs-11); }
 .row { display: flex; align-items: center; gap: var(--sp-4); width: 100%; height: 24px; padding: 0 var(--sp-5); }
 .row:hover { background: var(--bg-3); }
 .row.sel { background: var(--acc-lo); box-shadow: inset 2px 0 var(--acc); }

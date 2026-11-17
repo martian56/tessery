@@ -3,7 +3,7 @@ import { Download, FileDown, RotateCw } from 'lucide-react'
 import { useAuditLogQuery, useCreateExportMutation, useGetExportQuery, type AuditFilter } from '@/api/endpoints/orgs'
 import { errorMessage, type AuditEvent, type AuditResult } from '@/api/types'
 import { API_URL } from '@/config/env'
-import { Badge, Button, Field, Input, Select, toast, type Tone } from '@/ui'
+import { Badge, Button, Field, Input, Select, Skeleton, toast, type Tone } from '@/ui'
 import { Card, PageTitle, Table, mono, muted } from '@/features/chrome/PageLayout'
 import s from './Settings.module.css'
 
@@ -52,7 +52,7 @@ export function AuditSection({ org }: { org: string }) {
 
 function AuditPageRows({ org, filter, before, last, onMore }: { org: string; filter: AuditFilter; before?: number; last: boolean; onMore: (cursor: number) => void }) {
   const { data, isFetching, refetch } = useAuditLogQuery({ org, before, limit: PAGE, ...filter })
-  if (!data) return isFetching ? <tr><td colSpan={6} className={muted}>Loading…</td></tr> : null
+  if (!data) return isFetching ? <>{[0, 1, 2, 3].map((r) => <tr key={r}>{[0, 1, 2, 3, 4, 5].map((c) => <td key={c}><Skeleton h={12} w={c === 0 ? 90 : '60%'} /></td>)}</tr>)}</> : null
   return (
     <>
       {data.events.map((e) => <EventRow key={e.id} e={e} />)}

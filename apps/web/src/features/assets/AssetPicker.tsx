@@ -3,7 +3,7 @@ import { ImagePlus, Trash2, Upload } from 'lucide-react'
 import { assetsApi, uploadAsset, useAssetsQuery, useDeleteAssetMutation, type Asset } from '@/api/endpoints/assets'
 import { errorMessage } from '@/api/types'
 import { useAppDispatch } from '@/store'
-import { Button, Dialog, toast } from '@/ui'
+import { Button, Dialog, toast, Skeleton } from '@/ui'
 import s from './AssetPicker.module.css'
 
 const size = (b: number) => (b > 1024 ** 2 ? `${(b / 1024 ** 2).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`)
@@ -41,7 +41,7 @@ export function AssetPicker({ pid, open, onClose, onPick, accept = 'image' }: { 
       footer={<><input ref={input} type="file" multiple hidden accept={accept === 'image' ? 'image/*' : accept === 'video' ? 'video/mp4' : accept === 'font' ? '.woff,.woff2' : undefined} onChange={(e) => { upload(e.target.files); e.target.value = '' }} />
         <Button icon={<Upload />} disabled={busy} onClick={() => input.current?.click()}>{busy ? 'Uploading…' : 'Upload'}</Button><Button onClick={onClose}>Close</Button></>}>
       <div className={s.drop} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); upload(e.dataTransfer.files) }}>
-        {isLoading && <p className={s.hint}>Loading…</p>}
+        {isLoading && <div aria-busy="true" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={72} r={6} />)}</div>}
         {error && <p className={s.hint}>{errorMessage(error)}</p>}
         {data && !list.length && <div className={s.empty}><ImagePlus size={20} /><span>Drop files here or press Upload.</span></div>}
         <div className={s.grid}>

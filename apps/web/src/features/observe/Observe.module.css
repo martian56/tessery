@@ -17,7 +17,7 @@
 .kpis b { font: 600 22px var(--font-mono); letter-spacing: -.5px; }
 .bad, .kpis b.bad { color: var(--err); }
 .table { width: 100%; border-collapse: collapse; }
-.table th { text-align: left; font-weight: 600; color: var(--tx-3); font-size: var(--fs-10); text-transform: uppercase; letter-spacing: .6px; padding: 6px 10px; border-bottom: 1px solid var(--line-1); }
+.table th { text-align: left; font-weight: 600; color: var(--tx-3); font-size: var(--fs-11); padding: 6px 10px; border-bottom: 1px solid var(--line-1); }
 .table td { padding: 5px 10px; border-bottom: 1px solid var(--line-1); }
 .table tbody tr { cursor: pointer; }
 .table tbody tr:hover td { background: var(--bg-1); }

@@ -1,4 +1,4 @@
-import { Building2, Github, Mail, SlidersHorizontal, Users } from 'lucide-react'
+import { ADMIN_SECTIONS } from '@/features/chrome/nav'
 import { useAdminOrgsQuery, useAdminSettingsQuery, useAdminUpdateUserMutation, useAdminUsersQuery, useMeQuery, usePutAdminSettingsMutation } from '@/api/endpoints/identity'
 import { errorMessage } from '@/api/types'
 import { setCurrentOrg } from '@/app/currentOrg'
@@ -9,13 +9,7 @@ import { timeAgo } from '@/lib/format'
 import { EmailView } from './EmailView'
 import { GithubView } from './GithubView'
 
-const NAV = [
-  { id: 'users', label: 'Users', icon: <Users /> },
-  { id: 'orgs', label: 'Organizations', icon: <Building2 /> },
-  { id: 'email', label: 'Email', icon: <Mail /> },
-  { id: 'github', label: 'GitHub', icon: <Github /> },
-  { id: 'settings', label: 'Instance settings', icon: <SlidersHorizontal /> },
-]
+const NAV = ADMIN_SECTIONS
 
 export function AdminPage({ section }: { section: string }) {
   const { data: me } = useMeQuery()
@@ -45,7 +39,7 @@ function UsersView({ meId }: { meId: string }) {
   return (
     <>
       <PageTitle title="Users" description="Every account on this installation. Accounts are created when an organization adds a member with a new email." />
-      <Table head={['Name', 'Email', 'Last sign-in', 'Instance admin', 'Active']}>
+      <Table loading={!users} head={['Name', 'Email', 'Last sign-in', 'Instance admin', 'Active']}>
         {(users ?? []).map((u) => (
           <tr key={u.id}>
             <td>{u.name} {u.id === meId && <Badge>you</Badge>}</td>
@@ -65,7 +59,7 @@ function OrgsView() {
   return (
     <>
       <PageTitle title="Organizations" description="All organizations on this installation. As an instance administrator you can open any of them, even without being a member." />
-      <Table head={['Name', 'Slug', 'Created', '']}>
+      <Table loading={!orgs} head={['Name', 'Slug', 'Created', '']}>
         {(orgs ?? []).map((o) => (
           <tr key={o.id}>
             <td>{o.name}</td>

@@ -30,7 +30,7 @@ export function TeamsSection({ org, perms }: { org: string; perms: Perms }) {
     <>
       <PageTitle title="Teams" description="Teams group people and own projects. Access granted at team scope applies to every project the team owns."
         actions={perms.can('team:manage') && <Button variant="primary" icon={<Plus />} onClick={newTeam}>New team</Button>} />
-      <Table head={['Team', 'Slug', 'Members', 'Created']} empty="No teams yet">
+      <Table loading={!teams} head={['Team', 'Slug', 'Members', 'Created']} empty="No teams yet">
         {(teams ?? []).map((t) => (
           <tr key={t.id} style={{ cursor: 'pointer' }} onClick={() => setOpen(t.id)}>
             <td><b>{t.name}</b>{t.description && <div className={muted}>{t.description}</div>}</td>
@@ -91,7 +91,7 @@ function TeamDetailView({ org, team, perms, onBack }: { org: string; team: strin
           )}
         </Card>
       )}
-      <Table head={['Name', 'Email', 'Added', '']} empty="This team has no members">
+      <Table loading={!data} head={['Name', 'Email', 'Added', '']} empty="This team has no members">
         {data.members.map((m) => (
           <tr key={m.userId}>
             <td>{m.name}</td>

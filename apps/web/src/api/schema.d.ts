@@ -2017,6 +2017,18 @@ export interface components {
             fields?: Record<string, never> | null;
             name?: string | null;
         };
+        LatestReleaseDto: {
+            /** Format: date-time */
+            at: string;
+            /** Format: int32 */
+            checkpoint: number;
+            env: string;
+            error?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** @description pending, queued, deploying, released, rejected, cancelled or failed. */
+            status: string;
+        };
         LinkInput: {
             /** @description `owner/name`, from the repository list. */
             repo: string;
@@ -2170,9 +2182,13 @@ export interface components {
         };
         ProjectSummaryDto: {
             description: string;
+            /** @description The design's environment keys, in pipeline order. */
+            envKeys: string[];
             icon: string;
             /** Format: uuid */
             id: string;
+            /** @description The newest release of each environment, in no particular order. */
+            latest: components["schemas"]["LatestReleaseDto"][];
             name: string;
             /** Format: int32 */
             nodes: number;
@@ -2183,6 +2199,8 @@ export interface components {
             slug: string;
             /** Format: uuid */
             teamId?: string | null;
+            /** @description The technology of each node, in design order (at most 48), for drawing the project at a glance. */
+            techIds: string[];
             /** Format: date-time */
             updatedAt: string;
             /** Format: int32 */

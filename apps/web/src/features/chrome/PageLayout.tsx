@@ -1,26 +1,27 @@
 import type { ReactNode } from 'react'
-import clsx from 'clsx'
-import { navigate } from '@/app/router'
-import { AppHeader } from './AppHeader'
+import { Skeleton } from '@/ui'
+import { AppShell } from './AppShell'
+import type { NavItem } from './nav'
 import s from './PageLayout.module.css'
 
-export interface NavItem { id: string; label: string; icon?: ReactNode }
+export type { NavItem }
 
-export function PageLayout({ title, nav, active, base, children }: { title: string; nav: NavItem[]; active: string; base: string; children: ReactNode }) {
+/** A settings-style page in the app shell. Its sections are reached from the sidebar, so `nav` only names them. */
+export function PageLayout({ children, busy }: { title: string; nav: NavItem[]; active: string; base: string; children: ReactNode; busy?: boolean }) {
   return (
-    <div className={s.shell}>
-      <AppHeader />
-      <div className={s.body}>
-        <aside className={s.side}>
-          <div className={s.sideTitle}>{title}</div>
-          {nav.map((n) => (
-            <button key={n.id} className={clsx(s.navItem, active === n.id && s.on)} onClick={() => navigate(`${base}/${n.id}`)}>
-              {n.icon}{n.label}
-            </button>
-          ))}
-        </aside>
-        <main className={s.main}><div className={s.content}>{children}</div></main>
-      </div>
+    <AppShell busy={busy}>
+      <div className={s.content}>{children}</div>
+    </AppShell>
+  )
+}
+
+/** The shape of a page while it loads: a title, a line of description and a block of content. */
+export function PageSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className={s.skeleton} aria-busy="true" aria-label="Loading">
+      <Skeleton h={22} w={180} />
+      <Skeleton h={12} w="min(520px, 80%)" />
+      <div className={s.skeletonRows}>{Array.from({ length: rows }, (_, i) => <Skeleton key={i} h={40} r={8} />)}</div>
     </div>
   )
 }
@@ -46,13 +47,15 @@ export function Card({ title, children, actions }: { title?: string; children: R
   )
 }
 
-export function Table({ head, children, empty }: { head: ReactNode[]; children: ReactNode; empty?: ReactNode }) {
+export function Table({ head, children, empty, loading }: { head: ReactNode[]; children: ReactNode; empty?: ReactNode; loading?: boolean }) {
   const hasRows = Array.isArray(children) ? children.length > 0 : !!children
   return (
-    <div className={s.tableWrap}>
+    <div className={s.tableWrap} aria-busy={loading || undefined}>
       <table className={s.table}>
         <thead><tr>{head.map((h, i) => <th key={i}>{h}</th>)}</tr></thead>
-        <tbody>{hasRows ? children : <tr><td colSpan={head.length} className={s.emptyCell}>{empty ?? 'Nothing here yet'}</td></tr>}</tbody>
+        <tbody>{loading && !hasRows
+          ? [0, 1, 2].map((r) => <tr key={r}>{head.map((_, i) => <td key={i}><Skeleton h={12} w={i === 0 ? '70%' : i === head.length - 1 ? 24 : '55%'} /></td>)}</tr>)
+          : hasRows ? children : <tr><td colSpan={head.length} className={s.emptyCell}>{empty ?? 'Nothing here yet'}</td></tr>}</tbody>
       </table>
     </div>
   )

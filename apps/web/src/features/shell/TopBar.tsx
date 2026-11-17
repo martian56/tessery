@@ -1,5 +1,7 @@
 import { Activity, Lock, Rocket } from 'lucide-react'
 import { SaveState } from './SaveState'
+import { envColor } from '@/lib/envColor'
+import { TesseryMark } from '@/ui/TesseryMark'
 import { useAppDispatch, useAppSelector, useDoc, useUi } from '@/store'
 import { useProjectPermissions } from '@/app/useProjectPermissions'
 import { ui } from '@/store/uiSlice'
@@ -32,7 +34,7 @@ export function TopBar() {
   return (
     <header className={s.bar}>
       <button className={s.logo} onClick={() => navigate('/')} aria-label="All projects">
-        <svg width="15" height="15" viewBox="0 0 16 16"><path d="M2 14 L8 2 L14 14" fill="none" stroke="var(--acc)" strokeWidth="2" /><path d="M5 10 H11" stroke="var(--tx-1)" strokeWidth="1.6" /></svg>
+        <TesseryMark size={15} />
         <span>{doc.name}</span>
       </button>
       <MenuBar menus={menus} />
@@ -58,7 +60,7 @@ export function TopBar() {
           <Button size="sm" variant={live.on ? 'danger' : 'default'} className={live.on ? s.liveOn : undefined} icon={<Activity />} onClick={() => dispatch(ui.setLive({ on: !live.on }))}>{live.on ? 'Live' : 'Simulate'}</Button>
         </Tooltip>
         <div className={s.env}>
-          <Select aria-label="Environment" value={envId} onChange={(v) => dispatch(ui.setEnv(v))} options={doc.environments.map((e) => ({ value: e.id, label: e.name }))} />
+          <Select aria-label="Environment" value={envId} onChange={(v) => dispatch(ui.setEnv(v))} options={doc.environments.map((e) => ({ value: e.id, label: e.name, icon: <span className={s.envDot} style={{ background: envColor(e.id) }} aria-hidden="true" /> }))} />
         </div>
         <Tooltip content={canDeploy ? 'Deploy the selected environment' : 'You are not allowed to deploy to this environment'}><span><Button size="sm" variant="primary" icon={<Rocket />} disabled={!canDeploy} onClick={deploy.run}>Deploy</Button></span></Tooltip>
       </div>
