@@ -45,12 +45,14 @@ pub async fn smtp(ex: impl PgExecutor<'_>) -> DbResult<Smtp> {
     Ok(sqlx::query_as!(Smtp, "SELECT smtp, smtp_password FROM instance_settings").fetch_one(ex).await?)
 }
 
-pub async fn set_smtp(ex: impl PgExecutor<'_>, smtp: Option<&serde_json::Value>, password: Option<&[u8]>, keep_password: bool) -> DbResult<()> {
+/// Saves the email settings. With `keep_for` set to a provider, the stored secret stays only if the stored settings
+/// are for that same provider; settings saved before providers existed count as `smtp`.
+pub async fn set_smtp(ex: impl PgExecutor<'_>, smtp: Option<&serde_json::Value>, password: Option<&[u8]>, keep_for: Option<&str>) -> DbResult<()> {
     sqlx::query!(
-        "UPDATE instance_settings SET smtp = $1, smtp_password = CASE WHEN $3 THEN smtp_password ELSE $2 END",
+        "UPDATE instance_settings SET smtp = $1, smtp_password = CASE WHEN $3::text IS NOT NULL AND coalesce(smtp->>'provider', 'smtp') = $3 THEN smtp_password ELSE $2 END",
         smtp,
         password,
-        keep_password
+        keep_for
     )
     .execute(ex)
     .await?;
