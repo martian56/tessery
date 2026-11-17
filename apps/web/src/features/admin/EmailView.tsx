@@ -37,7 +37,7 @@ export function EmailView() {
   const turnOff = async () => {
     const r = await save({ settings: null })
     if ('error' in r) toast(errorMessage(r.error), 'err')
-    else { setForm(EMPTY); toast('Email turned off', 'ok') }
+    else { setForm(EMPTY); setSecret(''); toast('Email turned off', 'ok') }
   }
   const sendTest = async () => {
     const r = await test({ to })

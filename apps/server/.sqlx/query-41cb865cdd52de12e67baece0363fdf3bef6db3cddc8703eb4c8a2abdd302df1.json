@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE instance_settings SET smtp = $1, smtp_password = CASE WHEN $3::text IS NOT NULL AND coalesce(smtp->>'provider', 'smtp') = $3 THEN smtp_password ELSE $2 END",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Jsonb",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "41cb865cdd52de12e67baece0363fdf3bef6db3cddc8703eb4c8a2abdd302df1"
+}

@@ -147,6 +147,10 @@ async fn sends_through_resend_with_a_saved_api_key() {
     assert_eq!(admin.post("/api/admin/email/test", json!({ "to": "admin@example.com" })).await.status(), StatusCode::OK);
     assert_eq!(sent.lock().unwrap().last().unwrap().1["from"], "Ops <ops@example.com>");
 
+    let blank = admin.put("/api/admin/email", json!({ "settings": resend, "password": "  " })).await;
+    assert_eq!(blank.status(), StatusCode::UNPROCESSABLE_ENTITY, "a blank key is refused rather than wiping the saved one");
+    assert_eq!(admin.json("/api/admin/email").await["hasPassword"], true);
+
     let wrong = admin.put("/api/admin/email", json!({ "settings": resend, "password": "re_wrong" })).await;
     assert_eq!(wrong.status(), StatusCode::OK);
     let refused = admin.post("/api/admin/email/test", json!({ "to": "admin@example.com" })).await;

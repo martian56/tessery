@@ -54,7 +54,10 @@ pub async fn put_settings(State(state): State<AppState>, p: Principal, Json(req)
             return Err(ApiError::invalid("from", "use an address like Tessery <tessery@example.com>"));
         }
         if s.provider == "resend" {
-            let has_key = req.password.as_deref().is_some_and(|k| !k.trim().is_empty()) || (!switched && before.as_ref().is_some_and(|(_, k)| k.is_some()));
+            let has_key = match req.password.as_deref() {
+                Some(k) => !k.trim().is_empty(),
+                None => !switched && before.as_ref().is_some_and(|(_, k)| k.is_some()),
+            };
             if !has_key {
                 return Err(ApiError::invalid("password", "paste a Resend API key"));
             }
@@ -68,15 +71,18 @@ pub async fn put_settings(State(state): State<AppState>, p: Principal, Json(req)
             }
         }
     }
-    let secret = req.password.as_deref().map(str::trim);
+    let provider = settings.as_ref().map(|s| s.provider.clone());
+    // API keys arrive pasted with stray spaces; an SMTP password is kept exactly as typed.
+    let secret = req.password.as_deref().map(|pw| if provider.as_deref() == Some("resend") { pw.trim() } else { pw });
     let cipher = match secret {
         Some(pw) if !pw.is_empty() => Some(state.config.secret_key.as_ref().ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY to store the password or API key".into()))?.encrypt(pw.as_bytes())),
         _ => None,
     };
-    let keep = secret.is_none() && settings.is_some() && !switched;
+    // The update itself keeps the stored secret only while the stored provider still matches, so a save racing
+    // a provider switch cannot pair one provider's settings with the other's secret.
+    let keep = secret.is_none().then_some(provider.as_deref()).flatten();
     let value = settings.as_ref().map(|s| serde_json::to_value(s).expect("settings serialize"));
     tessery_db::settings::set_smtp(&state.db, value.as_ref(), cipher.as_deref(), keep).await?;
-    let provider = settings.as_ref().map(|s| s.provider.clone());
     let host = settings.as_ref().filter(|s| s.provider == "smtp").map(|s| s.host.clone());
     audit::record(&state.db, &p, Entry::new(None, "instance.email", "instance", p.user.id).details(json!({ "configured": settings.is_some(), "provider": provider, "host": host }))).await?;
     get_settings(State(state), p).await
