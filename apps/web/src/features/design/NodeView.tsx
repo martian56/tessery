@@ -12,6 +12,7 @@ import type { NodeLoad } from '@tessery/core/domain/simulate'
 import { fmtMs, fmtNum } from '@/lib/format'
 import { Tooltip } from '@/ui'
 import s from './NodeView.module.css'
+import { TechIcon } from '@/ui/icons/Icon'
 
 export type CanvasNode = Node<{ node: SystemNode; env?: Environment; live?: NodeLoad; dim: boolean; showProvider: boolean }, 'tessery'>
 
@@ -37,7 +38,7 @@ export const NodeView = memo(function NodeView({ data, selected }: NodeProps<Can
   return (
     <div className={clsx(s.node, selected && s.selected, dim && s.dim, live?.down && s.down)} style={{ '--cat': cat.color } as React.CSSProperties}>
       <div className={s.head}>
-        <span className={s.glyph}>{tech.glyph}</span>
+        <span className={s.glyph} title={tech.name}><TechIcon id={tech.id} size={14} /></span>
         <span className={s.name}>{node.name}</span>
         {showReplicas && node.replicas > 1 && <span className={s.rep}>×{node.replicas}</span>}
         {style && <span className={s.style} style={{ color: style.color }}>{style.label}</span>}

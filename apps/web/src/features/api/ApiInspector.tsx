@@ -6,6 +6,7 @@ import { API_STYLE_META, LANGUAGES, frameworksFor } from '@tessery/core/catalog/
 import { Button, Empty, Field, Input, Section, Select, Textarea } from '@/ui'
 import { KIND_OPTIONS, isPathStyle } from './apiMeta'
 import s from '@/features/design/Inspector.module.css'
+import { NavIcon } from '@/ui/icons/Icon'
 
 export function ApiInspector() {
   const dispatch = useAppDispatch()
@@ -60,7 +61,7 @@ export function ApiInspector() {
           <Button size="sm" icon={<Copy />} onClick={() => { const id = edit('duplicateOperation', { nodeId: spec.nodeId, opId: op.id }); dispatch(ui.setApi({ opId: id ?? null })) }}>Duplicate</Button>
           <Button size="sm" variant="danger" icon={<Trash2 />} onClick={() => { edit('removeOperation', { nodeId: spec.nodeId, opId: op.id }); dispatch(ui.setApi({ opId: null })) }}>Delete</Button>
         </div>
-      </> : <div className={s.title}><span className={s.glyph}>api</span><div><b>{node.name}</b><span>No operations yet</span></div></div>}
+      </> : <div className={s.title}><span className={s.glyph}><NavIcon name="api" size={20} /></span><div><b>{node.name}</b><span>No operations yet</span></div></div>}
       <Section title="Service">
         <Field label="Style"><Select value={spec.style} onChange={(v) => edit('updateApi', { nodeId: spec.nodeId, patch: { style: v, framework: frameworksFor(spec.language, v)[0]?.name ?? spec.framework } })} options={(Object.keys(API_STYLE_META) as ApiStyle[]).map((k) => ({ value: k, label: API_STYLE_META[k].label }))} /></Field>
         <Field label="Language"><Select value={spec.language} onChange={(v) => edit('updateApi', { nodeId: spec.nodeId, patch: { language: v, framework: frameworksFor(v, spec.style)[0]?.name ?? spec.framework } })} options={LANGUAGES.map((l) => ({ value: l.id, label: l.name, disabled: !frameworksFor(l.id, spec.style).length }))} /></Field>

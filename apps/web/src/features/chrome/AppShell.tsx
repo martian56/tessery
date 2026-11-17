@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Building2, Check, ChevronsLeft, ChevronsRight, ChevronsUpDown, CornerDownLeft, FolderKanban, LogOut, Plus, Search, Settings } from 'lucide-react'
+import { Building2, Check, ChevronsUpDown, CornerDownLeft, LogOut, Plus, Settings } from 'lucide-react'
 import clsx from 'clsx'
 import { useLogoutMutation, useMeQuery } from '@/api/endpoints/identity'
 import { useCreateOrgMutation } from '@/api/endpoints/orgs'
@@ -13,6 +13,7 @@ import { Dialog, DropdownMenu, Skeleton, Tooltip, toast, useDialogs, type MenuEn
 import { TesseryMark } from '@/ui/TesseryMark'
 import { ADMIN_SECTIONS, ORG_SECTIONS } from './nav'
 import s from './AppShell.module.css'
+import { NavIcon } from '@/ui/icons/Icon'
 
 const KEY = 'tessery.sidebar'
 const readRail = () => {
@@ -48,10 +49,10 @@ function useDestinations(): Destination[] {
   const { org } = useCurrentOrg()
   const perms = usePermissions({ org: org?.id })
   return useMemo(() => [
-    { id: 'home', label: 'Projects', icon: <FolderKanban />, path: '/', group: '' },
+    { id: 'home', label: 'Projects', icon: <NavIcon name="projects" />, path: '/', group: '' },
     ...(org ? ORG_SECTIONS.filter((x) => perms.can(x.perm)).map((x) => ({ id: `settings:${x.id}`, label: x.label, icon: x.icon, path: `/settings/${x.id}`, group: 'Organization' })) : []),
     ...(me?.instanceAdmin ? ADMIN_SECTIONS.map((x) => ({ id: `admin:${x.id}`, label: x.label, icon: x.icon, path: `/admin/${x.id}`, group: 'Instance' })) : []),
-    { id: 'account', label: 'Account', icon: <Settings />, path: '/account', group: 'You' },
+    { id: 'account', label: 'Account', icon: <NavIcon name="account" />, path: '/account', group: 'You' },
   ], [org, me?.instanceAdmin, perms])
 }
 
@@ -127,7 +128,7 @@ function Sidebar({ rail, toggle, find }: { rail: boolean; toggle: () => void; fi
           } items={orgItems} />
         )}
         {tip('Search and jump', (
-          <button className={s.search} onClick={find}><Search /><span className={`${s.label} ${s.searchText}`}>Search</span><kbd className={`${s.label} ${s.kbd}`}>Ctrl K</kbd></button>
+          <button className={s.search} onClick={find}><NavIcon name="search" /><span className={`${s.label} ${s.searchText}`}>Search</span><kbd className={`${s.label} ${s.kbd}`}>Ctrl K</kbd></button>
         ), 'Ctrl K')}
       </div>
       <div className={s.scroll}>
@@ -152,7 +153,7 @@ function Sidebar({ rail, toggle, find }: { rail: boolean; toggle: () => void; fi
           </button>
         } />
         {tip(rail ? 'Expand the sidebar' : 'Collapse the sidebar', (
-          <button className={s.fold} onClick={toggle} aria-label={rail ? 'Expand the sidebar' : 'Collapse the sidebar'}>{rail ? <ChevronsRight /> : <ChevronsLeft />}</button>
+          <button className={s.fold} onClick={toggle} aria-label={rail ? 'Expand the sidebar' : 'Collapse the sidebar'}><NavIcon name={rail ? 'expand' : 'collapse'} /></button>
         ), '[')}
       </div>
     </nav>

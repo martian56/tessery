@@ -17,6 +17,7 @@ import { effective } from './canvas/geometry'
 import { STATE_LABEL } from './canvas/tools'
 import { ICON_NAMES } from './canvas/EditorIcon'
 import f from './StyleFields.module.css'
+import { NavIcon } from '@/ui/icons/Icon'
 
 const FONTS = ['system-ui', 'Inter', 'Geist', 'Manrope', 'DM Sans', 'Instrument Sans', 'Space Grotesk', 'Bricolage Grotesque', 'Sora', 'Archivo', 'IBM Plex Sans', 'Fraunces', 'Instrument Serif', 'Newsreader', 'Playfair Display', 'EB Garamond', 'JetBrains Mono', 'IBM Plex Mono']
 const WEIGHTS = ['300', '400', '500', '600', '700', '800']
@@ -293,7 +294,7 @@ function PageSettings({ page }: { page: Page }) {
   const [picking, setPicking] = useState<null | 'logo' | 'favicon'>(null)
   return (
     <div className={ins.wrap}>
-      <div className={ins.title}><span className={ins.glyph}>pg</span><div><b>{page.name}</b><span>{page.route}</span></div></div>
+      <div className={ins.title}><span className={ins.glyph}><NavIcon name="pages" size={20} /></span><div><b>{page.name}</b><span>{page.route}</span></div></div>
       <Section title="Page">
         <Field label="Name"><Input value={page.name} onCommit={(x) => up({ name: x })} /></Field>
         <Field label="Route"><Input mono value={page.route} onCommit={(x) => up({ route: x.startsWith('/') ? x : `/${x}` })} /></Field>

@@ -1,4 +1,5 @@
 import { CATEGORY_META, TECH_BY_ID } from '@tessery/core/catalog/technologies'
+import { TechIcon } from '@/ui/icons/Icon'
 import s from './ProjectHome.module.css'
 
 /** The project's design at a glance: one chip per node, in its category's colour, in the order the canvas flows. */
@@ -10,7 +11,7 @@ export function Mosaic({ techIds }: { techIds: string[] }) {
       {nodes.length === 0 ? <span className={s.previewEmpty}>Empty canvas</span> : (
         <div className={s.chips}>
           {shown.map((t, i) => (
-            <span key={i} className={s.chip} style={{ '--cat': CATEGORY_META[t.category].color } as React.CSSProperties} title={t.name}>{t.glyph}</span>
+            <span key={i} className={s.chip} style={{ '--cat': CATEGORY_META[t.category].color } as React.CSSProperties} title={t.name}><TechIcon id={t.id} size={20} /></span>
           ))}
           {nodes.length > shown.length && <span className={s.more}>+{nodes.length - shown.length}</span>}
         </div>

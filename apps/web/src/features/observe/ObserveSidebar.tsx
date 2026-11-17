@@ -5,6 +5,7 @@ import { CATEGORY_META, TECH_BY_ID } from '@tessery/core/catalog/technologies'
 import { Dot, PanelHeader } from '@/ui'
 import { cpuOf, health, useEnvStatus } from './useObserve'
 import s from './Observe.module.css'
+import { TechIcon } from '@/ui/icons/Icon'
 
 export function ObserveSidebar() {
   const dispatch = useAppDispatch()
@@ -22,7 +23,7 @@ export function ObserveSidebar() {
             <button key={n.id} className={clsx(s.svc, cur === n.id && s.on)} onClick={() => dispatch(ui.setObserve({ nodeId: n.id }))}>
               <Dot color={health(m)} />
               <span>{n.name}</span>
-              <span className={s.cat} style={{ color: CATEGORY_META[TECH_BY_ID[n.techId].category].color }}>{TECH_BY_ID[n.techId].glyph}</span>
+              <span className={s.cat} style={{ color: CATEGORY_META[TECH_BY_ID[n.techId].category].color }} title={TECH_BY_ID[n.techId].name}><TechIcon id={n.techId} size={14} /></span>
               <span className={s.rps}>{cpu == null ? '' : `${cpu.toFixed(0)}%`}</span>
             </button>
           )

@@ -4,6 +4,7 @@ import { TECH_BY_ID } from '@tessery/core/catalog/technologies'
 import { Badge, Button, Field, NumberInput, Section, Select, Sparkline } from '@/ui'
 import { cpuOf, memoryOf, useEnvStatus } from './useObserve'
 import ins from '@/features/design/Inspector.module.css'
+import { NavIcon, TechIcon } from '@/ui/icons/Icon'
 
 export function ObserveInspector() {
   const dispatch = useAppDispatch()
@@ -18,7 +19,7 @@ export function ObserveInspector() {
   return (
     <div className={ins.wrap}>
       {n ? <>
-        <div className={ins.title}><span className={ins.glyph}>{TECH_BY_ID[n.techId].glyph}</span><div><b>{n.name}</b><span>{TECH_BY_ID[n.techId].name}</span></div></div>
+        <div className={ins.title}><span className={ins.glyph}><TechIcon id={n.techId} size={20} /></span><div><b>{n.name}</b><span>{TECH_BY_ID[n.techId].name}</span></div></div>
         <Section title="Now">
           {m ? <>
             <div className={ins.kpis}>
@@ -39,7 +40,7 @@ export function ObserveInspector() {
           {o.alerts.filter((x) => x.nodeId === n.id).map((x) => <div key={x.id} className={ins.link}><span>{x.name}</span><Badge tone={x.severity === 'critical' ? 'err' : 'warn'}>{x.severity}</Badge></div>)}
           {!o.slos.some((x) => x.nodeId === n.id) && !o.alerts.some((x) => x.nodeId === n.id) && <span className="muted">No SLOs or alerts for this service.</span>}
         </Section>
-      </> : <div className={ins.title}><span className={ins.glyph}>obs</span><div><b>Observability</b><span>live status and logs of the selected environment</span></div></div>}
+      </> : <div className={ins.title}><span className={ins.glyph}><NavIcon name="observe" size={20} /></span><div><b>Observability</b><span>live status and logs of the selected environment</span></div></div>}
       <Section title="Telemetry pipeline">
         <Field label="Metrics"><Select value={o.metrics} onChange={(v) => edit('updateObservability', { patch: { metrics: v } })} options={['Prometheus', 'VictoriaMetrics', 'Mimir', 'CloudWatch', 'Cloud Monitoring', 'Azure Monitor', 'Datadog'].map((x) => ({ value: x, label: x }))} /></Field>
         <Field label="Logs"><Select value={o.logs} onChange={(v) => edit('updateObservability', { patch: { logs: v } })} options={['Loki', 'OpenSearch', 'ClickHouse', 'CloudWatch Logs', 'Cloud Logging', 'Datadog'].map((x) => ({ value: x, label: x }))} /></Field>

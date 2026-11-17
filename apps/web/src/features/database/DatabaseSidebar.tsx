@@ -2,10 +2,10 @@ import { Plus, Table2 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAppDispatch, useDoc, useEdit } from '@/store'
 import { ui } from '@/store/uiSlice'
-import { TECH_BY_ID } from '@tessery/core/catalog/technologies'
 import { Button, Empty, PanelHeader, useDialogs } from '@/ui'
 import { useCurrentDb } from './useDb'
 import s from './Database.module.css'
+import { TechIcon } from '@/ui/icons/Icon'
 
 export function DatabaseSidebar() {
   const dispatch = useAppDispatch()
@@ -30,7 +30,7 @@ export function DatabaseSidebar() {
           return (
             <div key={id} className={s.db}>
               <button className={clsx(s.dbHead, nodeId === id && s.on)} onClick={() => dispatch(ui.setDatabase({ nodeId: id, tableId: null }))}>
-                <span className={s.glyph}>{TECH_BY_ID[n.techId].glyph}</span>
+                <span className={s.glyph}><TechIcon id={n.techId} size={15} /></span>
                 <span className={s.dbName}>{n.name}</span>
                 <span className={s.count}>{sc.tables.length}</span>
               </button>

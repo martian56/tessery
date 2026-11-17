@@ -13,7 +13,7 @@
 .item { display: flex; align-items: center; gap: var(--sp-4); height: 24px; padding: 0 var(--sp-4) 0 22px; border-radius: var(--r-1); cursor: grab; }
 .item:hover { background: var(--bg-3); }
 .item:active { cursor: grabbing; }
-.glyph { width: 34px; font: 600 9.5px var(--font-mono); flex-shrink: 0; }
+.glyph { width: 24px; display: grid; place-items: center; flex-shrink: 0; }
 .label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
 .group { font-weight: 600; padding: var(--sp-4) var(--sp-5) 2px; color: var(--tx-3); font-size: var(--fs-11); }
 .row { display: flex; align-items: center; gap: var(--sp-4); width: 100%; height: 24px; padding: 0 var(--sp-5); }
