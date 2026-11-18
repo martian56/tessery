@@ -39,7 +39,8 @@
 .trace:hover { color: var(--acc); }
 .traces { position: absolute; inset: 0; display: grid; grid-template-columns: 320px 1fr; }
 .traceList { border-right: 1px solid var(--line-1); overflow: auto; }
-.traceBar { display: flex; align-items: center; padding: var(--sp-3) var(--sp-5); border-bottom: 1px solid var(--line-1); position: sticky; top: 0; background: var(--bg-0); }
+.traceBar { display: flex; align-items: center; gap: var(--sp-3); white-space: nowrap; padding: var(--sp-3) var(--sp-5); border-bottom: 1px solid var(--line-1); position: sticky; top: 0; background: var(--bg-0); }
+.days { width: 52px; flex: none; }
 .traceRow { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: var(--sp-4) var(--sp-5); border-bottom: 1px solid var(--line-1); text-align: left; }
 .traceRow:hover { background: var(--bg-1); }
 .traceRow.on { background: var(--acc-lo); box-shadow: inset 2px 0 var(--acc); }
