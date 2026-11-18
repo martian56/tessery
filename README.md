@@ -14,7 +14,6 @@
   <img src="https://img.shields.io/badge/PostgreSQL-18-4169e1?logo=postgresql&logoColor=white" alt="PostgreSQL 18">
   <img src="https://img.shields.io/badge/deploys%20to-Docker%20%7C%20Kubernetes-2496ed?logo=docker&logoColor=white" alt="Deploys to Docker or Kubernetes">
   <a href="https://github.com/martian56/tessery/commits/main"><img src="https://img.shields.io/github/last-commit/martian56/tessery" alt="Last commit"></a>
-  <a href="https://github.com/martian56/tessery/issues"><img src="https://img.shields.io/github/issues/martian56/tessery" alt="Open issues"></a>
 </p>
 
 <p align="center">
