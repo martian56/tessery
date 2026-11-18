@@ -2,6 +2,7 @@
   "name": "@tessery/core",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "description": "Design model, technology catalog, design operations and code generators shared by the Tessery web app and server.",
   "scripts": {

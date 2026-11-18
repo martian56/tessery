@@ -13,6 +13,7 @@
   <img src="https://img.shields.io/badge/Node-22+-5fa04e?logo=nodedotjs&logoColor=white" alt="Node 22+">
   <img src="https://img.shields.io/badge/PostgreSQL-18-4169e1?logo=postgresql&logoColor=white" alt="PostgreSQL 18">
   <img src="https://img.shields.io/badge/deploys%20to-Docker%20%7C%20Kubernetes-2496ed?logo=docker&logoColor=white" alt="Deploys to Docker or Kubernetes">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3ecf8e" alt="MIT license"></a>
   <a href="https://github.com/martian56/tessery/commits/main"><img src="https://img.shields.io/github/last-commit/martian56/tessery" alt="Last commit"></a>
 </p>
 
@@ -216,3 +217,7 @@ cd apps/web && npx tsc --noEmit -p .
 
 Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for branches, commit messages and
 pull requests, and report security problems as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+Tessery is released under the [MIT License](LICENSE).
