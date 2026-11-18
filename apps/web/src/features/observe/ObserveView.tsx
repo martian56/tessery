@@ -223,7 +223,7 @@ function Retention({ env }: { env: string }) {
   return (
     <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }} title="Older traces are removed as new ones arrive">
       Keep for
-      <NumberInput value={days} min={1} max={90} onCommit={(x) => edit('updateEnv', { envId: env, patch: { traceRetentionDays: Math.round(x) } })} aria-label="Days to keep traces" />
+      <NumberInput value={days} min={1} max={90} onCommit={(x) => edit('updateEnv', { envId: env, patch: { traceRetentionDays: Math.round(x) } })} aria-label="Days to keep traces" className={s.days} />
       days
     </label>
   )
