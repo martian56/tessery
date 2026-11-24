@@ -1179,6 +1179,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project}/environments/{env}/kubernetes/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["check_kubernetes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project}/environments/{env}/logs": {
         parameters: {
             query?: never;
@@ -2081,6 +2097,24 @@ export interface components {
             fields?: Record<string, never> | null;
             name?: string | null;
         };
+        KubernetesCheck: {
+            /** @description Whether it may create the namespace, asked only when the namespace doesn't exist yet. */
+            canCreateNamespace?: boolean | null;
+            /** @description Whether the kubeconfig may create deployments in the namespace. */
+            canDeploy?: boolean | null;
+            namespace: string;
+            namespaceExists?: boolean | null;
+            /** @description True when the cluster answered and the kubeconfig may deploy to the namespace. */
+            ok: boolean;
+            /** @description What's wrong, in words, when `ok` is false. */
+            problem?: string | null;
+            /** @description The cluster's Kubernetes version, when it answered. */
+            serverVersion?: string | null;
+        };
+        KubernetesCheckRequest: {
+            /** @description The namespace the environment deploys to. */
+            namespace: string;
+        };
         LatestReleaseDto: {
             /** Format: date-time */
             at: string;
@@ -2753,7 +2787,7 @@ export interface components {
             /** @description False when `TESSERY_COMPOSE_DIR` isn't set, which turns in-app updates off. */
             enabled: boolean;
             history: components["schemas"]["UpdateEntry"][];
-            /** @description The version the last update to the running version came from, which a rollback returns to. */
+            /** @description The older version the last move to the running version came from, which a rollback returns to. */
             rollbackTo?: string | null;
         };
         UserDto: {
@@ -5156,6 +5190,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RowsDto"];
+                };
+            };
+        };
+    };
+    check_kubernetes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+                env: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KubernetesCheckRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KubernetesCheck"];
                 };
             };
         };

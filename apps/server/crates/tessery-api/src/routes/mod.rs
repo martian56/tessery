@@ -174,6 +174,7 @@ pub fn api() -> Router<AppState> {
         .route("/projects/{project}/environments/{env}/databases/{node}/sql", post(runtime::sql))
         .route("/projects/{project}/environments/{env}/secrets", get(delivery::list_secrets))
         .route("/projects/{project}/environments/{env}/secrets/{name}", axum::routing::put(delivery::put_secret).delete(delivery::delete_secret))
+        .route("/projects/{project}/environments/{env}/kubernetes/check", post(delivery::check_kubernetes))
         .route(
             "/projects/{project}/remote",
             get(delivery::get_remote)
