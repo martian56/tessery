@@ -2,7 +2,6 @@ import { normalizeDoc } from '@tessery/core/domain/normalize'
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { useGetProjectQuery } from '@/api/endpoints/projects'
 import { useMeQuery, useSetupStatusQuery } from '@/api/endpoints/identity'
-import { errorMessage } from '@/api/types'
 import { projectActions } from '@/store/projectSlice'
 import { ui } from '@/store/uiSlice'
 import { useAppDispatch, useAppSelector } from '@/store'
@@ -11,6 +10,7 @@ import { navigate, useRoute } from './router'
 import { usePermissions } from './usePermissions'
 import { ProjectHome } from '@/features/home/ProjectHome'
 import { AppSkeleton, WorkspaceSkeleton } from '@/features/chrome/BootSkeleton'
+import { ServerDown } from '@/features/chrome/ServerDown'
 import { SetupPage } from '@/features/auth/SetupPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
@@ -25,10 +25,12 @@ export function App() {
   const setup = useSetupStatusQuery()
   const me = useMeQuery(undefined, { skip: !setup.data || setup.data.required })
   if (setup.isLoading) return <AppSkeleton />
-  if (setup.error) return <Empty title="Cannot reach the Tessery server" action={<Button onClick={() => setup.refetch()}>Retry</Button>}>{errorMessage(setup.error)}</Empty>
+  if (setup.error) return <ServerDown error={setup.error} retry={setup.refetch} />
   if (setup.data?.required) return <SetupPage />
   if (window.location.pathname === '/reset-password') return <ResetPasswordPage />
   if (me.isLoading) return <AppSkeleton />
+  // Only a 401 means signed out; anything else is the server failing, which must not look like a sign-out.
+  if (me.error && !('status' in me.error && me.error.status === 401)) return <ServerDown error={me.error} retry={me.refetch} />
   if (!me.data) return <LoginPage />
   return <ErrorBoundary label="Tessery" resetKey={JSON.stringify(route)}><Suspense fallback={route.name === 'project' ? <WorkspaceSkeleton /> : <AppSkeleton />}><Routes /></Suspense></ErrorBoundary>
 }
