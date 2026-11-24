@@ -21,6 +21,8 @@ pub struct Health {
     pub queue: bool,
     /// The Node process that runs code generation and design edits.
     pub engine: bool,
+    /// The background worker, seen through its heartbeat in Redis.
+    pub worker: bool,
 }
 
 #[utoipa::path(get, path = "/api/health", tag = "system", responses((status = 200, body = Health), (status = 503, body = Health)))]
@@ -36,7 +38,12 @@ pub async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>)
         .is_ok();
     let queue = state.mq.healthy().await;
     let engine = state.engine.ping().await.is_ok();
-    let ok = database && redis && queue && engine;
+    let worker = redis::cmd("EXISTS")
+        .arg(tessery_core::heartbeat::WORKER_HEARTBEAT_KEY)
+        .query_async::<bool>(&mut r)
+        .await
+        .unwrap_or(false);
+    let ok = database && redis && queue && engine && worker;
     (
         if ok {
             StatusCode::OK
@@ -49,6 +56,7 @@ pub async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>)
             redis,
             queue,
             engine,
+            worker,
         }),
     )
 }
