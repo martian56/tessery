@@ -151,3 +151,127 @@ pub async fn setup(
         }),
     ))
 }
+
+/// Where the latest release is read from; tests point this at a fake.
+pub const RELEASES_URL: &str = "https://api.github.com/repos/martian56/tessery/releases/latest";
+const RELEASE_CACHE_SECS: u64 = 600;
+/// How long a failed or empty lookup is remembered before GitHub is asked again.
+const MISS_CACHE_SECS: u64 = 120;
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionInfo {
+    /// The version this instance runs, or `dev` for a build without one.
+    pub current: String,
+    /// The newest published release, or null when GitHub can't be reached.
+    pub latest: Option<String>,
+    /// The latest release's notes on GitHub.
+    pub release_url: Option<String>,
+    pub update_available: bool,
+}
+
+#[utoipa::path(get, path = "/api/system/version", operation_id = "system_version", tag = "system", responses((status = 200, body = VersionInfo)))]
+pub async fn version(State(state): State<AppState>, _p: Principal) -> Json<VersionInfo> {
+    let current = state.config.version.clone();
+    let latest = latest_release(&state).await;
+    let update_available = latest.as_ref().is_some_and(|(v, _)| is_newer(v, &current));
+    let (latest, release_url) = latest.unzip();
+    Json(VersionInfo { current, latest, release_url, update_available })
+}
+
+/// The latest release's version and page, cached in Redis so instances stay well under GitHub's rate limit.
+async fn latest_release(state: &AppState) -> Option<(String, String)> {
+    let url = &state.config.releases_url;
+    let key = format!("tessery:latest-release:{url}");
+    let mut r = state.redis.clone();
+    if let Ok(Some(hit)) = redis::cmd("GET").arg(&key).query_async::<Option<String>>(&mut r).await
+        && let Ok(found) = serde_json::from_str::<Option<(String, String)>>(&hit)
+    {
+        return found;
+    }
+    let found = fetch_latest(url).await;
+    let _: Result<(), _> = redis::cmd("SET")
+        .arg(&key)
+        .arg(serde_json::to_string(&found).unwrap_or_default())
+        .arg("EX")
+        .arg(if found.is_some() { RELEASE_CACHE_SECS } else { MISS_CACHE_SECS })
+        .query_async(&mut r)
+        .await;
+    found
+}
+
+async fn fetch_latest(url: &str) -> Option<(String, String)> {
+    #[derive(Deserialize)]
+    struct Release {
+        tag_name: String,
+        #[serde(default)]
+        html_url: String,
+    }
+    let res = reqwest::Client::new()
+        .get(url)
+        .header("user-agent", "tessery")
+        .header("accept", "application/vnd.github+json")
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await
+        .ok()?;
+    if !res.status().is_success() {
+        return None;
+    }
+    let release: Release = res.json().await.ok()?;
+    let version = release.tag_name.trim_start_matches('v').to_owned();
+    parse_version(&version)?;
+    Some((version, release.html_url))
+}
+
+/// `major.minor.patch` with an optional `-pre` suffix; anything else (such as `dev`) is not a version.
+fn parse_version(v: &str) -> Option<([u64; 3], Option<&str>)> {
+    let (core, pre) = match v.split_once('-') {
+        Some((c, p)) => (c, Some(p)),
+        None => (v, None),
+    };
+    let mut parts = core.split('.').map(|p| p.parse::<u64>().ok());
+    let n = [parts.next()??, parts.next()??, parts.next()??];
+    if parts.next().is_some() {
+        return None;
+    }
+    Some((n, pre))
+}
+
+/// Whether `latest` is a later version than `current`. A pre-release sorts before its release, and a build
+/// without a version never reports an update.
+pub fn is_newer(latest: &str, current: &str) -> bool {
+    let (Some((l, lp)), Some((c, cp))) = (parse_version(latest), parse_version(current)) else {
+        return false;
+    };
+    match l.cmp(&c) {
+        std::cmp::Ordering::Greater => true,
+        std::cmp::Ordering::Less => false,
+        std::cmp::Ordering::Equal => match (lp, cp) {
+            (None, Some(_)) => true,
+            (Some(a), Some(b)) => pre_release_order(a, b).is_gt(),
+            _ => false,
+        },
+    }
+}
+
+/// Orders pre-release labels by their dot-separated parts, numbers as numbers: `rc.10` comes after `rc.2`.
+fn pre_release_order(a: &str, b: &str) -> std::cmp::Ordering {
+    let (mut x, mut y) = (a.split('.'), b.split('.'));
+    loop {
+        let ord = match (x.next(), y.next()) {
+            (None, None) => return std::cmp::Ordering::Equal,
+            (None, Some(_)) => return std::cmp::Ordering::Less,
+            (Some(_), None) => return std::cmp::Ordering::Greater,
+            (Some(p), Some(q)) => match (p.parse::<u64>(), q.parse::<u64>()) {
+                (Ok(m), Ok(n)) => m.cmp(&n),
+                (Ok(_), Err(_)) => std::cmp::Ordering::Less,
+                (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
+                (Err(_), Err(_)) => p.cmp(q),
+            },
+        };
+        if ord.is_ne() {
+            return ord;
+        }
+    }
+}

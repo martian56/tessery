@@ -18,6 +18,10 @@ pub struct Config {
     pub notify_allow_private: bool,
     /// Resend's API address; `None` means Resend itself.
     pub resend_url: Option<String>,
+    /// The version this build runs, from `TESSERY_VERSION`; `dev` when built without one.
+    pub version: String,
+    /// Where the latest release is looked up.
+    pub releases_url: String,
     pub data_dir: PathBuf,
     pub secret_key: Option<tessery_core::SecretKey>,
     pub engine: tessery_engine::EngineConfig,
@@ -74,6 +78,8 @@ impl Config {
             trust_proxy: flag("TESSERY_TRUST_PROXY", false),
             notify_allow_private: flag("TESSERY_NOTIFY_ALLOW_PRIVATE", false),
             resend_url: tessery_notify::resend_url_from_env(),
+            version: var("TESSERY_VERSION", "dev"),
+            releases_url: var("TESSERY_RELEASES_URL", crate::routes::system::RELEASES_URL),
             data_dir: PathBuf::from(var("TESSERY_DATA_DIR", "./data")),
             oidc: crate::routes::sso::OidcConfig::from_env(),
             provider_apis: tessery_cloud::endpoints_from_env(),

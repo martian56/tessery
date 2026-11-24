@@ -32,6 +32,7 @@ pub fn api() -> Router<AppState> {
     Router::new()
         .route("/health", get(system::health))
         .route("/setup", get(system::setup_status).post(system::setup))
+        .route("/system/version", get(system::version))
         .route("/openapi.json", get(crate::openapi::serve))
         .route("/auth/login", post(auth::login))
         .route("/auth/logout", post(auth::logout))
