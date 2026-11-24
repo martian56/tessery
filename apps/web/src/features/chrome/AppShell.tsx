@@ -205,12 +205,12 @@ function QuickSwitcher({ open, onOpenChange }: { open: boolean; onOpenChange: (o
   )
 }
 
-/** Tells instance admins a newer release is out, and takes them to the version page to install it. */
+/** Tells instance admins a newer release is out, and takes them to the Updates page to install it. */
 function UpdatePill({ rail }: { rail: boolean }) {
   const { data } = useSystemVersionQuery(undefined, { pollingInterval: VERSION_POLL_MS })
   if (!data?.updateAvailable || !data.latest) return null
   const pill = (
-    <button className={s.update} onClick={() => navigate('/admin/version')} aria-label={`Update to ${data.latest}`}>
+    <button className={s.update} onClick={() => navigate('/admin/updates')} aria-label={`Update to ${data.latest}`}>
       <span className={s.updateDot} /><span className={s.label}>Update to {data.latest}</span>
     </button>
   )

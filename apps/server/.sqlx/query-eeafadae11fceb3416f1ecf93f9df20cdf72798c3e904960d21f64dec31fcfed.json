@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE instance_settings SET auto_update = coalesce($1, auto_update), auto_update_from = coalesce($2, auto_update_from), auto_update_to = coalesce($3, auto_update_to)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Int2",
+        "Int2"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eeafadae11fceb3416f1ecf93f9df20cdf72798c3e904960d21f64dec31fcfed"
+}

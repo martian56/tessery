@@ -5,6 +5,7 @@ mod github;
 mod jobs;
 mod notify;
 mod provision;
+mod updates;
 
 use anyhow::Context;
 use tessery_mq::Mq;
@@ -39,6 +40,7 @@ async fn main() -> anyhow::Result<()> {
     let sweeper = {
         let db = db.clone();
         let mq = mq.clone();
+        let mut auto_updates = updates::AutoUpdates::from_env();
         tokio::spawn(async move {
             let mut tick = tokio::time::interval(Duration::from_secs(60));
             loop {
@@ -48,6 +50,9 @@ async fn main() -> anyhow::Result<()> {
                 }
                 if let Err(e) = backups::schedule(&db, &mq).await {
                     tracing::error!(error = %e, "scheduling backups failed");
+                }
+                if let Err(e) = auto_updates.tick(&db).await {
+                    tracing::error!(error = %e, "automatic update failed");
                 }
             }
         })
