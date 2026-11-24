@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { useLogoutMutation, useMeQuery } from '@/api/endpoints/identity'
 import { useCreateOrgMutation } from '@/api/endpoints/orgs'
 import { useListProjectsQuery } from '@/api/endpoints/projects'
+import { useSystemVersionQuery, VERSION_POLL_MS } from '@/api/endpoints/system'
 import { restartSignedOut } from '@/api/base'
 import { errorMessage } from '@/api/types'
 import { setCurrentOrg, useCurrentOrg } from '@/app/currentOrg'
@@ -127,6 +128,7 @@ function Sidebar({ rail, toggle, find }: { rail: boolean; toggle: () => void; fi
             </button>
           } items={orgItems} />
         )}
+        {me?.instanceAdmin && <UpdatePill rail={rail} />}
         {tip('Search and jump', (
           <button className={s.search} onClick={find}><NavIcon name="search" /><span className={`${s.label} ${s.searchText}`}>Search</span><kbd className={`${s.label} ${s.kbd}`}>Ctrl K</kbd></button>
         ), 'Ctrl K')}
@@ -201,4 +203,16 @@ function QuickSwitcher({ open, onOpenChange }: { open: boolean; onOpenChange: (o
       </div>
     </Dialog>
   )
+}
+
+/** Tells instance admins a newer release is out, and takes them to the version page to install it. */
+function UpdatePill({ rail }: { rail: boolean }) {
+  const { data } = useSystemVersionQuery(undefined, { pollingInterval: VERSION_POLL_MS })
+  if (!data?.updateAvailable || !data.latest) return null
+  const pill = (
+    <button className={s.update} onClick={() => navigate('/admin/version')} aria-label={`Update to ${data.latest}`}>
+      <span className={s.updateDot} /><span className={s.label}>Update to {data.latest}</span>
+    </button>
+  )
+  return rail ? <Tooltip content={`Update to ${data.latest}`} side="right">{pill}</Tooltip> : pill
 }
