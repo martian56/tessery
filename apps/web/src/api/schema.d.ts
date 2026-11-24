@@ -1653,7 +1653,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["version"];
+        get: operations["system_version"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5906,7 +5906,7 @@ export interface operations {
             };
         };
     };
-    version: {
+    system_version: {
         parameters: {
             query?: never;
             header?: never;

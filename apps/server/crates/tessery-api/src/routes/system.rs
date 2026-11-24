@@ -155,6 +155,8 @@ pub async fn setup(
 /// Where the latest release is read from; tests point this at a fake.
 pub const RELEASES_URL: &str = "https://api.github.com/repos/martian56/tessery/releases/latest";
 const RELEASE_CACHE_SECS: u64 = 600;
+/// How long a failed or empty lookup is remembered before GitHub is asked again.
+const MISS_CACHE_SECS: u64 = 120;
 
 #[derive(Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -168,7 +170,7 @@ pub struct VersionInfo {
     pub update_available: bool,
 }
 
-#[utoipa::path(get, path = "/api/system/version", tag = "system", responses((status = 200, body = VersionInfo)))]
+#[utoipa::path(get, path = "/api/system/version", operation_id = "system_version", tag = "system", responses((status = 200, body = VersionInfo)))]
 pub async fn version(State(state): State<AppState>, _p: Principal) -> Json<VersionInfo> {
     let current = state.config.version.clone();
     let latest = latest_release(&state).await;
@@ -183,19 +185,19 @@ async fn latest_release(state: &AppState) -> Option<(String, String)> {
     let key = format!("tessery:latest-release:{url}");
     let mut r = state.redis.clone();
     if let Ok(Some(hit)) = redis::cmd("GET").arg(&key).query_async::<Option<String>>(&mut r).await
-        && let Ok(found) = serde_json::from_str::<(String, String)>(&hit)
+        && let Ok(found) = serde_json::from_str::<Option<(String, String)>>(&hit)
     {
-        return Some(found);
+        return found;
     }
-    let found = fetch_latest(url).await?;
+    let found = fetch_latest(url).await;
     let _: Result<(), _> = redis::cmd("SET")
         .arg(&key)
         .arg(serde_json::to_string(&found).unwrap_or_default())
         .arg("EX")
-        .arg(RELEASE_CACHE_SECS)
+        .arg(if found.is_some() { RELEASE_CACHE_SECS } else { MISS_CACHE_SECS })
         .query_async(&mut r)
         .await;
-    Some(found)
+    found
 }
 
 async fn fetch_latest(url: &str) -> Option<(String, String)> {
@@ -247,8 +249,29 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
         std::cmp::Ordering::Less => false,
         std::cmp::Ordering::Equal => match (lp, cp) {
             (None, Some(_)) => true,
-            (Some(a), Some(b)) => a > b,
+            (Some(a), Some(b)) => pre_release_order(a, b).is_gt(),
             _ => false,
         },
+    }
+}
+
+/// Orders pre-release labels by their dot-separated parts, numbers as numbers: `rc.10` comes after `rc.2`.
+fn pre_release_order(a: &str, b: &str) -> std::cmp::Ordering {
+    let (mut x, mut y) = (a.split('.'), b.split('.'));
+    loop {
+        let ord = match (x.next(), y.next()) {
+            (None, None) => return std::cmp::Ordering::Equal,
+            (None, Some(_)) => return std::cmp::Ordering::Less,
+            (Some(_), None) => return std::cmp::Ordering::Greater,
+            (Some(p), Some(q)) => match (p.parse::<u64>(), q.parse::<u64>()) {
+                (Ok(m), Ok(n)) => m.cmp(&n),
+                (Ok(_), Err(_)) => std::cmp::Ordering::Less,
+                (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
+                (Err(_), Err(_)) => p.cmp(q),
+            },
+        };
+        if ord.is_ne() {
+            return ord;
+        }
     }
 }
