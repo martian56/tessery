@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/tessery-core", "crates/tessery-db", "crates/tessery-mq", "crates/tessery-git", "crates/tessery-engine", "crates/tessery-cloud", "crates/tessery-notify", "crates/tessery-update", "crates/tessery-api", "crates/tessery-worker"]
 
 [workspace.package]
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT"
