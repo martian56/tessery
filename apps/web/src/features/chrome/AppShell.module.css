@@ -25,6 +25,10 @@
 .org > svg { width: 12px; height: 12px; color: var(--tx-2); flex-shrink: 0; }
 
 .search { height: 28px; padding: 0 8px; background: var(--bg-band); border: 1px solid var(--line-2); color: var(--tx-3); font-size: var(--fs-13); font-weight: 500; }
+.update { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px 0 9px; align-self: flex-start; max-width: 100%; border-radius: 999px; background: var(--acc-lo); color: var(--acc-hi); font-size: var(--fs-12); font-weight: 550; }
+.update:hover { background: color-mix(in srgb, var(--acc) 26%, transparent); }
+.updateDot { width: 6px; height: 6px; border-radius: 50%; background: var(--acc-hi); flex-shrink: 0; }
+.shell[data-rail] .update { padding: 0; width: 28px; justify-content: center; }
 .search:hover { border-color: var(--line-3); color: var(--tx-2); }
 .searchText { flex: 1; }
 .kbd { flex: none; font: 500 var(--fs-11) var(--font-ui); color: var(--tx-3); line-height: 16px; }
