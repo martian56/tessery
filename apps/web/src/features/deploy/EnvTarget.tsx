@@ -54,7 +54,7 @@ export function TargetSection({ doc, env }: { doc: ProjectDoc; env: Environment 
           <Field label="Ingress class"><Input mono value={target.ingressClass ?? ''} placeholder="cluster default" onCommit={(v) => patch({ ingressClass: v.trim() })} /></Field>
           <Field label="Public port" hint="Only when the ingress is not on port 80"><NumberInput value={target.publicPort ?? 80} min={1} max={65535} onCommit={(v) => patch({ publicPort: v === 80 ? undefined : v })} /></Field>
           <div className={s.hint}>Needs a KUBECONFIG secret below. Data stores run as StatefulSets with persistent volumes.</div>
-          <ConnectionCheck doc={doc} env={env} />
+          <ConnectionCheck key={`${env.id}:${namespaceOf(doc, env)}`} doc={doc} env={env} />
         </>
       )}
       {target.kind === 'git' && <div className={s.hint}>Tessery only moves the <code>env/{env.id}</code> branch. Deploy from it with your own CI.</div>}
