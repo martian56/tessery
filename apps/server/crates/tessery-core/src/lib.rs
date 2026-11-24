@@ -1,4 +1,5 @@
 pub mod access;
+pub mod heartbeat;
 pub mod ids;
 pub mod migrations;
 pub mod permission;
