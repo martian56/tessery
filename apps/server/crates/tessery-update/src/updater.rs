@@ -3,8 +3,9 @@ use tokio::process::Command;
 const CONTAINER: &str = "tessery-updater";
 
 /// Pins the target version in `.env`, so a later `docker compose up -d` keeps it, then recreates only the app
-/// services. Postgres, Redis, RabbitMQ, object storage and Caddy keep running, and the server applies any new
-/// migrations when it starts.
+/// services. `--no-deps` keeps Postgres, Redis, RabbitMQ and object storage running: without it, a Compose version
+/// other than the one that started them sees their config as changed and recreates them too. The server applies
+/// any new migrations when it starts.
 const SCRIPT: &str = r#"set -eu
 cd "$TESSERY_COMPOSE_DIR"
 touch .env
@@ -15,7 +16,7 @@ else
 fi
 echo "moving Tessery to $TESSERY_TARGET"
 docker compose pull server worker
-docker compose up -d server worker
+docker compose up -d --no-deps server worker
 echo "Tessery is on $TESSERY_TARGET"
 "#;
 
