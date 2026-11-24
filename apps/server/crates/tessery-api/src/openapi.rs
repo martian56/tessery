@@ -6,7 +6,7 @@ use utoipa::OpenApi;
 #[openapi(
     info(title = "Tessery API", version = env!("CARGO_PKG_VERSION"), description = "Self-hosted system design, code generation and deployment platform."),
     paths(
-        system::health, system::setup_status, system::setup,
+        system::health, system::setup_status, system::setup, system::version,
         auth::login, auth::logout, auth::me, auth::update_me, auth::change_password, auth::my_permissions,
         access::catalog, access::list_roles, access::create_role, access::update_role, access::delete_role,
         access::list_bindings, access::create_binding, access::delete_binding,

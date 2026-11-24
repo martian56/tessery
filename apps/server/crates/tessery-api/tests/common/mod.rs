@@ -72,6 +72,8 @@ pub async fn spawn_with(customize: impl FnOnce(&mut Config)) -> TestApp {
         trust_proxy: true,
         notify_allow_private: false,
         resend_url: None,
+        version: "dev".into(),
+        releases_url: "http://127.0.0.1:9/releases/latest".into(),
         object_store: std::env::var("TESSERY_TEST_S3_ENDPOINT").ok().map(|endpoint| tessery_api::config::ObjectStore {
             s3: tessery_cloud::S3 { endpoint, region: "us-east-1".into(), access_key: "tessery".into(), secret: "tessery-dev-secret".into() },
             bucket: format!("test-{}", Uuid::new_v4().simple()),
