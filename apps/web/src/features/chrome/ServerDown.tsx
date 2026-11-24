@@ -41,13 +41,13 @@ function Path({ failure, host }: { failure: Failure; host: string }) {
   const server: State = failure.kind === 'network' || failure.kind === 'checking' ? 'unknown' : failure.kind === 'gateway' ? 'down' : failure.down.length ? 'ok' : 'down'
   const parts = Object.values(PARTS).map((name) => ({
     name: name === 'the code generation engine' ? 'Engine' : name,
-    state: (failure.kind === 'server' && failure.down.length ? (failure.down.includes(name) ? 'down' : 'ok') : 'unknown') as State,
+    state: (failure.kind === 'server' ? (failure.down.includes(name) ? 'down' : 'ok') : 'unknown') as State,
   }))
   const link = (a: State, b: State): State => (a === 'down' || b === 'down' ? 'down' : a === 'ok' && b === 'ok' ? 'ok' : 'unknown')
   const hops: { icon: ReactNode; label: string; detail: string; state: State }[] = [
     { icon: <Monitor />, label: 'This browser', detail: 'online', state: 'ok' },
     { icon: <Globe />, label: host, detail: proxy === 'ok' ? 'answers' : 'no answer', state: proxy },
-    { icon: <Server />, label: 'Tessery server', detail: server === 'ok' ? 'running' : server === 'down' ? 'not answering' : failure.kind === 'checking' ? 'checking…' : 'unknown', state: server },
+    { icon: <Server />, label: 'Tessery server', detail: server === 'ok' ? 'running' : failure.kind === 'server' ? `error ${failure.status}` : server === 'down' ? 'not answering' : failure.kind === 'checking' ? 'checking…' : 'unknown', state: server },
   ]
   return (
     <figure className={s.path} aria-label="Where the connection stops">
@@ -63,7 +63,7 @@ function Path({ failure, host }: { failure: Failure; host: string }) {
           </li>
         ))}
       </ol>
-      <div className={s.parts} data-state={server}>
+      <div className={s.parts} data-state={failure.kind === 'server' ? 'ok' : 'unknown'}>
         {parts.map((p) => (
           <span key={p.name} className={s.part} data-state={p.state}><Database aria-hidden />{p.name}</span>
         ))}
@@ -116,7 +116,9 @@ export function ServerDown({ error, retry }: { error: unknown; retry: () => Prom
   }, [attempt, checking, check])
 
   const host = window.location.host
-  const title = failure.kind === 'server' && failure.down.length ? `${failure.down[0] === 'Postgres' ? 'The database' : 'Part of Tessery'} isn't answering` : "Tessery isn't answering"
+  const title = failure.kind !== 'server' ? "Tessery isn't answering"
+    : failure.down.length ? `${failure.down[0] === 'Postgres' ? 'The database' : 'Part of Tessery'} isn't answering`
+    : 'Tessery ran into a problem'
   const body = failure.kind === 'network'
     ? <>Your browser couldn't connect to <b>{host}</b>. If your internet connection works, the Tessery server is restarting, perhaps after an update, or it has stopped.</>
     : failure.kind === 'gateway'
