@@ -63,7 +63,7 @@ function UpdateDialog({ target, onClose }: { target: string; onClose: () => void
       const r = await start({ version: target })
       if ('error' in r) {
         const status = 'status' in r.error ? r.error.status : undefined
-        setError(status === 404 ? 'This server can't update itself from the app yet. Pull the new images on the host and restart Tessery.' : errorMessage(r.error))
+        setError(status === 404 ? "This server can't update itself from the app yet. Pull the new images on the host and restart Tessery." : errorMessage(r.error))
         return
       }
       setStep('pulling')
