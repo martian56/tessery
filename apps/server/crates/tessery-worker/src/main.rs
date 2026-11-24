@@ -34,6 +34,14 @@ async fn main() -> anyhow::Result<()> {
     for id in tessery_db::delivery::fail_interrupted(&db).await? {
         tracing::warn!(release_id = %id, "marked a deploy interrupted by the last shutdown as failed");
     }
+    let redis_url = std::env::var("TESSERY_REDIS_URL").context("TESSERY_REDIS_URL is required")?;
+    let redis_config = redis::aio::ConnectionManagerConfig::new()
+        .set_response_timeout(Some(Duration::from_secs(5)))
+        .set_connection_timeout(Some(Duration::from_secs(5)));
+    let redis_conn = redis::Client::open(redis_url.as_str())?
+        .get_connection_manager_with_config(redis_config)
+        .await
+        .context("connecting to Redis")?;
     tracing::info!("tessery-worker started");
 
     let sweeper = {
@@ -53,6 +61,26 @@ async fn main() -> anyhow::Result<()> {
         })
     };
 
+    let heartbeat = {
+        let mut redis_conn = redis_conn.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(tessery_core::heartbeat::WORKER_HEARTBEAT_INTERVAL);
+            loop {
+                tick.tick().await;
+                let res: redis::RedisResult<()> = redis::cmd("SET")
+                    .arg(tessery_core::heartbeat::WORKER_HEARTBEAT_KEY)
+                    .arg("1")
+                    .arg("EX")
+                    .arg(tessery_core::heartbeat::WORKER_HEARTBEAT_TTL_SECS)
+                    .query_async(&mut redis_conn)
+                    .await;
+                if let Err(e) = res {
+                    tracing::error!(error = %e, "writing the worker heartbeat failed");
+                }
+            }
+        })
+    };
+
     let consume = mq.consume("tessery-worker", 4, |env| {
         let ctx = ctx.clone();
         async move {
@@ -66,5 +94,6 @@ async fn main() -> anyhow::Result<()> {
         _ = tokio::signal::ctrl_c() => tracing::info!("shutting down"),
     }
     sweeper.abort();
+    heartbeat.abort();
     Ok(())
 }
