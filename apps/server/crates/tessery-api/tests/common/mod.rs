@@ -222,3 +222,21 @@ pub async fn role_id(s: &Session, org: Uuid, key: &str) -> Uuid {
         .parse()
         .unwrap()
 }
+
+/// Pretends a worker is running by writing its heartbeat.
+pub async fn worker_heartbeat() {
+    let url = env("TESSERY_TEST_REDIS_URL", "redis://127.0.0.1:16379");
+    let mut conn = redis::Client::open(url.as_str())
+        .expect("parse the Redis URL")
+        .get_multiplexed_async_connection()
+        .await
+        .expect("connect to test Redis; is `docker compose up -d` running?");
+    let _: () = redis::cmd("SET")
+        .arg(tessery_core::heartbeat::WORKER_HEARTBEAT_KEY)
+        .arg("1")
+        .arg("EX")
+        .arg(tessery_core::heartbeat::WORKER_HEARTBEAT_TTL_SECS)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
+}
