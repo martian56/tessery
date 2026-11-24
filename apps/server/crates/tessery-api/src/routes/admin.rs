@@ -91,6 +91,12 @@ pub struct Settings {
     pub allow_org_creation: bool,
     /// Days of container metrics to keep, 1 to 90.
     pub metrics_retention_days: i32,
+    /// Install new releases automatically inside the daily window.
+    pub auto_update: bool,
+    /// Start of the automatic update window, as a UTC hour from 0 to 23.
+    pub auto_update_from: i16,
+    /// End of the window, a UTC hour from 0 to 23, not included. Before the start, the window runs past midnight.
+    pub auto_update_to: i16,
 }
 
 /// Fields left out keep their stored value.
@@ -99,6 +105,9 @@ pub struct Settings {
 pub struct SettingsUpdate {
     pub allow_org_creation: Option<bool>,
     pub metrics_retention_days: Option<i32>,
+    pub auto_update: Option<bool>,
+    pub auto_update_from: Option<i16>,
+    pub auto_update_to: Option<i16>,
 }
 
 #[utoipa::path(get, path = "/api/admin/settings", tag = "admin", responses((status = 200, body = Settings)))]
@@ -108,9 +117,13 @@ pub async fn get_settings(
 ) -> ApiResult<Json<Settings>> {
     p.require_instance_admin()?;
     let s = tessery_db::settings::get(&state.db).await?;
+    let auto = tessery_db::settings::auto_update(&state.db).await?;
     Ok(Json(Settings {
         allow_org_creation: s.allow_org_creation,
         metrics_retention_days: tessery_db::metrics::retention_days(&state.db).await?,
+        auto_update: auto.enabled,
+        auto_update_from: auto.from_hour,
+        auto_update_to: auto.to_hour,
     }))
 }
 
@@ -124,6 +137,14 @@ pub async fn put_settings(
     if req.metrics_retention_days.is_some_and(|d| !(1..=90).contains(&d)) {
         return Err(ApiError::invalid("metricsRetentionDays", "use 1 to 90 days"));
     }
+    for (field, hour) in [("autoUpdateFrom", req.auto_update_from), ("autoUpdateTo", req.auto_update_to)] {
+        if hour.is_some_and(|h| !(0..=23).contains(&h)) {
+            return Err(ApiError::invalid(field, "use an hour from 0 to 23"));
+        }
+    }
+    if req.auto_update == Some(true) && !state.config.updater.enabled() {
+        return Err(ApiError::Conflict(tessery_update::UpdateError::Disabled.to_string()));
+    }
     let mut tx = state.db.begin().await.map_err(tessery_db::DbError::from)?;
     if let Some(allow) = req.allow_org_creation {
         tessery_db::settings::set_allow_org_creation(&mut *tx, allow).await?;
@@ -131,11 +152,14 @@ pub async fn put_settings(
     if let Some(days) = req.metrics_retention_days {
         tessery_db::metrics::set_retention_days(&mut *tx, days).await?;
     }
+    if req.auto_update.is_some() || req.auto_update_from.is_some() || req.auto_update_to.is_some() {
+        tessery_db::settings::set_auto_update(&mut *tx, req.auto_update, req.auto_update_from, req.auto_update_to).await?;
+    }
     audit::record(
         &mut *tx,
         &p,
         Entry::new(None, "admin.settings_update", "instance", "instance")
-            .details(json!({ "allowOrgCreation": req.allow_org_creation, "metricsRetentionDays": req.metrics_retention_days })),
+            .details(json!({ "allowOrgCreation": req.allow_org_creation, "metricsRetentionDays": req.metrics_retention_days, "autoUpdate": req.auto_update, "autoUpdateFrom": req.auto_update_from, "autoUpdateTo": req.auto_update_to })),
     )
     .await?;
     tx.commit().await.map_err(tessery_db::DbError::from)?;

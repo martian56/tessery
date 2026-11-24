@@ -1,0 +1,18 @@
+[package]
+name = "tessery-update"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["process"] }
+tracing.workspace = true
+
+[lints]
+workspace = true

@@ -152,8 +152,9 @@ pub async fn setup(
     ))
 }
 
-/// Where the latest release is read from; tests point this at a fake.
-pub const RELEASES_URL: &str = "https://api.github.com/repos/martian56/tessery/releases/latest";
+pub use tessery_update::{RELEASES_URL, is_newer};
+use tessery_update::Release;
+
 const RELEASE_CACHE_SECS: u64 = 600;
 /// How long a failed or empty lookup is remembered before GitHub is asked again.
 const MISS_CACHE_SECS: u64 = 120;
@@ -174,22 +175,21 @@ pub struct VersionInfo {
 pub async fn version(State(state): State<AppState>, _p: Principal) -> Json<VersionInfo> {
     let current = state.config.version.clone();
     let latest = latest_release(&state).await;
-    let update_available = latest.as_ref().is_some_and(|(v, _)| is_newer(v, &current));
-    let (latest, release_url) = latest.unzip();
+    let update_available = latest.as_ref().is_some_and(|r| is_newer(&r.version, &current));
+    let (latest, release_url) = latest.map(|r| (r.version, r.url)).unzip();
     Json(VersionInfo { current, latest, release_url, update_available })
 }
 
-/// The latest release's version and page, cached in Redis so instances stay well under GitHub's rate limit.
-async fn latest_release(state: &AppState) -> Option<(String, String)> {
-    let url = &state.config.releases_url;
-    let key = format!("tessery:latest-release:{url}");
+/// Reads through a Redis cache so instances stay well under GitHub's rate limit; misses are kept for less time.
+async fn cached<T: Serialize + serde::de::DeserializeOwned>(state: &AppState, key: &str, fetch: impl std::future::Future<Output = Option<T>>) -> Option<T> {
+    let key = format!("tessery:{key}:{}", state.config.releases_url);
     let mut r = state.redis.clone();
     if let Ok(Some(hit)) = redis::cmd("GET").arg(&key).query_async::<Option<String>>(&mut r).await
-        && let Ok(found) = serde_json::from_str::<Option<(String, String)>>(&hit)
+        && let Ok(found) = serde_json::from_str::<Option<T>>(&hit)
     {
         return found;
     }
-    let found = fetch_latest(url).await;
+    let found = fetch.await;
     let _: Result<(), _> = redis::cmd("SET")
         .arg(&key)
         .arg(serde_json::to_string(&found).unwrap_or_default())
@@ -200,78 +200,126 @@ async fn latest_release(state: &AppState) -> Option<(String, String)> {
     found
 }
 
-async fn fetch_latest(url: &str) -> Option<(String, String)> {
-    #[derive(Deserialize)]
-    struct Release {
-        tag_name: String,
-        #[serde(default)]
-        html_url: String,
-    }
-    let res = reqwest::Client::new()
-        .get(url)
-        .header("user-agent", "tessery")
-        .header("accept", "application/vnd.github+json")
-        .timeout(std::time::Duration::from_secs(5))
-        .send()
-        .await
-        .ok()?;
-    if !res.status().is_success() {
-        return None;
-    }
-    let release: Release = res.json().await.ok()?;
-    let version = release.tag_name.trim_start_matches('v').to_owned();
-    parse_version(&version)?;
-    Some((version, release.html_url))
+async fn latest_release(state: &AppState) -> Option<Release> {
+    cached(state, "latest-release", tessery_update::fetch_latest(&state.config.releases_url)).await
 }
 
-/// `major.minor.patch` with an optional `-pre` suffix; anything else (such as `dev`) is not a version.
-fn parse_version(v: &str) -> Option<([u64; 3], Option<&str>)> {
-    let (core, pre) = match v.split_once('-') {
-        Some((c, p)) => (c, Some(p)),
-        None => (v, None),
-    };
-    let mut parts = core.split('.').map(|p| p.parse::<u64>().ok());
-    let n = [parts.next()??, parts.next()??, parts.next()??];
-    if parts.next().is_some() {
-        return None;
-    }
-    Some((n, pre))
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemRelease {
+    pub version: String,
+    pub name: String,
+    /// Release notes in Markdown.
+    pub notes: String,
+    pub url: String,
+    pub published_at: Option<String>,
+    pub prerelease: bool,
 }
 
-/// Whether `latest` is a later version than `current`. A pre-release sorts before its release, and a build
-/// without a version never reports an update.
-pub fn is_newer(latest: &str, current: &str) -> bool {
-    let (Some((l, lp)), Some((c, cp))) = (parse_version(latest), parse_version(current)) else {
-        return false;
-    };
-    match l.cmp(&c) {
-        std::cmp::Ordering::Greater => true,
-        std::cmp::Ordering::Less => false,
-        std::cmp::Ordering::Equal => match (lp, cp) {
-            (None, Some(_)) => true,
-            (Some(a), Some(b)) => pre_release_order(a, b).is_gt(),
-            _ => false,
-        },
-    }
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemReleaseList {
+    /// Null when GitHub can't be reached.
+    pub releases: Option<Vec<SystemRelease>>,
 }
 
-/// Orders pre-release labels by their dot-separated parts, numbers as numbers: `rc.10` comes after `rc.2`.
-fn pre_release_order(a: &str, b: &str) -> std::cmp::Ordering {
-    let (mut x, mut y) = (a.split('.'), b.split('.'));
-    loop {
-        let ord = match (x.next(), y.next()) {
-            (None, None) => return std::cmp::Ordering::Equal,
-            (None, Some(_)) => return std::cmp::Ordering::Less,
-            (Some(_), None) => return std::cmp::Ordering::Greater,
-            (Some(p), Some(q)) => match (p.parse::<u64>(), q.parse::<u64>()) {
-                (Ok(m), Ok(n)) => m.cmp(&n),
-                (Ok(_), Err(_)) => std::cmp::Ordering::Less,
-                (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
-                (Err(_), Err(_)) => p.cmp(q),
-            },
-        };
-        if ord.is_ne() {
-            return ord;
-        }
+#[utoipa::path(get, path = "/api/system/releases", operation_id = "system_releases", tag = "system", responses((status = 200, body = SystemReleaseList)))]
+pub async fn releases(State(state): State<AppState>, p: Principal) -> ApiResult<Json<SystemReleaseList>> {
+    p.require_instance_admin()?;
+    let list = cached(&state, "releases", tessery_update::fetch_releases(&state.config.releases_url)).await;
+    Ok(Json(SystemReleaseList {
+        releases: list.map(|l| {
+            l.into_iter()
+                .map(|r| SystemRelease { version: r.version, name: r.name, notes: r.notes, url: r.url, published_at: r.published_at, prerelease: r.prerelease })
+                .collect()
+        }),
+    }))
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateEntry {
+    pub from_version: String,
+    pub to_version: String,
+    /// `update` or `rollback`.
+    pub kind: String,
+    pub automatic: bool,
+    pub started_by: Option<String>,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub started_at: time::OffsetDateTime,
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatesInfo {
+    pub current: String,
+    /// False when `TESSERY_COMPOSE_DIR` isn't set, which turns in-app updates off.
+    pub enabled: bool,
+    /// The older version the last move to the running version came from, which a rollback returns to.
+    pub rollback_to: Option<String>,
+    pub history: Vec<UpdateEntry>,
+}
+
+#[utoipa::path(get, path = "/api/system/updates", operation_id = "system_updates", tag = "system", responses((status = 200, body = UpdatesInfo)))]
+pub async fn updates(State(state): State<AppState>, p: Principal) -> ApiResult<Json<UpdatesInfo>> {
+    p.require_instance_admin()?;
+    let current = state.config.version.clone();
+    let history = tessery_db::updates::list(&state.db, 20).await?;
+    let rollback_to = history
+        .iter()
+        .find(|u| u.to_version == current)
+        .map(|u| u.from_version.clone())
+        .filter(|v| is_newer(&current, v));
+    Ok(Json(UpdatesInfo {
+        enabled: state.config.updater.enabled(),
+        rollback_to,
+        history: history
+            .into_iter()
+            .map(|u| UpdateEntry {
+                from_version: u.from_version,
+                to_version: u.to_version,
+                kind: u.kind,
+                automatic: u.automatic,
+                started_by: u.started_by_email,
+                started_at: u.started_at,
+            })
+            .collect(),
+        current,
+    }))
+}
+
+#[derive(Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StartUpdate {
+    /// The version to move to: a newer one updates, an older one rolls back.
+    pub version: String,
+}
+
+#[utoipa::path(post, path = "/api/system/update", operation_id = "system_update", tag = "system", request_body = StartUpdate, responses((status = 202, body = crate::routes::dto::Ok), (status = 409, body = crate::error::ErrorBody)))]
+pub async fn start_update(State(state): State<AppState>, p: Principal, Json(req): Json<StartUpdate>) -> ApiResult<(StatusCode, Json<crate::routes::dto::Ok>)> {
+    p.require_instance_admin()?;
+    let target = req.version.trim().trim_start_matches('v').to_owned();
+    let current = state.config.version.clone();
+    if !tessery_update::is_version(&target) {
+        return Err(ApiError::invalid("version", "use a version such as 0.2.0"));
     }
+    if target == current {
+        return Err(ApiError::Conflict(format!("Tessery already runs {target}")));
+    }
+    let kind = if is_newer(&target, &current) || !tessery_update::is_version(&current) { "update" } else { "rollback" };
+    state.config.updater.start(&target).await.map_err(|e| match e {
+        tessery_update::UpdateError::Disabled | tessery_update::UpdateError::AlreadyRunning => ApiError::Conflict(e.to_string()),
+        tessery_update::UpdateError::BadVersion(_) => ApiError::invalid("version", e.to_string()),
+        tessery_update::UpdateError::Failed(_) => ApiError::Internal(anyhow::anyhow!(e.to_string())),
+    })?;
+    tessery_db::updates::record(&state.db, &current, &target, kind, Some(p.user.id)).await?;
+    audit::record(
+        &state.db,
+        &p,
+        Entry::new(None, if kind == "update" { "system.update" } else { "system.rollback" }, "instance", "instance")
+            .details(json!({ "from": current, "to": target, "trigger": "manual" })),
+    )
+    .await?;
+    Ok((StatusCode::ACCEPTED, Json(crate::routes::dto::Ok { ok: true })))
 }

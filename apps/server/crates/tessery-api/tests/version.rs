@@ -2,7 +2,7 @@ mod common;
 
 use axum::http::StatusCode;
 use serde_json::{Value, json};
-use tessery_api::routes::system::is_newer;
+
 
 async fn releases(tag: &'static str) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -64,16 +64,3 @@ async fn requires_a_signed_in_user() {
     assert_eq!(app.session().get("/api/system/version").await.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[test]
-fn compares_versions_as_numbers() {
-    assert!(is_newer("0.10.0", "0.9.0"));
-    assert!(is_newer("1.0.0", "0.99.99"));
-    assert!(!is_newer("0.2.0", "0.2.0"));
-    assert!(!is_newer("0.1.9", "0.2.0"));
-    assert!(is_newer("0.2.0", "0.2.0-rc.1"), "a release is newer than its pre-release");
-    assert!(!is_newer("0.2.0-rc.1", "0.2.0"));
-    assert!(is_newer("0.2.0-rc.10", "0.2.0-rc.2"), "pre-release numbers compare as numbers");
-    assert!(!is_newer("0.2.0-rc.2", "0.2.0-rc.10"));
-    assert!(!is_newer("0.2.0", "dev"));
-    assert!(!is_newer("main", "0.1.0"));
-}

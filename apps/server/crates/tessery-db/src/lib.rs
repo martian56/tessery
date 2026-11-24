@@ -19,6 +19,7 @@ pub mod tokens;
 pub mod tokens_password;
 pub mod two_factor;
 pub mod types;
+pub mod updates;
 pub mod users;
 
 pub use error::{DbError, DbResult};

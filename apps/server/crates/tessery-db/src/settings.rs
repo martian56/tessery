@@ -58,3 +58,31 @@ pub async fn set_smtp(ex: impl PgExecutor<'_>, smtp: Option<&serde_json::Value>,
     .await?;
     Ok(())
 }
+
+pub struct AutoUpdate {
+    pub enabled: bool,
+    pub from_hour: i16,
+    pub to_hour: i16,
+}
+
+pub async fn auto_update(ex: impl PgExecutor<'_>) -> DbResult<AutoUpdate> {
+    Ok(sqlx::query_as!(
+        AutoUpdate,
+        "SELECT auto_update AS enabled, auto_update_from AS from_hour, auto_update_to AS to_hour FROM instance_settings"
+    )
+    .fetch_one(ex)
+    .await?)
+}
+
+/// Fields left as `None` keep their stored value.
+pub async fn set_auto_update(ex: impl PgExecutor<'_>, enabled: Option<bool>, from_hour: Option<i16>, to_hour: Option<i16>) -> DbResult<()> {
+    sqlx::query!(
+        "UPDATE instance_settings SET auto_update = coalesce($1, auto_update), auto_update_from = coalesce($2, auto_update_from), auto_update_to = coalesce($3, auto_update_to)",
+        enabled,
+        from_hour,
+        to_hour
+    )
+    .execute(ex)
+    .await?;
+    Ok(())
+}
