@@ -71,11 +71,13 @@ ${via}
 }
 
 export function serviceUrl(service: string): string {
-  const via = VIA[service]
+  // Own properties only, so a service named like an Object method (constructor, toString) isn't misread.
+  const own = <T,>(m: Record<string, T>) => (Object.prototype.hasOwnProperty.call(m, service) ? m[service] : undefined)
+  const via = own(VIA)
   if (via) return serviceUrl(via[0]) + via[1]
   if (typeof window !== 'undefined') return \`/api/\${service}\`
   const key = service.toUpperCase().replace(/[^A-Z0-9]+/g, '_') + '_URL'
-  return process.env[key] ?? DEV_URLS[service] ?? 'http://localhost:8080'
+  return process.env[key] ?? own(DEV_URLS) ?? 'http://localhost:8080'
 }
 
 /** \`token\` calls on behalf of a signed-in user from server code; in the browser the session cookie does it.

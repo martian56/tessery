@@ -134,6 +134,7 @@ test('a web app that reaches a service only through a gateway calls it through t
 
   runOp(doc, 'connect', { source: web.id, target: api.id })
   assert.doesNotMatch(generateAll(doc)['apps/web/lib/api.ts'], /"tasks-api": \["gateway"/, 'a direct edge wins')
+  assert.match(generateAll(doc)['apps/web/lib/api.ts'], /hasOwnProperty\.call\(m, service\)/, 'service names like constructor are not read from Object.prototype')
 })
 
 test('the local development stack works without any secrets set', () => {
