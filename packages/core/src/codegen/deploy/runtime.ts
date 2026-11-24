@@ -181,7 +181,7 @@ function kafkaEnv(n: SystemNode): Record<string, string> {
   }
 }
 
-const EDGE = new Set(['api-gateway', 'graphql-gateway', 'load-balancer', 'reverse-proxy'])
+export const EDGE = new Set(['api-gateway', 'graphql-gateway', 'load-balancer', 'reverse-proxy'])
 
 export function builtInAuth(doc: ProjectDoc): SystemNode | undefined {
   return doc.nodes.find((n) => n.techId === 'auth-service' && (n.config.engine ?? 'Built-in (Tessery)') === 'Built-in (Tessery)')
