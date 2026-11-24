@@ -12,11 +12,14 @@ pub struct AutoUpdates {
     current: String,
     releases_url: String,
     last_check: Option<Instant>,
+    /// The version this process already tried to install. A successful update replaces the worker, so a version
+    /// still here failed, and it isn't tried again until the worker restarts.
+    attempted: Option<String>,
 }
 
 impl AutoUpdates {
     pub fn from_env() -> Self {
-        Self { updater: Updater::from_env(), current: tessery_update::current_version(), releases_url: tessery_update::releases_url_from_env(), last_check: None }
+        Self { updater: Updater::from_env(), current: tessery_update::current_version(), releases_url: tessery_update::releases_url_from_env(), last_check: None, attempted: None }
     }
 
     /// Starts the updater when automatic updates are on, the current UTC hour is inside the window and a newer
@@ -35,9 +38,10 @@ impl AutoUpdates {
         }
         self.last_check = Some(Instant::now());
         let Some(latest) = tessery_update::fetch_latest(&self.releases_url).await else { return Ok(()) };
-        if !tessery_update::is_newer(&latest.version, &self.current) {
+        if !tessery_update::is_newer(&latest.version, &self.current) || self.attempted.as_deref() == Some(latest.version.as_str()) {
             return Ok(());
         }
+        self.attempted = Some(latest.version.clone());
         match self.updater.start(&latest.version).await {
             Ok(()) => {}
             Err(tessery_update::UpdateError::AlreadyRunning) => return Ok(()),

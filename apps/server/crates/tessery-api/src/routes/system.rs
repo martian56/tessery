@@ -256,7 +256,7 @@ pub struct UpdatesInfo {
     pub current: String,
     /// False when `TESSERY_COMPOSE_DIR` isn't set, which turns in-app updates off.
     pub enabled: bool,
-    /// The version the last update to the running version came from, which a rollback returns to.
+    /// The older version the last move to the running version came from, which a rollback returns to.
     pub rollback_to: Option<String>,
     pub history: Vec<UpdateEntry>,
 }
@@ -270,7 +270,7 @@ pub async fn updates(State(state): State<AppState>, p: Principal) -> ApiResult<J
         .iter()
         .find(|u| u.to_version == current)
         .map(|u| u.from_version.clone())
-        .filter(|v| tessery_update::is_version(v) && v != &current);
+        .filter(|v| is_newer(&current, v));
     Ok(Json(UpdatesInfo {
         enabled: state.config.updater.enabled(),
         rollback_to,

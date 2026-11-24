@@ -106,3 +106,16 @@ async fn lists_published_releases_for_the_changelog() {
     let list: Value = admin.json("/api/system/releases").await;
     assert_eq!(list["releases"], Value::Null, "GitHub can't be reached");
 }
+
+#[tokio::test]
+async fn rollback_only_offers_an_older_version() {
+    let app = common::spawn_with(|c| c.version = "0.1.0".into()).await;
+    let (admin, _) = app.setup().await;
+    let url = std::env::var("TESSERY_TEST_DATABASE_URL").unwrap_or_else(|_| "postgres://tessery:tessery@127.0.0.1:15432/tessery".into());
+    let pool = sqlx::PgPool::connect(&format!("{}/{}", url.rsplit_once('/').unwrap().0, app.db_name)).await.unwrap();
+    tessery_db::updates::record(&pool, "0.1.0", "0.2.0", "update", None).await.unwrap();
+    tessery_db::updates::record(&pool, "0.2.0", "0.1.0", "rollback", None).await.unwrap();
+    let info: Value = admin.json("/api/system/updates").await;
+    assert_eq!(info["rollbackTo"], Value::Null, "after rolling back from 0.2.0, going to 0.2.0 is an update, not a rollback");
+    assert_eq!(info["history"].as_array().unwrap().len(), 2);
+}
