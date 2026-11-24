@@ -1,40 +1,45 @@
 import { Fragment, type ReactNode } from 'react'
 import s from './UpdatesView.module.css'
 
-const TABLE_ROW = /^\s*\|.*\|\s*$/
-// The line under a table's header, such as |---|:---:|, only sets alignment.
-const TABLE_RULE = /^\s*\|(\s*:?-+:?\s*\|)+\s*$/
+// The line under a table's header, such as |---|:---:| or ---|---, only sets alignment.
+const TABLE_RULE = /^\s*\|?(\s*:?-+:?\s*\|)+\s*(:?-+:?\s*)?$/
+
+/** Splits a table row into cells. The outer pipes are optional in Markdown. */
+const cells = (line: string) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim())
 
 /** Renders the small part of Markdown that GitHub release notes use: headings, lists, tables, links, bold and code.
  * It builds elements rather than HTML, so nothing in the notes can run in the page. */
 export function ReleaseNotes({ text }: { text: string }) {
   const blocks: ReactNode[] = []
   let list: ReactNode[] = []
-  let rows: string[][] = []
-  const flush = () => {
+  const flushList = () => {
     if (list.length) blocks.push(<ul key={blocks.length}>{list}</ul>)
-    if (rows.length) blocks.push(<Table key={blocks.length} rows={rows} />)
     list = []
-    rows = []
   }
-  text.replace(/\r\n/g, '\n').split('\n').forEach((raw, i) => {
-    const line = raw.trimEnd()
-    if (TABLE_ROW.test(line)) {
-      if (list.length) flush()
-      if (!TABLE_RULE.test(line)) rows.push(line.trim().slice(1, -1).split('|').map((c) => c.trim()))
-      return
+  const lines = text.replace(/\r\n/g, '\n').split('\n').map((l) => l.trimEnd())
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    // A table is a header row with an alignment line under it; its rows run until a line without a pipe.
+    if (line.includes('|') && TABLE_RULE.test(lines[i + 1] ?? '')) {
+      flushList()
+      const rows = [cells(line)]
+      i += 2
+      while (i < lines.length && lines[i].includes('|')) rows.push(cells(lines[i++]))
+      i--
+      blocks.push(<Table key={blocks.length} rows={rows} />)
+      continue
     }
     const item = /^\s*[-*]\s+(.*)$/.exec(line)
     if (item) {
-      if (rows.length) flush()
-      return void list.push(<li key={i}>{inline(item[1])}</li>)
+      list.push(<li key={i}>{inline(item[1])}</li>)
+      continue
     }
-    flush()
+    flushList()
     const heading = /^#{1,6}\s+(.*)$/.exec(line)
     if (heading) blocks.push(<h4 key={i}>{inline(heading[1])}</h4>)
     else if (line.trim()) blocks.push(<p key={i}>{inline(line)}</p>)
-  })
-  flush()
+  }
+  flushList()
   return blocks.length ? <div className={s.notes}>{blocks}</div> : <p className={s.quiet}>No notes for this release.</p>
 }
 
