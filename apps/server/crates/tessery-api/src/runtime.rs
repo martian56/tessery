@@ -58,7 +58,7 @@ pub async fn locate(state: &AppState, project: Uuid, env: &str) -> ApiResult<Run
     Ok(Running { place, plan })
 }
 
-async fn secret(state: &AppState, project: Uuid, env: &str, name: &str) -> ApiResult<Option<String>> {
+pub(crate) async fn secret(state: &AppState, project: Uuid, env: &str, name: &str) -> ApiResult<Option<String>> {
     let Some(s) = tessery_db::delivery::secrets(&state.db, project, env).await?.into_iter().find(|s| s.name == name) else { return Ok(None) };
     let key = state.config.secret_key.as_ref().ok_or_else(|| ApiError::Conflict("TESSERY_SECRET_KEY is not set".into()))?;
     let plain = key.decrypt(&s.cipher).map_err(|e| ApiError::Internal(e.into()))?;

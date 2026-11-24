@@ -1,6 +1,9 @@
 import { baseApi } from '../base'
 import type { Checkpoint, CheckpointDiff, Pipeline, Release, ReleaseLog, ReleasePreview, Remote, SecretInfo } from '../types'
 import type { ProjectDoc } from '@tessery/core/domain/types'
+import type { components } from '../schema'
+
+export type KubernetesCheck = components['schemas']['KubernetesCheck']
 
 const releaseChanges = ['Pipeline', 'Releases'] as const
 
@@ -42,6 +45,9 @@ export const deliveryApi = baseApi.injectEndpoints({
       query: ({ pid, env, name, value }) => ({ url: `/projects/${pid}/environments/${env}/secrets/${name}`, method: 'PUT', body: { value } }),
       invalidatesTags: ['Secrets'],
     }),
+    checkKubernetes: b.mutation<KubernetesCheck, { pid: string; env: string; namespace: string }>({
+      query: ({ pid, env, namespace }) => ({ url: `/projects/${pid}/environments/${env}/kubernetes/check`, method: 'POST', body: { namespace } }),
+    }),
     deleteSecret: b.mutation<void, { pid: string; env: string; name: string }>({
       query: ({ pid, env, name }) => ({ url: `/projects/${pid}/environments/${env}/secrets/${name}`, method: 'DELETE' }),
       invalidatesTags: ['Secrets'],
@@ -60,6 +66,6 @@ export const deliveryApi = baseApi.injectEndpoints({
 export const {
   useCheckpointsQuery, useCreateCheckpointMutation, useLazyCheckpointDocQuery, useCheckpointDiffQuery,
   usePipelineQuery, useReleasesQuery, useLazyReleasePreviewQuery, useCreateReleaseMutation, useDecideReleaseMutation,
-  useStopEnvMutation, useLazyReleaseLogQuery, useSecretsQuery, usePutSecretMutation, useDeleteSecretMutation,
+  useStopEnvMutation, useLazyReleaseLogQuery, useSecretsQuery, usePutSecretMutation, useDeleteSecretMutation, useCheckKubernetesMutation,
   useRemoteQuery, usePutRemoteMutation, useDeleteRemoteMutation, usePushRemoteMutation,
 } = deliveryApi

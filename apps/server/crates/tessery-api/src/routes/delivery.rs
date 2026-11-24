@@ -1033,3 +1033,123 @@ pub async fn delete_secret(State(state): State<AppState>, p: Principal, Path((pr
     audit::record(&state.db, &p, Entry::new(Some(project_target.org().0), "secret.delete", "project", project).decision(d).details(json!({ "env": env, "name": name }))).await?;
     Ok(Json(OK))
 }
+
+#[derive(Deserialize, ToSchema)]
+pub struct KubernetesCheckRequest {
+    /// The namespace the environment deploys to.
+    pub namespace: String,
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KubernetesCheck {
+    /// True when the cluster answered and the kubeconfig may deploy to the namespace.
+    pub ok: bool,
+    /// The cluster's Kubernetes version, when it answered.
+    pub server_version: Option<String>,
+    pub namespace: String,
+    pub namespace_exists: Option<bool>,
+    /// Whether the kubeconfig may create deployments in the namespace.
+    pub can_deploy: Option<bool>,
+    /// Whether it may create the namespace, asked only when the namespace doesn't exist yet.
+    pub can_create_namespace: Option<bool>,
+    /// What's wrong, in words, when `ok` is false.
+    pub problem: Option<String>,
+}
+
+fn valid_namespace(ns: &str) -> bool {
+    let b = ns.as_bytes();
+    !b.is_empty()
+        && b.len() <= 63
+        && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-')
+        && b[0] != b'-'
+        && b[b.len() - 1] != b'-'
+}
+
+/// The first line of kubectl's error, without its `error: ` prefix.
+fn kubectl_error(stderr: &str) -> String {
+    let line = stderr.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("kubectl failed without saying why");
+    line.trim_start_matches("error: ").trim_start_matches("Error from server ").to_owned()
+}
+
+#[utoipa::path(post, path = "/api/projects/{project}/environments/{env}/kubernetes/check", tag = "delivery", params(("project" = Uuid, Path), ("env" = String, Path)), request_body = KubernetesCheckRequest, responses((status = 200, body = KubernetesCheck)))]
+pub async fn check_kubernetes(State(state): State<AppState>, p: Principal, Path((project, env)): Path<(Uuid, String)>, Json(req): Json<KubernetesCheckRequest>) -> ApiResult<Json<KubernetesCheck>> {
+    let project_target = rbac::project_target(&state, project).await?;
+    rbac::require(&state, &p, &env_target(&project_target, &env), P::DeploymentRun).await?;
+    if !valid_env_key(&env) {
+        return Err(ApiError::invalid("env", "unknown environment"));
+    }
+    let namespace = req.namespace.trim().to_owned();
+    if !valid_namespace(&namespace) {
+        return Err(ApiError::invalid("namespace", "use lowercase letters, digits and dashes, at most 63 characters"));
+    }
+    let kubeconfig = crate::runtime::secret(&state, project, &env, "KUBECONFIG")
+        .await?
+        .ok_or_else(|| ApiError::Conflict(format!("{env} has no KUBECONFIG secret; add it under Secrets first")))?;
+    crate::runtime::ensure_runner().await?;
+    let mut out = KubernetesCheck { ok: false, server_version: None, namespace: namespace.clone(), namespace_exists: None, can_deploy: None, can_create_namespace: None, problem: None };
+    let args = |a: &[&str]| a.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+
+    let version = crate::runtime::kubectl(&kubeconfig, &args(&["version", "-o", "json", "--request-timeout=15s"]), None).await?;
+    let parsed: Option<Value> = serde_json::from_str(&version.stdout).ok();
+    out.server_version = parsed.as_ref().and_then(|v| v.pointer("/serverVersion/gitVersion")).and_then(Value::as_str).map(str::to_owned);
+    if out.server_version.is_none() {
+        out.problem = Some(format!("The cluster didn't answer: {}", kubectl_error(&version.stderr)));
+        return Ok(Json(out));
+    }
+
+    let get_ns = args(&["get", "namespace", &namespace, "-o", "name", "--request-timeout=15s"]);
+    let can_deploy = args(&["auth", "can-i", "create", "deployments.apps", "-n", &namespace, "--request-timeout=15s"]);
+    let (exists, deploy) = tokio::join!(crate::runtime::kubectl(&kubeconfig, &get_ns, None), crate::runtime::kubectl(&kubeconfig, &can_deploy, None));
+    let (exists, deploy) = (exists?, deploy?);
+    if exists.ok {
+        out.namespace_exists = Some(true);
+    } else if exists.stderr.contains("NotFound") || exists.stderr.contains("not found") {
+        out.namespace_exists = Some(false);
+    } else if !exists.stderr.contains("Forbidden") && !exists.stderr.contains("forbidden") {
+        out.problem = Some(format!("Couldn't look up namespace {namespace}: {}", kubectl_error(&exists.stderr)));
+        return Ok(Json(out));
+    }
+    // `can-i` prints yes or no and exits 1 for no, so read its answer rather than the exit code.
+    out.can_deploy = match deploy.stdout.trim() {
+        "yes" => Some(true),
+        "no" => Some(false),
+        _ => {
+            out.problem = Some(format!("Couldn't check permissions: {}", kubectl_error(&deploy.stderr)));
+            return Ok(Json(out));
+        }
+    };
+    if out.namespace_exists == Some(false) {
+        let create = crate::runtime::kubectl(&kubeconfig, &args(&["auth", "can-i", "create", "namespaces", "--request-timeout=15s"]), None).await?;
+        out.can_create_namespace = Some(create.stdout.trim() == "yes");
+    }
+
+    out.problem = if out.can_deploy == Some(false) {
+        Some(format!("This kubeconfig may not create deployments in {namespace}. Grant its user or service account a role there, such as edit."))
+    } else if out.namespace_exists == Some(false) && out.can_create_namespace == Some(false) {
+        Some(format!("Namespace {namespace} doesn't exist and this kubeconfig may not create it. Create it, or grant permission to create namespaces."))
+    } else {
+        None
+    };
+    out.ok = out.problem.is_none();
+    Ok(Json(out))
+}
+
+#[cfg(test)]
+mod kubernetes_check_tests {
+    use super::{kubectl_error, valid_namespace};
+
+    #[test]
+    fn namespaces_are_dns_labels() {
+        assert!(valid_namespace("shop-prod") && valid_namespace("a1"));
+        assert!(!valid_namespace("") && !valid_namespace("-x") && !valid_namespace("x-") && !valid_namespace("Shop") && !valid_namespace("a b"));
+        assert!(!valid_namespace("--all-namespaces"), "can't be read as a kubectl flag");
+        assert!(!valid_namespace(&"a".repeat(64)));
+    }
+
+    #[test]
+    fn errors_read_as_one_line() {
+        assert_eq!(kubectl_error("error: You must be logged in to the server (Unauthorized)\nmore"), "You must be logged in to the server (Unauthorized)");
+        assert_eq!(kubectl_error("\n"), "kubectl failed without saying why");
+    }
+}

@@ -28,7 +28,7 @@ use utoipa::OpenApi;
         delivery::get_remote, delivery::put_remote, delivery::delete_remote, delivery::push_remote, delivery::bundle,
         tokens::list, tokens::create, tokens::revoke, sso::info,
         runtime::status, runtime::logs, runtime::tables, runtime::rows, runtime::sql, telemetry::traces, telemetry::trace,
-        delivery::stop_env, delivery::release_logs, delivery::list_secrets, delivery::put_secret, delivery::delete_secret,
+        delivery::stop_env, delivery::release_logs, delivery::list_secrets, delivery::put_secret, delivery::delete_secret, delivery::check_kubernetes,
         audit_log::list, audit_log::create_export, audit_log::get_export, audit_log::download_export,
         admin::users, admin::update_user, admin::orgs, admin::get_settings, admin::put_settings,
     ),
