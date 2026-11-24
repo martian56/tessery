@@ -1,19 +1,34 @@
 import { Fragment, type ReactNode } from 'react'
 import s from './UpdatesView.module.css'
 
-/** Renders the small part of Markdown that GitHub release notes use: headings, lists, links, bold and code. It builds
- * elements rather than HTML, so nothing in the notes can run in the page. */
+const TABLE_ROW = /^\s*\|.*\|\s*$/
+// The line under a table's header, such as |---|:---:|, only sets alignment.
+const TABLE_RULE = /^\s*\|(\s*:?-+:?\s*\|)+\s*$/
+
+/** Renders the small part of Markdown that GitHub release notes use: headings, lists, tables, links, bold and code.
+ * It builds elements rather than HTML, so nothing in the notes can run in the page. */
 export function ReleaseNotes({ text }: { text: string }) {
   const blocks: ReactNode[] = []
   let list: ReactNode[] = []
+  let rows: string[][] = []
   const flush = () => {
     if (list.length) blocks.push(<ul key={blocks.length}>{list}</ul>)
+    if (rows.length) blocks.push(<Table key={blocks.length} rows={rows} />)
     list = []
+    rows = []
   }
   text.replace(/\r\n/g, '\n').split('\n').forEach((raw, i) => {
     const line = raw.trimEnd()
+    if (TABLE_ROW.test(line)) {
+      if (list.length) flush()
+      if (!TABLE_RULE.test(line)) rows.push(line.trim().slice(1, -1).split('|').map((c) => c.trim()))
+      return
+    }
     const item = /^\s*[-*]\s+(.*)$/.exec(line)
-    if (item) return void list.push(<li key={i}>{inline(item[1])}</li>)
+    if (item) {
+      if (rows.length) flush()
+      return void list.push(<li key={i}>{inline(item[1])}</li>)
+    }
     flush()
     const heading = /^#{1,6}\s+(.*)$/.exec(line)
     if (heading) blocks.push(<h4 key={i}>{inline(heading[1])}</h4>)
@@ -23,7 +38,16 @@ export function ReleaseNotes({ text }: { text: string }) {
   return blocks.length ? <div className={s.notes}>{blocks}</div> : <p className={s.quiet}>No notes for this release.</p>
 }
 
-const TOKEN = /(\[[^\]]+\]\(https?:\/\/[^)\s]+\)|https?:\/\/[^\s)]+|\*\*[^*]+\*\*|`[^`]+`)/g
+function Table({ rows: [head, ...body] }: { rows: string[][] }) {
+  return (
+    <table>
+      <thead><tr>{head.map((c, i) => <th key={i}>{inline(c)}</th>)}</tr></thead>
+      <tbody>{body.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{inline(c)}</td>)}</tr>)}</tbody>
+    </table>
+  )
+}
+
+const TOKEN =/(\[[^\]]+\]\(https?:\/\/[^)\s]+\)|https?:\/\/[^\s)]+|\*\*[^*]+\*\*|`[^`]+`)/g
 
 function inline(text: string): ReactNode {
   return text.split(TOKEN).map((part, i) => {

@@ -39,5 +39,11 @@
 .notes p { margin: 4px 0; }
 .notes ul { margin: 4px 0; padding-left: 18px; }
 .notes li { margin: 2px 0; }
+.notes table { border-collapse: collapse; margin: 6px 0 10px; font-size: var(--fs-12); }
+.notes th, .notes td { text-align: left; padding: 4px 16px 4px 0; border-bottom: 1px solid var(--line-1); }
+.notes th { color: var(--tx-3); font-weight: 500; }
+.notes table { border-collapse: collapse; margin: 6px 0 10px; font-size: var(--fs-12); }
+.notes th, .notes td { text-align: left; padding: 4px 16px 4px 0; border-bottom: 1px solid var(--line-1); }
+.notes th { color: var(--tx-3); font-weight: 500; }
 .notes a { color: var(--acc-hi); }
 .notes a:hover { text-decoration: underline; }
