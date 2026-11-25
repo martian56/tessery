@@ -4,7 +4,7 @@ use std::time::Duration;
 pub const WORKER_HEARTBEAT_KEY: &str = "tessery:worker:heartbeat";
 
 /// How often the worker refreshes its heartbeat.
-pub const WORKER_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
+pub const WORKER_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(3);
 
-/// How long the key lives without a refresh. Three missed beats and it is gone.
-pub const WORKER_HEARTBEAT_TTL_SECS: u64 = 15;
+/// How long the key lives without a refresh. A few missed beats and it is gone.
+pub const WORKER_HEARTBEAT_TTL_SECS: u64 = 10;
