@@ -138,6 +138,7 @@ async fn validation_errors_name_the_field() {
 async fn health_and_openapi_are_public() {
     let app = common::spawn().await;
     let s = app.session();
+    common::worker_heartbeat().await;
     let h = s.json("/api/health").await;
     assert_eq!(h["status"], "ok");
     let spec = s.json("/api/openapi.json").await;

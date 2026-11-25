@@ -45,7 +45,11 @@ HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD curl -fsS http://127.0.0
 ENTRYPOINT ["/usr/local/bin/tessery-server"]
 
 FROM runtime AS worker
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends redis-tools && rm -rf /var/lib/apt/lists/*
+USER tessery
 COPY --from=rust /usr/local/bin/tessery-worker /usr/local/bin/tessery-worker
+HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=3 CMD [ "$(redis-cli -u "$TESSERY_REDIS_URL" EXISTS tessery:worker:heartbeat)" = "1" ] || exit 1
 ARG TESSERY_VERSION=dev
 ENV TESSERY_VERSION=$TESSERY_VERSION
 ENTRYPOINT ["/usr/local/bin/tessery-worker"]
