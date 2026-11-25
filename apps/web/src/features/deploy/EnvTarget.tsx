@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { KeyRound, Plus, Trash2 } from 'lucide-react'
 import type { DeployTarget, Environment, ProjectDoc } from '@tessery/core/domain/types'
 import { dockerPublicHost, isHostname, namespaceOf, workloads } from '@tessery/core/codegen/deploy'
-import { useDeleteSecretMutation, usePutSecretMutation } from '@/api/endpoints/delivery'
+import { useCheckKubernetesMutation, useDeleteSecretMutation, usePutSecretMutation, type KubernetesCheck } from '@/api/endpoints/delivery'
 import { useListServersQuery } from '@/api/endpoints/servers'
 import { errorMessage } from '@/api/types'
 import { usePermissions } from '@/app/usePermissions'
@@ -54,6 +54,7 @@ export function TargetSection({ doc, env }: { doc: ProjectDoc; env: Environment 
           <Field label="Ingress class"><Input mono value={target.ingressClass ?? ''} placeholder="cluster default" onCommit={(v) => patch({ ingressClass: v.trim() })} /></Field>
           <Field label="Public port" hint="Only when the ingress is not on port 80"><NumberInput value={target.publicPort ?? 80} min={1} max={65535} onCommit={(v) => patch({ publicPort: v === 80 ? undefined : v })} /></Field>
           <div className={s.hint}>Needs a KUBECONFIG secret below. Data stores run as StatefulSets with persistent volumes.</div>
+          <ConnectionCheck key={`${env.id}:${namespaceOf(doc, env)}`} doc={doc} env={env} />
         </>
       )}
       {target.kind === 'git' && <div className={s.hint}>Tessery only moves the <code>env/{env.id}</code> branch. Deploy from it with your own CI.</div>}
@@ -198,5 +199,40 @@ export function SecretsSection({ doc, env }: { doc: ProjectDoc; env: Environment
         </Dialog>
       )}
     </Section>
+  )
+}
+
+/** Tries the stored kubeconfig against the cluster before any release does: can it reach it, and may it deploy to the
+ * namespace. */
+function ConnectionCheck({ doc, env }: { doc: ProjectDoc; env: Environment }) {
+  const [check, { isLoading }] = useCheckKubernetesMutation()
+  const [result, setResult] = useState<KubernetesCheck | { error: string } | null>(null)
+  const namespace = namespaceOf(doc, env)
+  const run = async () => {
+    setResult(null)
+    const r = await check({ pid: doc.id, env: env.id, namespace })
+    setResult('error' in r ? { error: errorMessage(r.error) } : r.data)
+  }
+  return (
+    <div className={s.check}>
+      <Button size="xs" onClick={run} disabled={isLoading}>{isLoading ? 'Testing…' : 'Test connection'}</Button>
+      {result && <CheckResult result={result} />}
+    </div>
+  )
+}
+
+function CheckResult({ result }: { result: KubernetesCheck | { error: string } }) {
+  if ('error' in result) return <p className={s.checkErr} role="alert">{result.error}</p>
+  const lines = [
+    result.serverVersion && `Reached the cluster, Kubernetes ${result.serverVersion}.`,
+    result.namespaceExists === true && `Namespace ${result.namespace} exists.`,
+    result.namespaceExists === false && result.canCreateNamespace && `Namespace ${result.namespace} doesn't exist yet; the first release creates it.`,
+    result.ok && `This kubeconfig may deploy to ${result.namespace}.`,
+  ].filter(Boolean)
+  return (
+    <div className={result.ok ? s.checkOk : s.checkErr} role={result.ok ? 'status' : 'alert'}>
+      {lines.map((l) => <p key={l as string}>{l}</p>)}
+      {result.problem && <p>{result.problem}</p>}
+    </div>
   )
 }

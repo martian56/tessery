@@ -111,6 +111,32 @@ test('a REST base path prefixes service routes, the client and form actions alik
   assert.match(files['apps/web/app/page.tsx'], /path: `\/v1\/projects`/)
 })
 
+test('a web app that reaches a service only through a gateway calls it through the gateway', () => {
+  const doc = tasksTemplate()
+  const web = doc.nodes.find((n) => n.techId === 'web-app')!
+  const api = doc.nodes.find((n) => n.name === 'tasks-api')!
+  doc.edges = doc.edges.filter((e) => !(e.source === web.id && e.target === api.id))
+  const gw = runOp(doc, 'addNode', { techId: 'api-gateway', x: 0, y: 0, name: 'gateway' }) as string
+  runOp(doc, 'connect', { source: web.id, target: gw })
+  runOp(doc, 'connect', { source: gw, target: api.id })
+  let files = generateAll(doc)
+  const client = files['apps/web/lib/api.ts']
+  assert.match(client, /"tasks-api": \["gateway", ""\]/, 'one upstream: the gateway passes paths through')
+  assert.match(client, /if \(via\) return serviceUrl\(via\[0\]\) \+ via\[1\]/)
+  assert.doesNotMatch(client, /DEV_URLS[^}]*"tasks-api"/, 'no direct address for a service behind the gateway')
+  assert.match(files['apps/web/app/form-action/[service]/[...path]/route.ts'], /"tasks-api"/, 'forms may post to it')
+  assert.match(files['apps/web/app/api/[service]/[...path]/route.ts'], /"tasks-api"/)
+
+  const other = runOp(doc, 'addNode', { techId: 'service', x: 0, y: 0, name: 'reports', config: { language: 'Go' } }) as string
+  runOp(doc, 'connect', { source: gw, target: other })
+  files = generateAll(doc)
+  assert.match(files['apps/web/lib/api.ts'], /"tasks-api": \["gateway", "\/tasks-api"\]/, 'several upstreams: routed by name')
+
+  runOp(doc, 'connect', { source: web.id, target: api.id })
+  assert.doesNotMatch(generateAll(doc)['apps/web/lib/api.ts'], /"tasks-api": \["gateway"/, 'a direct edge wins')
+  assert.match(generateAll(doc)['apps/web/lib/api.ts'], /hasOwnProperty\.call\(m, service\)/, 'service names like constructor are not read from Object.prototype')
+})
+
 test('the local development stack works without any secrets set', () => {
   const compose = generateAll(tasksTemplate())['compose.yaml']
   assert.match(compose, /AUTH_SECRET: "\$\{AUTH_SECRET:-dev\}"/)

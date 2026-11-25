@@ -32,6 +32,10 @@ pub fn api() -> Router<AppState> {
     Router::new()
         .route("/health", get(system::health))
         .route("/setup", get(system::setup_status).post(system::setup))
+        .route("/system/version", get(system::version))
+        .route("/system/releases", get(system::releases))
+        .route("/system/updates", get(system::updates))
+        .route("/system/update", post(system::start_update))
         .route("/openapi.json", get(crate::openapi::serve))
         .route("/auth/login", post(auth::login))
         .route("/auth/logout", post(auth::logout))
@@ -170,6 +174,7 @@ pub fn api() -> Router<AppState> {
         .route("/projects/{project}/environments/{env}/databases/{node}/sql", post(runtime::sql))
         .route("/projects/{project}/environments/{env}/secrets", get(delivery::list_secrets))
         .route("/projects/{project}/environments/{env}/secrets/{name}", axum::routing::put(delivery::put_secret).delete(delivery::delete_secret))
+        .route("/projects/{project}/environments/{env}/kubernetes/check", post(delivery::check_kubernetes))
         .route(
             "/projects/{project}/remote",
             get(delivery::get_remote)

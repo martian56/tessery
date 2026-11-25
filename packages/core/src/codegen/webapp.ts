@@ -211,7 +211,7 @@ export function webAppFiles(doc: ProjectDoc, app: SystemNode): Files {
   const appTheme = themeOf(doc, app.id)
   const favicon = appTheme.favicon?.startsWith('asset:') ? `/assets/${appTheme.favicon.slice(6)}` : appTheme.favicon?.startsWith('https://') ? appTheme.favicon : undefined
   const f: Files = {}
-  f[`${dir}/lib/api.ts`] = apiClient(doc)
+  f[`${dir}/lib/api.ts`] = apiClient(doc, app)
   pages.forEach((p) => {
     f[`${dir}/app/${routeDir(p.route)}page.tsx`] = pageSource(doc, p)
     const loading = loadingSource(doc, p)

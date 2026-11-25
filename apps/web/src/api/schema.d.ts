@@ -1179,6 +1179,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project}/environments/{env}/kubernetes/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["check_kubernetes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project}/environments/{env}/logs": {
         parameters: {
             query?: never;
@@ -1646,6 +1662,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/system/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["system_releases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["system_update"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["system_updates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["system_version"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2016,6 +2096,24 @@ export interface components {
             /** @description Replace the credentials. They are checked with the provider first. */
             fields?: Record<string, never> | null;
             name?: string | null;
+        };
+        KubernetesCheck: {
+            /** @description Whether it may create the namespace, asked only when the namespace doesn't exist yet. */
+            canCreateNamespace?: boolean | null;
+            /** @description Whether the kubeconfig may create deployments in the namespace. */
+            canDeploy?: boolean | null;
+            namespace: string;
+            namespaceExists?: boolean | null;
+            /** @description True when the cluster answered and the kubeconfig may deploy to the namespace. */
+            ok: boolean;
+            /** @description What's wrong, in words, when `ok` is false. */
+            problem?: string | null;
+            /** @description The cluster's Kubernetes version, when it answered. */
+            serverVersion?: string | null;
+        };
+        KubernetesCheckRequest: {
+            /** @description The namespace the environment deploys to. */
+            namespace: string;
         };
         LatestReleaseDto: {
             /** Format: date-time */
@@ -2435,6 +2533,18 @@ export interface components {
         };
         Settings: {
             allowOrgCreation: boolean;
+            /** @description Install new releases automatically inside the daily window. */
+            autoUpdate: boolean;
+            /**
+             * Format: int32
+             * @description Start of the automatic update window, as a UTC hour from 0 to 23.
+             */
+            autoUpdateFrom: number;
+            /**
+             * Format: int32
+             * @description End of the window, a UTC hour from 0 to 23, not included. Before the start, the window runs past midnight.
+             */
+            autoUpdateTo: number;
             /**
              * Format: int32
              * @description Days of container metrics to keep, 1 to 90.
@@ -2444,6 +2554,11 @@ export interface components {
         /** @description Fields left out keep their stored value. */
         SettingsUpdate: {
             allowOrgCreation?: boolean | null;
+            autoUpdate?: boolean | null;
+            /** Format: int32 */
+            autoUpdateFrom?: number | null;
+            /** Format: int32 */
+            autoUpdateTo?: number | null;
             /** Format: int32 */
             metricsRetentionDays?: number | null;
         };
@@ -2532,12 +2647,29 @@ export interface components {
             /** @description Where the environment deploys to: `git`, `docker` or `kubernetes`. */
             target: string;
         };
+        StartUpdate: {
+            /** @description The version to move to: a newer one updates, an older one rolls back. */
+            version: string;
+        };
         /** @enum {string} */
         SubjectKind: "user" | "team";
         SubjectRef: {
             /** Format: uuid */
             id: string;
             kind: components["schemas"]["SubjectKind"];
+        };
+        SystemRelease: {
+            name: string;
+            /** @description Release notes in Markdown. */
+            notes: string;
+            prerelease: boolean;
+            publishedAt?: string | null;
+            url: string;
+            version: string;
+        };
+        SystemReleaseList: {
+            /** @description Null when GitHub can't be reached. */
+            releases?: components["schemas"]["SystemRelease"][] | null;
         };
         TablesDto: {
             tables: string[];
@@ -2629,6 +2761,16 @@ export interface components {
             events: string[];
             name: string;
         };
+        UpdateEntry: {
+            automatic: boolean;
+            fromVersion: string;
+            /** @description `update` or `rollback`. */
+            kind: string;
+            /** Format: date-time */
+            startedAt: string;
+            startedBy?: string | null;
+            toVersion: string;
+        };
         UpdateMe: {
             name: string;
         };
@@ -2639,6 +2781,14 @@ export interface components {
         UpdateUser: {
             disabled?: boolean | null;
             instanceAdmin?: boolean | null;
+        };
+        UpdatesInfo: {
+            current: string;
+            /** @description False when `TESSERY_COMPOSE_DIR` isn't set, which turns in-app updates off. */
+            enabled: boolean;
+            history: components["schemas"]["UpdateEntry"][];
+            /** @description The older version the last move to the running version came from, which a rollback returns to. */
+            rollbackTo?: string | null;
         };
         UserDto: {
             /** Format: date-time */
@@ -2665,6 +2815,15 @@ export interface components {
             message: string;
             /** Format: int32 */
             version: number;
+        };
+        VersionInfo: {
+            /** @description The version this instance runs, or `dev` for a build without one. */
+            current: string;
+            /** @description The newest published release, or null when GitHub can't be reached. */
+            latest?: string | null;
+            /** @description The latest release's notes on GitHub. */
+            releaseUrl?: string | null;
+            updateAvailable: boolean;
         };
     };
     responses: never;
@@ -5035,6 +5194,32 @@ export interface operations {
             };
         };
     };
+    check_kubernetes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+                env: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KubernetesCheckRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KubernetesCheck"];
+                };
+            };
+        };
+    };
     logs: {
         parameters: {
             query?: {
@@ -5878,6 +6063,94 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    system_releases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemReleaseList"];
+                };
+            };
+        };
+    };
+    system_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartUpdate"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ok"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    system_updates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdatesInfo"];
+                };
+            };
+        };
+    };
+    system_version: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionInfo"];
+                };
             };
         };
     };

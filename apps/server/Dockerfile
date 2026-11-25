@@ -38,6 +38,8 @@ COPY --from=web /repo/packages/core/dist/tessery-engine.mjs /usr/local/lib/tesse
 COPY --from=web /repo/apps/web/dist /srv/web
 COPY --from=rust /usr/local/bin/tessery-server /usr/local/bin/tessery-server
 ENV TESSERY_WEB_DIR=/srv/web TESSERY_ENGINE_SCRIPT=/usr/local/lib/tessery/tessery-engine.mjs TESSERY_NODE_BIN=/usr/local/bin/node
+ARG TESSERY_VERSION=dev
+ENV TESSERY_VERSION=$TESSERY_VERSION
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD curl -fsS http://127.0.0.1:8080/api/health || exit 1
 ENTRYPOINT ["/usr/local/bin/tessery-server"]
@@ -48,4 +50,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends redis-tools && 
 USER tessery
 COPY --from=rust /usr/local/bin/tessery-worker /usr/local/bin/tessery-worker
 HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=3 CMD [ "$(redis-cli -u "$TESSERY_REDIS_URL" EXISTS tessery:worker:heartbeat)" = "1" ] || exit 1
+ARG TESSERY_VERSION=dev
+ENV TESSERY_VERSION=$TESSERY_VERSION
 ENTRYPOINT ["/usr/local/bin/tessery-worker"]

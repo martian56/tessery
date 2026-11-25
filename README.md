@@ -140,8 +140,13 @@ To try it on your own machine instead, follow [Development](#development).
 
 ## Self-hosting
 
+The full guide, including updates, automatic updates and rolling back, is [docs/self-hosting.md](docs/self-hosting.md).
+
 Only ports 80 and 443 are opened; Postgres, Redis and RabbitMQ stay on the internal network. Every setting is
 described in [`deploy/.env.example`](deploy/.env.example). Set `TESSERY_IMAGE_TAG` in `.env` to pin a version.
+
+**Updates.** Instance admins update from Instance admin, Updates, by hand or automatically inside a daily window,
+and can roll back to the previous version from the same page.
 
 Back up `.env`. `TESSERY_SECRET_KEY` encrypts environment secrets, git credentials and provider credentials and
 cannot be recovered.
@@ -216,7 +221,18 @@ cd apps/web && npx tsc --noEmit -p .
 ## Contributing
 
 Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for branches, commit messages and
-pull requests, and report security problems as described in [SECURITY.md](SECURITY.md).
+pull requests, and report security problems as described in [SECURITY.md](SECURITY.md). Maintainers cut releases as
+described in [docs/releasing.md](docs/releasing.md).
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=martian56%2Ftessery&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=martian56/tessery&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=martian56/tessery&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=martian56/tessery&type=date&legend=top-left" />
+ </picture>
+</a>
 
 ## License
 

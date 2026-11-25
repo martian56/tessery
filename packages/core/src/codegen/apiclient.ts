@@ -1,5 +1,6 @@
 import type { SystemNode, Operation, ProjectDoc } from '../domain/types'
-import { builtInAuth, devConnection } from './deploy/runtime'
+import { EDGE, builtInAuth, devConnection } from './deploy/runtime'
+import { TECH_BY_ID } from '../catalog/technologies'
 import { restPrefix } from './services/model'
 
 const camel = (s: string) => s.replace(/-(\w)/g, (_, c: string) => c.toUpperCase())
@@ -30,9 +31,30 @@ function method(svc: string, style: string, basePath: string, o: Operation, pref
   return `    ${o.name}: (${args}) => call(${svc}, '${m}', ${m === 'GET' ? `withQuery(${url}, opts?.query)` : url}, ${hasBody ? 'body' : 'undefined'}, opts?.token),`
 }
 
-export function apiClient(doc: ProjectDoc): string {
+const targets = (doc: ProjectDoc, from: SystemNode) =>
+  doc.edges.filter((e) => e.source === from.id).map((e) => doc.nodes.find((n) => n.id === e.target)).filter((n): n is SystemNode => !!n)
+
+/** Services the app has no edge to but reaches through a gateway it connects to, with that gateway and the path it
+ * serves them under: a gateway with one upstream passes paths through, one with several routes /<service>/. */
+export function gatewayRoutes(doc: ProjectDoc, app?: SystemNode): Map<string, { gateway: SystemNode; prefix: string }> {
+  const out = new Map<string, { gateway: SystemNode; prefix: string }>()
+  if (!app) return out
+  const direct = targets(doc, app)
+  for (const gateway of direct.filter((n) => EDGE.has(n.techId))) {
+    const ups = targets(doc, gateway).filter((d) => TECH_BY_ID[d.techId]?.category !== 'client')
+    for (const up of ups) {
+      if (!direct.includes(up) && !out.has(up.name)) out.set(up.name, { gateway, prefix: ups.length === 1 ? '' : `/${up.name}` })
+    }
+  }
+  return out
+}
+
+export function apiClient(doc: ProjectDoc, app?: SystemNode): string {
   const specs = Object.values(doc.apis).map((sp) => ({ sp, node: doc.nodes.find((n) => n.id === sp.nodeId) })).filter((x): x is { sp: typeof x.sp; node: SystemNode } => !!x.node)
-  const devUrls = specs.map(({ node }) => `  ${JSON.stringify(node.name)}: ${JSON.stringify(devConnection(node, doc).url)},`).join('\n')
+  const routes = gatewayRoutes(doc, app)
+  const gateways = [...new Set([...routes.values()].map((r) => r.gateway))]
+  const devUrls = [...specs.map(({ node }) => node).filter((n) => !routes.has(n.name)), ...gateways].map((node) => `  ${JSON.stringify(node.name)}: ${JSON.stringify(devConnection(node, doc).url)},`).join('\n')
+  const via = [...routes].map(([name, r]) => `  ${JSON.stringify(name)}: [${JSON.stringify(r.gateway.name)}, ${JSON.stringify(r.prefix)}],`).join('\n')
   const groups = specs.map(({ sp, node }) => {
     const svc = JSON.stringify(node.name)
     return `  ${camel(node.name)}: {\n${sp.operations.map((o) => method(svc, sp.style, sp.basePath, o, restPrefix(sp))).join('\n')}\n  },`
@@ -43,10 +65,19 @@ const DEV_URLS: Record<string, string> = {
 ${devUrls}
 }
 
+// Services this app reaches through a gateway: the gateway, and the path it serves them under.
+const VIA: Record<string, [string, string]> = {
+${via}
+}
+
 export function serviceUrl(service: string): string {
+  // Own properties only, so a service named like an Object method (constructor, toString) isn't misread.
+  const own = <T,>(m: Record<string, T>) => (Object.prototype.hasOwnProperty.call(m, service) ? m[service] : undefined)
+  const via = own(VIA)
+  if (via) return serviceUrl(via[0]) + via[1]
   if (typeof window !== 'undefined') return \`/api/\${service}\`
   const key = service.toUpperCase().replace(/[^A-Z0-9]+/g, '_') + '_URL'
-  return process.env[key] ?? DEV_URLS[service] ?? 'http://localhost:8080'
+  return process.env[key] ?? own(DEV_URLS) ?? 'http://localhost:8080'
 }
 
 /** \`token\` calls on behalf of a signed-in user from server code; in the browser the session cookie does it.
@@ -83,7 +114,7 @@ ${groups}
 
 export function apiProxy(doc: ProjectDoc, app: SystemNode): string {
   const auth = builtInAuth(doc)?.name
-  const allowed = [...new Set([...doc.edges.filter((e) => e.source === app.id).map((e) => doc.nodes.find((n) => n.id === e.target)?.name), auth])].filter((n): n is string => !!n)
+  const allowed = [...new Set([...doc.edges.filter((e) => e.source === app.id).map((e) => doc.nodes.find((n) => n.id === e.target)?.name), ...gatewayRoutes(doc, app).keys(), auth])].filter((n): n is string => !!n)
   return `import { serviceUrl } from '@/lib/api'
 
 const ALLOWED = new Set(${JSON.stringify(allowed)})
@@ -112,7 +143,7 @@ export const dynamic = 'force-dynamic'
 /** Lets designed forms change data without client code: the form posts here, this calls the service with the visitor's session and sends them back. */
 export function formAction(doc: ProjectDoc, app: SystemNode): string {
   const auth = builtInAuth(doc)?.name
-  const allowed = [...new Set([...doc.edges.filter((e) => e.source === app.id).map((e) => doc.nodes.find((n) => n.id === e.target)?.name), auth])].filter((n): n is string => !!n)
+  const allowed = [...new Set([...doc.edges.filter((e) => e.source === app.id).map((e) => doc.nodes.find((n) => n.id === e.target)?.name), ...gatewayRoutes(doc, app).keys(), auth])].filter((n): n is string => !!n)
   return `import { serviceUrl } from '@/lib/api'
 
 // Turns a POST from a form designed in Tessery into a JSON call to the service, then returns the visitor to the page.

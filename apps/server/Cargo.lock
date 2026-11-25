@@ -3577,7 +3577,7 @@ dependencies = [
 
 [[package]]
 name = "tessery-api"
-version = "0.1.0"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "argon2",
@@ -3607,6 +3607,7 @@ dependencies = [
  "tessery-git",
  "tessery-mq",
  "tessery-notify",
+ "tessery-update",
  "thiserror",
  "time",
  "tokio",
@@ -3620,7 +3621,7 @@ dependencies = [
 
 [[package]]
 name = "tessery-cloud"
-version = "0.1.0"
+version = "0.2.2"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -3638,7 +3639,7 @@ dependencies = [
 
 [[package]]
 name = "tessery-core"
-version = "0.1.0"
+version = "0.2.2"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -3654,7 +3655,7 @@ dependencies = [
 
 [[package]]
 name = "tessery-db"
-version = "0.1.0"
+version = "0.2.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -3668,7 +3669,7 @@ dependencies = [
 
 [[package]]
 name = "tessery-engine"
-version = "0.1.0"
+version = "0.2.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -3679,7 +3680,7 @@ dependencies = [
 
 [[package]]
 name = "tessery-git"
-version = "0.1.0"
+version = "0.2.2"
 dependencies = [
  "base64 0.22.1",
  "tempfile",
@@ -3691,7 +3692,7 @@ dependencies = [
 
 [[package]]
 name = "tessery-mq"
-version = "0.1.0"
+version = "0.2.2"
 dependencies = [
  "futures-util",
  "lapin",
@@ -3705,7 +3706,7 @@ dependencies = [
 
 [[package]]
 name = "tessery-notify"
-version = "0.1.0"
+version = "0.2.2"
 dependencies = [
  "lettre",
  "reqwest",
@@ -3716,8 +3717,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tessery-update"
+version = "0.2.2"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "tessery-worker"
-version = "0.1.0"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3734,6 +3747,7 @@ dependencies = [
  "tessery-git",
  "tessery-mq",
  "tessery-notify",
+ "tessery-update",
  "time",
  "tokio",
  "tracing",

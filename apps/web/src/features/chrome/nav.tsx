@@ -22,4 +22,5 @@ export const ADMIN_SECTIONS: NavItem[] = [
   { id: 'email', label: 'Email', icon: <NavIcon name="email" /> },
   { id: 'github', label: 'GitHub', icon: <NavIcon name="github" /> },
   { id: 'settings', label: 'Instance settings', icon: <NavIcon name="settings" /> },
+  { id: 'updates', label: 'Updates', icon: <NavIcon name="activity" /> },
 ]
