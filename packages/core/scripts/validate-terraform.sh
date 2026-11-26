@@ -1,6 +1,6 @@
 #!/bin/sh
-# Runs terraform validate on every directory scripts/terraform-fixtures.ts wrote, JOBS at a time. The first
-# directory runs alone so it fills TF_PLUGIN_CACHE_DIR; the rest only read from it.
+# Runs terraform validate on every directory scripts/terraform-fixtures.ts wrote, JOBS at a time, sharing the
+# providers through TF_PLUGIN_CACHE_DIR.
 set -eu
 export TF_PLUGIN_CACHE_DIR=${TF_PLUGIN_CACHE_DIR:-$HOME/.terraform.d/plugin-cache}
 
@@ -22,6 +22,18 @@ mkdir -p "$TF_PLUGIN_CACHE_DIR"
 dirs=$(find "$root" -name versions.tf -exec dirname {} \; | sort)
 [ -n "$dirs" ] || { echo "no Terraform under $root"; exit 1; }
 failed=0
-sh "$0" --one "$(echo "$dirs" | head -n 1)" || failed=1
-echo "$dirs" | tail -n +2 | xargs -r -P "${JOBS:-4}" -n 1 sh "$0" --one || failed=1
+# Parallel inits that download into the shared cache corrupt it, so one directory per distinct set of providers
+# runs first, alone.
+seen=' '
+first=''
+rest=''
+for dir in $dirs; do
+  set_id=$(grep 'source = ' "$dir/versions.tf" | sort | cksum | cut -d' ' -f1)
+  case "$seen" in
+    *" $set_id "*) rest="$rest $dir" ;;
+    *) seen="$seen$set_id "; first="$first $dir" ;;
+  esac
+done
+for dir in $first; do sh "$0" --one "$dir" || failed=1; done
+echo $rest | tr ' ' '\n' | sed '/^$/d' | xargs -r -P "${JOBS:-4}" -n 1 sh "$0" --one || failed=1
 [ "$failed" -eq 0 ] || { echo "some directories failed"; exit 1; }
