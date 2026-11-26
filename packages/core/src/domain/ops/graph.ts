@@ -57,7 +57,7 @@ export const graphOps = {
     if (['postgres', 'mysql', 'mariadb', 'cockroachdb', 'timescaledb', 'clickhouse', 'sqlite', 'supabase', 'pgvector'].includes(a.techId)) doc.databases[n.id] = { nodeId: n.id, tables: [] }
     return n.id
   },
-  updateNode(doc: ProjectDoc, a: { id: string; patch: Partial<Pick<SystemNode, 'name' | 'replicas' | 'notes'>> }) {
+  updateNode(doc: ProjectDoc, a: { id: string; patch: Partial<Pick<SystemNode, 'name' | 'replicas' | 'maxReplicas' | 'notes'>> }) {
     const n = doc.nodes.find((x) => x.id === a.id); if (!n) return
     Object.assign(n, a.patch)
     if (a.patch.name) n.name = a.patch.name.trim().replace(/\s+/g, '-') || n.name

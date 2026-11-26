@@ -92,6 +92,38 @@ test('kubernetes manifests reference secrets instead of embedding them', () => {
   assert.match(yaml, /host: web\.tasks-dev\.example\.com/)
 })
 
+test('kubernetes autoscales between replicas and max replicas, and budgets disruptions', () => {
+  const doc = normalizeDoc(tasksTemplate())
+  const api = doc.nodes.find((n) => n.name === 'tasks-api')!
+  runOp(doc, 'updateNode', { id: api.id, patch: { replicas: 2, maxReplicas: 6 } })
+  const web = doc.nodes.find((n) => n.name === 'web')!
+  runOp(doc, 'updateNode', { id: web.id, patch: { replicas: 1 } })
+  const env = { ...doc.environments[0], scale: 1, target: { kind: 'kubernetes' as const } }
+  const docs = manifests(doc, env).split('---\n')
+  const find = (kind: string, name: string) => docs.find((d) => d.includes(`kind: ${kind}\n`) && d.includes(`name: ${name}\n`))
+  const hpa = find('HorizontalPodAutoscaler', 'tasks-api')
+  assert.ok(hpa)
+  assert.match(hpa, /minReplicas: 2\n\s+maxReplicas: 6/)
+  assert.match(hpa, /averageUtilization: 70/)
+  assert.doesNotMatch(find('Deployment', 'tasks-api')!, /^\s+replicas:/m)
+  assert.match(find('PodDisruptionBudget', 'tasks-api')!, /maxUnavailable: 1/)
+  assert.match(find('Deployment', 'web')!, /^\s+replicas: 1$/m)
+  assert.equal(find('HorizontalPodAutoscaler', 'web'), undefined)
+  assert.equal(find('PodDisruptionBudget', 'web'), undefined)
+})
+
+test('a certificate issuer serves kubernetes ingresses over HTTPS', () => {
+  const doc = normalizeDoc(tasksTemplate())
+  const env = { ...doc.environments[0], target: { kind: 'kubernetes' as const, domain: 'example.com', certIssuer: 'letsencrypt' } }
+  const yaml = manifests(doc, env)
+  assert.match(yaml, /cert-manager\.io\/cluster-issuer: letsencrypt/)
+  assert.match(yaml, /tls:\n\s+- hosts:\n\s+- web\.tasks-dev\.example\.com\n\s+secretName: web-tls/)
+  assert.deepEqual(plan(doc, env).endpoints, [{ name: 'web', url: 'https://web.tasks-dev.example.com' }])
+  const plain = { ...env, target: { kind: 'kubernetes' as const, domain: 'example.com' } }
+  assert.doesNotMatch(manifests(doc, plain), /tls:|cert-manager/)
+  assert.equal(plan(doc, plain).endpoints[0].url, 'http://web.tasks-dev.example.com')
+})
+
 test('generated pages never reference data they do not load', () => {
   const doc = tasksTemplate()
   const page = doc.pages[0]

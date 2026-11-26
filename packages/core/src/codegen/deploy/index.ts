@@ -40,7 +40,8 @@ export function plan(doc: ProjectDoc, env: Environment): DeployPlan {
     }
     if (target.kind === 'kubernetes') {
       const host = publicHost(doc, env, w.name, target)
-      return host ? [{ name: w.name, url: `http://${host}${target.publicPort && target.publicPort !== 80 ? `:${target.publicPort}` : ''}` }] : []
+      const [scheme, standard] = target.certIssuer ? ['https', 443] : ['http', 80]
+      return host ? [{ name: w.name, url: `${scheme}://${host}${target.publicPort && target.publicPort !== standard ? `:${target.publicPort}` : ''}` }] : []
     }
     return []
   })
