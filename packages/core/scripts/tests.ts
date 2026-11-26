@@ -12,6 +12,10 @@ import { manifests } from '../src/codegen/deploy/kubernetes'
 import { envCompose } from '../src/codegen/deploy/compose'
 import { yamlDoc } from '../src/codegen/deploy/yaml'
 import { generateAll, parseMigrationState, planMigrations } from '../src/codegen'
+import { terraform, terraformProblems } from '../src/codegen/terraform'
+import { TECH_BY_ID } from '../src/catalog/technologies'
+import { defaultPlacement } from '../src/catalog/placement'
+import { newNode } from '../src/domain/builders'
 
 function shopDoc() {
   return shop()
@@ -122,6 +126,46 @@ test('a certificate issuer serves kubernetes ingresses over HTTPS', () => {
   const plain = { ...env, target: { kind: 'kubernetes' as const, domain: 'example.com' } }
   assert.doesNotMatch(manifests(doc, plain), /tls:|cert-manager/)
   assert.equal(plan(doc, plain).endpoints[0].url, 'http://web.tasks-dev.example.com')
+})
+
+const onProvider = (pid: string) => {
+  const doc = normalizeDoc(tasksTemplate())
+  for (const n of doc.nodes) if (TECH_BY_ID[n.techId].category !== 'client') n.placement = defaultPlacement(TECH_BY_ID[n.techId], pid)
+  return { doc, env: { ...doc.environments[0], target: { kind: 'git' as const }, overrides: {} } }
+}
+
+test('terraform pins its providers, takes credentials as variables and leaves no placeholders', () => {
+  const { doc, env } = onProvider('hetzner')
+  const files = terraform(doc, env)
+  assert.match(files['infra/dev/hetzner/versions.tf'], /hcloud = \{ source = "hetznercloud\/hcloud", version = "~> [\d.]+" \}/)
+  assert.match(files['infra/dev/hetzner/versions.tf'], /backend "s3" \{\n\s+key = "tasks\/dev\/hetzner\.tfstate"/)
+  assert.match(files['infra/dev/hetzner/variables.tf'], /variable "hcloud_token" \{[^}]*sensitive\s+= true/)
+  assert.match(files['infra/dev/hetzner/main.tf'], /resource "hcloud_server" "tasks_api"/)
+  assert.match(files['infra/dev/hetzner/outputs.tf'], /output "tasks_api_ip"/)
+  assert.doesNotMatch(Object.values(files).join('\n'), /null_resource/)
+  assert.deepEqual(terraformProblems(doc, env), [])
+})
+
+test('a node outside the environment region is reported instead of moved', () => {
+  const { doc, env } = onProvider('hetzner')
+  const api = doc.nodes.find((n) => n.name === 'tasks-api')!
+  api.placement = { ...api.placement, regionId: 'ash' }
+  assert.match(terraformProblems(doc, env).find((p) => p.nodeId === api.id)!.message, /tasks-api is in ash, but this environment's Hetzner Terraform runs in/)
+  assert.doesNotMatch(terraform(doc, env)['infra/dev/hetzner/main.tf'], /"tasks_api"/)
+})
+
+test('scheduled jobs on AWS keep their weekdays', () => {
+  const { doc, env } = onProvider('aws')
+  doc.nodes.push({ ...newNode('cron', 'report', 0, 0, { config: { schedule: '0 9 * * 1-5/2' } }), placement: defaultPlacement(TECH_BY_ID.cron, 'aws') })
+  assert.match(terraform(doc, env)['infra/dev/aws/main.tf'], /cron\(0 9 \? \* 2,4,6 \*\)/)
+})
+
+test('nodes Terraform can not create show up as problems', () => {
+  const { doc, env } = onProvider('vultr')
+  const problems = terraformProblems(doc, env)
+  assert.ok(problems.length > 0)
+  assert.match(problems[0].message, /Tessery writes Terraform for AWS, Google Cloud, Azure, Hetzner and DigitalOcean/)
+  assert.deepEqual(terraform(doc, env), {})
 })
 
 test('generated pages never reference data they do not load', () => {

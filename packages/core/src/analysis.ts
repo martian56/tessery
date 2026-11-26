@@ -3,6 +3,7 @@ import { blocksOf, walk } from './domain/tree'
 import { TECH_BY_ID } from './catalog/technologies'
 import { checkPlacement } from './catalog/placement'
 import { builtInAuth } from './codegen/deploy/runtime'
+import { terraformProblems } from './codegen/terraform'
 import { SQL_STORES } from './codegen/services/crud'
 import { readsOnly } from './codegen/services/model'
 import type { SimResult } from './domain/simulate'
@@ -20,6 +21,7 @@ export function analyze(doc: ProjectDoc, env: Environment | undefined, sim: SimR
   const out: Problem[] = []
   const add = (p: Omit<Problem, 'id'>) => out.push({ ...p, id: `${p.area}:${p.nodeId ?? ''}:${out.length}` })
   if (env?.target?.kind === 'docker' && env.target.server && !env.target.host) add({ severity: 'error', area: 'deploy', message: `${env.name} runs on a saved server whose address is missing. Pick the server again under Deploys to.` })
+  if (env) for (const p of terraformProblems(doc, env)) add({ severity: 'error', area: 'deploy', nodeId: p.nodeId, message: p.message })
   for (const n of doc.nodes) {
     const t = TECH_BY_ID[n.techId]
     const pc = checkPlacement(n, env)
