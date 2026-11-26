@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/martian56/tessery/actions/workflows/ci.yml"><img src="https://github.com/martian56/tessery/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/Rust-1.99+-b7410e?logo=rust&logoColor=white" alt="Rust 1.99+">
   <img src="https://img.shields.io/badge/Node-22+-5fa04e?logo=nodedotjs&logoColor=white" alt="Node 22+">
   <img src="https://img.shields.io/badge/PostgreSQL-18-4169e1?logo=postgresql&logoColor=white" alt="PostgreSQL 18">

@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   typescript:
     name: Core and web
@@ -19,6 +23,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            packages/core/package-lock.json
+            apps/web/package-lock.json
 
       - name: Install core
         working-directory: packages/core
@@ -95,6 +103,10 @@ jobs:
         working-directory: apps/server
         run: rustup toolchain install
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/server
+
       - name: Check formatting
         working-directory: apps/server
         run: cargo fmt --check
@@ -106,6 +118,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: packages/core/package-lock.json
 
       - name: Build the engine
         working-directory: packages/core
