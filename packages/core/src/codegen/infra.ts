@@ -3,59 +3,13 @@ import { TECH_BY_ID } from '../catalog/technologies'
 import { localPorts, workloads } from './deploy/runtime'
 import { slug } from './deploy/compose'
 import { PROVIDER_BY_ID } from '../catalog/providers'
-import { checkPlacement, effectivePlacement, fitPlan } from '../catalog/placement'
+import { effectivePlacement } from '../catalog/placement'
+import { hasCloudInit } from './terraform'
 
-const tf = (s: string) => s.replace(/-/g, '_')
-const isWorkload = (n: SystemNode) => { const t = TECH_BY_ID[n.techId]; return t.category !== 'client' && !t.saas && !!t.image }
-
-const TF_PROVIDER: Record<string, string> = {
-  aws: 'hashicorp/aws', gcp: 'hashicorp/google', azure: 'hashicorp/azurerm', hetzner: 'hetznercloud/hcloud', digitalocean: 'digitalocean/digitalocean',
-  linode: 'linode/linode', vultr: 'vultr/vultr', ovh: 'ovh/ovh', scaleway: 'scaleway/scaleway', oracle: 'oracle/oci', cloudflare: 'cloudflare/cloudflare', vercel: 'vercel/vercel', fly: 'fly-apps/fly', contabo: 'contabo/contabo',
-}
-function managedResource(n: SystemNode, pid: string, product: string, region: string): string {
-  const name = tf(n.name), t = n.techId
-  const T: Record<string, Record<string, string>> = {
-    aws: { postgres: `module "${name}" {\n  source         = "terraform-aws-modules/rds/aws"\n  engine         = "postgres"\n  engine_version = "${n.config.version ?? '17'}"\n  multi_az       = ${!!n.config.highAvailability}\n  allocated_storage = ${n.config.storageGb ?? 20}\n}`, redis: `resource "aws_elasticache_replication_group" "${name}" {\n  engine = "valkey"\n  node_type = "cache.t4g.small"\n}`, kafka: `resource "aws_msk_cluster" "${name}" {\n  kafka_version = "3.9.x"\n  number_of_broker_nodes = ${n.config.brokers ?? 3}\n}`, 'object-storage': `resource "aws_s3_bucket" "${name}" {\n  bucket = "${n.config.bucket ?? n.name}"\n}`, queue: `resource "aws_sqs_queue" "${name}" {\n  name = "${n.name}"\n}`, service: `resource "aws_ecs_service" "${name}" {\n  name          = "${n.name}"\n  desired_count = ${n.replicas}\n  launch_type   = "FARGATE"\n}` },
-    gcp: { postgres: `resource "google_sql_database_instance" "${name}" {\n  database_version = "POSTGRES_${n.config.version ?? '17'}"\n  region = "${region}"\n}`, redis: `resource "google_redis_instance" "${name}" {\n  memory_size_gb = 1\n  region = "${region}"\n}`, 'object-storage': `resource "google_storage_bucket" "${name}" {\n  name = "${n.config.bucket ?? n.name}"\n  location = "${region}"\n}`, queue: `resource "google_cloud_tasks_queue" "${name}" {\n  location = "${region}"\n}`, service: `resource "google_cloud_run_v2_service" "${name}" {\n  name = "${n.name}"\n  location = "${region}"\n  template { scaling { min_instance_count = ${n.replicas} } }\n}` },
-    azure: { postgres: `resource "azurerm_postgresql_flexible_server" "${name}" {\n  version = "${n.config.version ?? '16'}"\n  location = "${region}"\n}`, redis: `resource "azurerm_redis_cache" "${name}" {\n  location = "${region}"\n  sku_name = "Standard"\n}`, service: `resource "azurerm_container_app" "${name}" {\n  name = "${n.name}"\n}` },
-    digitalocean: { postgres: `resource "digitalocean_database_cluster" "${name}" {\n  engine = "pg"\n  version = "${n.config.version ?? '17'}"\n  region = "${region}"\n  size = "db-s-1vcpu-1gb"\n  node_count = ${n.config.highAvailability ? 2 : 1}\n}`, redis: `resource "digitalocean_database_cluster" "${name}" {\n  engine = "valkey"\n  region = "${region}"\n  size = "db-s-1vcpu-1gb"\n  node_count = 1\n}`, 'object-storage': `resource "digitalocean_spaces_bucket" "${name}" {\n  name = "${n.config.bucket ?? n.name}"\n  region = "${region}"\n}`, service: `resource "digitalocean_app" "${name}" {\n  spec { name = "${n.name}"\n    region = "${region}" }\n}` },
-    hetzner: { 'load-balancer': `resource "hcloud_load_balancer" "${name}" {\n  load_balancer_type = "lb11"\n  location = "${region}"\n}`, 'object-storage': `# Hetzner Object Storage bucket "${n.config.bucket ?? n.name}" (S3 API) in ${region}` },
-  }
-  const key = TECH_BY_ID[t].category === 'compute' && t !== 'function' ? 'service' : t
-  return T[pid]?.[key] ?? `# ${n.name}: ${product} (${PROVIDER_BY_ID[pid]?.name}, ${region})\nresource "null_resource" "${name}" {}`
-}
-function vmResource(n: SystemNode, pid: string, region: string): string {
-  const p = PROVIDER_BY_ID[pid]
-  const plan = n.placement.planId ?? fitPlan(p, n, TECH_BY_ID[n.techId])?.id ?? 'small'
-  const name = tf(n.name)
-  const VM: Record<string, string> = {
-    hetzner: `resource "hcloud_server" "${name}" {\n  name        = "${n.name}"\n  server_type = "${plan}"\n  image       = "ubuntu-24.04"\n  location    = "${region}"\n  user_data   = file("\${path.module}/cloud-init/${n.name}.yaml")\n}`,
-    digitalocean: `resource "digitalocean_droplet" "${name}" {\n  name   = "${n.name}"\n  size   = "${plan}"\n  image  = "ubuntu-24-04-x64"\n  region = "${region}"\n  user_data = file("\${path.module}/cloud-init/${n.name}.yaml")\n}`,
-    aws: `resource "aws_instance" "${name}" {\n  instance_type = "${plan}"\n  ami           = data.aws_ami.ubuntu.id\n  user_data     = file("\${path.module}/cloud-init/${n.name}.yaml")\n}`,
-    vultr: `resource "vultr_instance" "${name}" {\n  plan = "${plan}"\n  region = "${region}"\n  os_id = 2284\n}`,
-    linode: `resource "linode_instance" "${name}" {\n  type = "${plan}"\n  region = "${region}"\n  image = "linode/ubuntu24.04"\n}`,
-    contabo: `resource "contabo_instance" "${name}" {\n  product_id = "${plan}"\n  region = "${region.toUpperCase()}"\n  image_id = "ubuntu-24.04"\n}`,
-    scaleway: `resource "scaleway_instance_server" "${name}" {\n  type = "${plan}"\n  image = "ubuntu_noble"\n}`,
-    ovh: `resource "ovh_cloud_project_instance" "${name}" {\n  flavor_name = "${plan}"\n  region = "${region.toUpperCase()}"\n}`,
-  }
-  return VM[pid] ?? `# ${n.name}: VM ${plan} at ${p.name} (${region}), provisioned with ansible/inventory.ini`
-}
-
-export function terraform(doc: ProjectDoc, env: Environment): Record<string, string> {
-  const by = new Map<string, SystemNode[]>()
-  doc.nodes.forEach((n) => { const pl = effectivePlacement(n, env); if (pl.mode === 'external' || pl.providerId === 'self' || pl.providerId === 'saas' || TECH_BY_ID[n.techId].category === 'client') return; if (!by.has(pl.providerId)) by.set(pl.providerId, []); by.get(pl.providerId)!.push(n) })
-  const files: Record<string, string> = {}
-  for (const [pid, nodes] of by) {
-    const src = TF_PROVIDER[pid]
-    const region = env.overrides[nodes[0].id]?.regionId ?? nodes[0].placement.regionId ?? PROVIDER_BY_ID[pid].regions[0].id
-    const body = nodes.map((n) => { const pl = effectivePlacement(n, env); const c = checkPlacement(n, env); return pl.mode === 'self-hosted' ? vmResource(n, pid, pl.regionId ?? region) : managedResource(n, pid, c.product, pl.regionId ?? region) }).join('\n\n')
-    files[`infra/${env.id}/${pid}/main.tf`] = `# ${env.name} on ${PROVIDER_BY_ID[pid].name}, sketched by Tessery from the design's placements.\n# A starting point, not a working configuration: add networking, credentials, sizing and the\n# provider settings before running tofu apply. Docker and Kubernetes targets need none of this.\nterraform {\n  required_providers {\n    ${pid} = { source = "${src ?? 'hashicorp/null'}" }\n  }\n  backend "s3" { key = "${doc.name}/${env.id}/${pid}.tfstate" }\n}\n\n${body}\n`
-  }
-  return files
-}
+export { terraform, terraformProblems } from './terraform'
 
 export function vpsFiles(doc: ProjectDoc, env: Environment): Record<string, string> {
-  const vms = doc.nodes.filter((n) => effectivePlacement(n, env).mode === 'self-hosted' && isWorkload(n))
+  const vms = doc.nodes.filter((n) => hasCloudInit(n, env))
   if (!vms.length) return {}
   const files: Record<string, string> = {}
   vms.forEach((n) => {
