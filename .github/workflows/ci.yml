@@ -47,3 +47,70 @@ jobs:
       - name: Build web
         working-directory: apps/web
         run: npm run build
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    env:
+      SQLX_OFFLINE: "true"
+      TESSERY_TEST_DATABASE_URL: postgres://tessery:tessery@localhost:5432/tessery
+      TESSERY_TEST_REDIS_URL: redis://localhost:6379
+      TESSERY_TEST_AMQP_URL: amqp://tessery:tessery@localhost:5672/%2f
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: tessery
+          POSTGRES_PASSWORD: tessery
+          POSTGRES_DB: tessery
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U tessery"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      rabbitmq:
+        image: rabbitmq:4-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: tessery
+          RABBITMQ_DEFAULT_PASS: tessery
+        ports: ["5672:5672"]
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the toolchain
+        working-directory: apps/server
+        run: rustup toolchain install
+
+      - name: Check formatting
+        working-directory: apps/server
+        run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: apps/server
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the engine
+        working-directory: packages/core
+        run: npm ci && npm run build:engine
+
+      - name: Test
+        working-directory: apps/server
+        run: cargo test --workspace
