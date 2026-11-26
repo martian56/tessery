@@ -55,7 +55,13 @@ async fn smtp_sink() -> (u16, Arc<Mutex<Vec<String>>>) {
 
 fn link_token(message: &str) -> String {
     let unfolded = message.replace("=\n", "").replace("=3D", "=");
-    unfolded.split("token=").nth(1).expect("a link with a token").chars().take_while(|c| c.is_ascii_hexdigit()).collect()
+    unfolded
+        .split("token=")
+        .nth(1)
+        .expect("a link with a token")
+        .chars()
+        .take_while(|c| c.is_ascii_hexdigit())
+        .collect()
 }
 
 #[tokio::test]
@@ -64,35 +70,67 @@ async fn reset_and_invitation_links_arrive_by_email() {
     let app = common::spawn().await;
     let (admin, org) = app.setup().await;
 
-    let no_email = admin.post(&format!("/api/orgs/{org}/members"), json!({ "email": "new@example.com", "name": "New" })).await;
+    let no_email =
+        admin.post(&format!("/api/orgs/{org}/members"), json!({ "email": "new@example.com", "name": "New" })).await;
     assert_eq!(no_email.status(), StatusCode::UNPROCESSABLE_ENTITY, "without email a password is still required");
 
     let saved = admin.put("/api/admin/email", json!({ "settings": { "host": "127.0.0.1", "port": port, "username": "", "from": "Tessery <tessery@example.com>", "security": "none" } })).await;
     assert_eq!(saved.status(), StatusCode::OK);
-    assert_eq!(admin.post("/api/admin/email/test", json!({ "to": "admin@example.com" })).await.status(), StatusCode::OK);
+    assert_eq!(
+        admin.post("/api/admin/email/test", json!({ "to": "admin@example.com" })).await.status(),
+        StatusCode::OK
+    );
     assert!(inbox.lock().unwrap().last().unwrap().contains("Email from your Tessery instance works"));
 
     let (member, _) = add_member(&app, &admin, org, "dev@example.com", "editor").await;
     drop(member);
     let anon = app.session();
-    assert_eq!(anon.post("/api/auth/password/forgot", json!({ "email": "nobody@example.com" })).await.status(), StatusCode::OK, "unknown addresses look the same");
+    assert_eq!(
+        anon.post("/api/auth/password/forgot", json!({ "email": "nobody@example.com" })).await.status(),
+        StatusCode::OK,
+        "unknown addresses look the same"
+    );
     let before = inbox.lock().unwrap().len();
-    assert_eq!(anon.post("/api/auth/password/forgot", json!({ "email": "dev@example.com" })).await.status(), StatusCode::OK);
+    assert_eq!(
+        anon.post("/api/auth/password/forgot", json!({ "email": "dev@example.com" })).await.status(),
+        StatusCode::OK
+    );
     assert_eq!(inbox.lock().unwrap().len(), before + 1, "only the real account gets an email");
     let token = link_token(inbox.lock().unwrap().last().unwrap());
     let info: Value = anon.json(&format!("/api/auth/password/token?token={token}")).await;
     assert_eq!(info["purpose"], "reset");
-    assert_eq!(anon.post("/api/auth/password/reset", json!({ "token": token, "password": "a-brand-new-password" })).await.status(), StatusCode::OK);
-    assert_eq!(anon.post("/api/auth/password/reset", json!({ "token": token, "password": "another-password-1" })).await.status(), StatusCode::UNPROCESSABLE_ENTITY, "a link works once");
+    assert_eq!(
+        anon.post("/api/auth/password/reset", json!({ "token": token, "password": "a-brand-new-password" }))
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        anon.post("/api/auth/password/reset", json!({ "token": token, "password": "another-password-1" }))
+            .await
+            .status(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "a link works once"
+    );
     assert_eq!(app.session().login("dev@example.com", "a-brand-new-password").await, StatusCode::OK);
 
-    let invited = admin.post(&format!("/api/orgs/{org}/members"), json!({ "email": "invitee@example.com", "name": "Invitee", "role": "viewer" })).await;
+    let invited = admin
+        .post(
+            &format!("/api/orgs/{org}/members"),
+            json!({ "email": "invitee@example.com", "name": "Invitee", "role": "viewer" }),
+        )
+        .await;
     assert_eq!(invited.status(), StatusCode::CREATED);
     let mail = inbox.lock().unwrap().last().unwrap().clone();
     assert!(mail.contains("added you to"), "{mail}");
     let token = link_token(&mail);
     assert_eq!(anon.json(&format!("/api/auth/password/token?token={token}")).await["purpose"], "invite");
-    assert_eq!(anon.post("/api/auth/password/reset", json!({ "token": token, "password": "invitee-password-1" })).await.status(), StatusCode::OK);
+    assert_eq!(
+        anon.post("/api/auth/password/reset", json!({ "token": token, "password": "invitee-password-1" }))
+            .await
+            .status(),
+        StatusCode::OK
+    );
     assert_eq!(app.session().login("invitee@example.com", "invitee-password-1").await, StatusCode::OK);
 }
 
@@ -131,24 +169,41 @@ async fn sends_through_resend_with_a_saved_api_key() {
     let no_key = admin.put("/api/admin/email", json!({ "settings": resend })).await;
     assert_eq!(no_key.status(), StatusCode::UNPROCESSABLE_ENTITY, "Resend needs an API key");
 
-    let saved: Value = admin.put("/api/admin/email", json!({ "settings": resend, "password": "re_test_key" })).await.json().await.unwrap();
+    let saved: Value = admin
+        .put("/api/admin/email", json!({ "settings": resend, "password": "re_test_key" }))
+        .await
+        .json()
+        .await
+        .unwrap();
     assert_eq!(saved["settings"]["provider"], "resend");
     assert_eq!(saved["hasPassword"], true);
     assert!(saved.to_string().find("re_test_key").is_none(), "the key is never sent back");
 
-    assert_eq!(admin.post("/api/admin/email/test", json!({ "to": "admin@example.com" })).await.status(), StatusCode::OK);
+    assert_eq!(
+        admin.post("/api/admin/email/test", json!({ "to": "admin@example.com" })).await.status(),
+        StatusCode::OK
+    );
     let (_, body) = sent.lock().unwrap().last().unwrap().clone();
     assert_eq!(body["to"], json!(["admin@example.com"]));
     assert_eq!(body["from"], "Tessery <tessery@example.com>");
     assert!(body["text"].as_str().unwrap().contains("Email from your Tessery instance works"));
 
-    let kept = admin.put("/api/admin/email", json!({ "settings": { "provider": "resend", "from": "Ops <ops@example.com>" } })).await;
+    let kept = admin
+        .put("/api/admin/email", json!({ "settings": { "provider": "resend", "from": "Ops <ops@example.com>" } }))
+        .await;
     assert_eq!(kept.status(), StatusCode::OK, "the saved key stays when only the sender changes");
-    assert_eq!(admin.post("/api/admin/email/test", json!({ "to": "admin@example.com" })).await.status(), StatusCode::OK);
+    assert_eq!(
+        admin.post("/api/admin/email/test", json!({ "to": "admin@example.com" })).await.status(),
+        StatusCode::OK
+    );
     assert_eq!(sent.lock().unwrap().last().unwrap().1["from"], "Ops <ops@example.com>");
 
     let blank = admin.put("/api/admin/email", json!({ "settings": resend, "password": "  " })).await;
-    assert_eq!(blank.status(), StatusCode::UNPROCESSABLE_ENTITY, "a blank key is refused rather than wiping the saved one");
+    assert_eq!(
+        blank.status(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "a blank key is refused rather than wiping the saved one"
+    );
     assert_eq!(admin.json("/api/admin/email").await["hasPassword"], true);
 
     let wrong = admin.put("/api/admin/email", json!({ "settings": resend, "password": "re_wrong" })).await;

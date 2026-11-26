@@ -69,9 +69,13 @@ pub async fn authenticate(ex: impl PgExecutor<'_>, hash: &[u8]) -> DbResult<Toke
 }
 
 pub async fn revoke(ex: impl PgExecutor<'_>, user_id: Uuid, id: Uuid) -> DbResult<bool> {
-    Ok(sqlx::query!("UPDATE api_tokens SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL", id, user_id)
-        .execute(ex)
-        .await?
-        .rows_affected()
+    Ok(sqlx::query!(
+        "UPDATE api_tokens SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",
+        id,
+        user_id
+    )
+    .execute(ex)
+    .await?
+    .rows_affected()
         == 1)
 }

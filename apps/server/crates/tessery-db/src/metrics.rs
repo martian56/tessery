@@ -17,7 +17,12 @@ pub struct Sample {
 }
 
 pub async fn deployed(ex: impl PgExecutor<'_>) -> DbResult<Vec<(Uuid, String)>> {
-    Ok(sqlx::query!("SELECT project_id, env_key FROM environment_heads ORDER BY project_id, env_key").fetch_all(ex).await?.into_iter().map(|r| (r.project_id, r.env_key)).collect())
+    Ok(sqlx::query!("SELECT project_id, env_key FROM environment_heads ORDER BY project_id, env_key")
+        .fetch_all(ex)
+        .await?
+        .into_iter()
+        .map(|r| (r.project_id, r.env_key))
+        .collect())
 }
 
 pub async fn insert(ex: impl PgExecutor<'_>, project: Uuid, env: &str, samples: &[Sample]) -> DbResult<()> {
@@ -76,7 +81,13 @@ pub struct Point {
     pub ok: Option<bool>,
 }
 
-pub async fn series(ex: impl PgExecutor<'_>, project: Uuid, env: &str, range_secs: f64, step_secs: f64) -> DbResult<Vec<Point>> {
+pub async fn series(
+    ex: impl PgExecutor<'_>,
+    project: Uuid,
+    env: &str,
+    range_secs: f64,
+    step_secs: f64,
+) -> DbResult<Vec<Point>> {
     Ok(sqlx::query_as!(
         Point,
         r#"WITH per AS (
@@ -128,10 +139,25 @@ pub struct Rule {
 }
 
 pub async fn rules(ex: impl PgExecutor<'_>, project: Uuid, env: &str) -> DbResult<Vec<Rule>> {
-    Ok(sqlx::query_as!(Rule, "SELECT * FROM alert_rules WHERE project_id = $1 AND env_key = $2 ORDER BY created_at", project, env).fetch_all(ex).await?)
+    Ok(sqlx::query_as!(
+        Rule,
+        "SELECT * FROM alert_rules WHERE project_id = $1 AND env_key = $2 ORDER BY created_at",
+        project,
+        env
+    )
+    .fetch_all(ex)
+    .await?)
 }
 
-pub async fn add_rule(ex: impl PgExecutor<'_>, project: Uuid, env: &str, node: &str, metric: &str, threshold: f64, minutes: i32) -> DbResult<Rule> {
+pub async fn add_rule(
+    ex: impl PgExecutor<'_>,
+    project: Uuid,
+    env: &str,
+    node: &str,
+    metric: &str,
+    threshold: f64,
+    minutes: i32,
+) -> DbResult<Rule> {
     Ok(sqlx::query_as!(
         Rule,
         "INSERT INTO alert_rules (id, project_id, env_key, node, metric, threshold, minutes) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
@@ -148,11 +174,21 @@ pub async fn add_rule(ex: impl PgExecutor<'_>, project: Uuid, env: &str, node: &
 }
 
 pub async fn delete_rule(ex: impl PgExecutor<'_>, project: Uuid, id: Uuid) -> DbResult<()> {
-    let n = sqlx::query!("DELETE FROM alert_rules WHERE project_id = $1 AND id = $2", project, id).execute(ex).await?.rows_affected();
+    let n = sqlx::query!("DELETE FROM alert_rules WHERE project_id = $1 AND id = $2", project, id)
+        .execute(ex)
+        .await?
+        .rows_affected();
     if n == 0 { Err(DbError::NotFound) } else { Ok(()) }
 }
 
 pub async fn set_firing(ex: impl PgExecutor<'_>, id: Uuid, nodes: &[String], fired: bool) -> DbResult<()> {
-    sqlx::query!("UPDATE alert_rules SET firing_nodes = $2, fired_at = CASE WHEN $3 THEN now() ELSE fired_at END WHERE id = $1", id, nodes, fired).execute(ex).await?;
+    sqlx::query!(
+        "UPDATE alert_rules SET firing_nodes = $2, fired_at = CASE WHEN $3 THEN now() ELSE fired_at END WHERE id = $1",
+        id,
+        nodes,
+        fired
+    )
+    .execute(ex)
+    .await?;
     Ok(())
 }

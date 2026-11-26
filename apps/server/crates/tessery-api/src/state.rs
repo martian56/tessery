@@ -1,10 +1,10 @@
 use crate::config::Config;
+use redis::aio::ConnectionManager;
+use std::sync::Arc;
 use tessery_db::PgPool;
 use tessery_engine::Engine;
 use tessery_git::Repos;
 use tessery_mq::Mq;
-use redis::aio::ConnectionManager;
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {

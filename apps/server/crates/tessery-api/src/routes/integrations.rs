@@ -1,17 +1,17 @@
 use crate::audit::{self, Entry};
 use crate::auth::Principal;
-use tessery_cloud::{self as cloud, ProviderSpec};
 use crate::error::{ApiError, ApiResult};
 use crate::rbac::{self, org_target};
 use crate::routes::dto::{OK, Ok};
 use crate::state::AppState;
-use tessery_core::Permission as P;
-use tessery_db::integrations::{self as db, NewIntegration};
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
+use tessery_cloud::{self as cloud, ProviderSpec};
+use tessery_core::Permission as P;
+use tessery_db::integrations::{self as db, NewIntegration};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -36,16 +36,33 @@ pub struct IntegrationDto {
 
 impl From<db::Integration> for IntegrationDto {
     fn from(i: db::Integration) -> Self {
-        Self { id: i.id, provider: i.provider, name: i.name, summary: i.summary, last_check: i.last_check, checked_at: i.checked_at, created_at: i.created_at }
+        Self {
+            id: i.id,
+            provider: i.provider,
+            name: i.name,
+            summary: i.summary,
+            last_check: i.last_check,
+            checked_at: i.checked_at,
+            created_at: i.created_at,
+        }
     }
 }
 
 fn key(state: &AppState) -> ApiResult<&tessery_core::SecretKey> {
-    state.config.secret_key.as_ref().ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY on the server to store cloud credentials".into()))
+    state
+        .config
+        .secret_key
+        .as_ref()
+        .ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY on the server to store cloud credentials".into()))
 }
 
 fn spec(provider: &str) -> ApiResult<&'static ProviderSpec> {
-    cloud::provider(provider).ok_or_else(|| ApiError::invalid("provider", format!("use one of {}", cloud::PROVIDERS.iter().map(|p| p.id).collect::<Vec<_>>().join(", "))))
+    cloud::provider(provider).ok_or_else(|| {
+        ApiError::invalid(
+            "provider",
+            format!("use one of {}", cloud::PROVIDERS.iter().map(|p| p.id).collect::<Vec<_>>().join(", ")),
+        )
+    })
 }
 
 fn check_name(name: &str) -> ApiResult<&str> {
@@ -63,7 +80,11 @@ pub async fn providers(_p: Principal) -> Json<&'static [ProviderSpec]> {
 }
 
 #[utoipa::path(get, path = "/api/orgs/{org}/integrations", tag = "integrations", params(("org" = Uuid, Path)), responses((status = 200, body = [IntegrationDto])))]
-pub async fn list(State(state): State<AppState>, p: Principal, Path(org): Path<Uuid>) -> ApiResult<Json<Vec<IntegrationDto>>> {
+pub async fn list(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(org): Path<Uuid>,
+) -> ApiResult<Json<Vec<IntegrationDto>>> {
     rbac::require(&state, &p, &org_target(org), P::IntegrationRead).await?;
     Ok(Json(db::list(&state.db, org).await?.into_iter().map(Into::into).collect()))
 }
@@ -80,19 +101,46 @@ pub struct NewIntegrationInput {
 
 /// Connects a cloud account. The credentials are checked with the provider first and refused if it rejects them.
 #[utoipa::path(post, path = "/api/orgs/{org}/integrations", tag = "integrations", params(("org" = Uuid, Path)), request_body = NewIntegrationInput, responses((status = 201, body = IntegrationDto), (status = 422)))]
-pub async fn create(State(state): State<AppState>, p: Principal, Path(org): Path<Uuid>, Json(req): Json<NewIntegrationInput>) -> ApiResult<(StatusCode, Json<IntegrationDto>)> {
+pub async fn create(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(org): Path<Uuid>,
+    Json(req): Json<NewIntegrationInput>,
+) -> ApiResult<(StatusCode, Json<IntegrationDto>)> {
     let d = rbac::require(&state, &p, &org_target(org), P::IntegrationManage).await?;
     let spec = spec(&req.provider)?;
     let name = check_name(&req.name)?;
     let fields = cloud::clean(spec, &req.fields).map_err(|e| ApiError::invalid("fields", e))?;
-    let account = cloud::verify(spec.id, &fields, &state.config.provider_apis).await.map_err(|e| ApiError::invalid("fields", e))?;
-    let cipher = key(&state)?.encrypt(serde_json::to_vec(&fields).map_err(|e| ApiError::Internal(e.into()))?.as_slice());
+    let account = cloud::verify(spec.id, &fields, &state.config.provider_apis)
+        .await
+        .map_err(|e| ApiError::invalid("fields", e))?;
+    let cipher =
+        key(&state)?.encrypt(serde_json::to_vec(&fields).map_err(|e| ApiError::Internal(e.into()))?.as_slice());
     let summary = cloud::summary(spec.id, &fields);
     let capabilities = cloud::capabilities(spec.id, &fields, &state.config.provider_apis).await;
     let check = json!({ "ok": true, "account": account, "capabilities": capabilities });
     let mut tx = state.db.begin().await.map_err(|e| ApiError::Internal(e.into()))?;
-    let i = db::create(&mut *tx, NewIntegration { org_id: org, provider: spec.id, name, secret: &cipher, summary: &summary, check: &check, created_by: p.user.id }).await?;
-    audit::record(&mut *tx, &p, Entry::new(Some(org), "integration.create", "integration", i.id).decision(d).details(json!({ "provider": spec.id, "name": name, "account": account }))).await?;
+    let i = db::create(
+        &mut *tx,
+        NewIntegration {
+            org_id: org,
+            provider: spec.id,
+            name,
+            secret: &cipher,
+            summary: &summary,
+            check: &check,
+            created_by: p.user.id,
+        },
+    )
+    .await?;
+    audit::record(
+        &mut *tx,
+        &p,
+        Entry::new(Some(org), "integration.create", "integration", i.id)
+            .decision(d)
+            .details(json!({ "provider": spec.id, "name": name, "account": account })),
+    )
+    .await?;
     tx.commit().await.map_err(|e| ApiError::Internal(e.into()))?;
     Ok((StatusCode::CREATED, Json(i.into())))
 }
@@ -107,17 +155,29 @@ pub struct IntegrationPatch {
 }
 
 #[utoipa::path(patch, path = "/api/orgs/{org}/integrations/{integration}", tag = "integrations", params(("org" = Uuid, Path), ("integration" = Uuid, Path)), request_body = IntegrationPatch, responses((status = 200, body = IntegrationDto)))]
-pub async fn update(State(state): State<AppState>, p: Principal, Path((org, id)): Path<(Uuid, Uuid)>, Json(req): Json<IntegrationPatch>) -> ApiResult<Json<IntegrationDto>> {
+pub async fn update(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((org, id)): Path<(Uuid, Uuid)>,
+    Json(req): Json<IntegrationPatch>,
+) -> ApiResult<Json<IntegrationDto>> {
     let d = rbac::require(&state, &p, &org_target(org), P::IntegrationManage).await?;
     let current = db::get(&state.db, org, id).await?;
     let name = req.name.as_deref().map(check_name).transpose()?;
     let replaced = match &req.fields {
         Some(input) => {
             let fields = cloud::clean(spec(&current.provider)?, input).map_err(|e| ApiError::invalid("fields", e))?;
-            let account = cloud::verify(&current.provider, &fields, &state.config.provider_apis).await.map_err(|e| ApiError::invalid("fields", e))?;
-            let cipher = key(&state)?.encrypt(serde_json::to_vec(&fields).map_err(|e| ApiError::Internal(e.into()))?.as_slice());
+            let account = cloud::verify(&current.provider, &fields, &state.config.provider_apis)
+                .await
+                .map_err(|e| ApiError::invalid("fields", e))?;
+            let cipher =
+                key(&state)?.encrypt(serde_json::to_vec(&fields).map_err(|e| ApiError::Internal(e.into()))?.as_slice());
             let capabilities = cloud::capabilities(&current.provider, &fields, &state.config.provider_apis).await;
-            Some((cipher, cloud::summary(&current.provider, &fields), json!({ "ok": true, "account": account, "capabilities": capabilities })))
+            Some((
+                cipher,
+                cloud::summary(&current.provider, &fields),
+                json!({ "ok": true, "account": account, "capabilities": capabilities }),
+            ))
         }
         None => None,
     };
@@ -126,18 +186,33 @@ pub async fn update(State(state): State<AppState>, p: Principal, Path((org, id))
     if let Some((_, _, check)) = &replaced {
         db::record_check(&mut *tx, id, check).await?;
     }
-    audit::record(&mut *tx, &p, Entry::new(Some(org), "integration.update", "integration", id).decision(d).details(json!({ "name": i.name, "newCredentials": replaced.is_some() }))).await?;
+    audit::record(
+        &mut *tx,
+        &p,
+        Entry::new(Some(org), "integration.update", "integration", id)
+            .decision(d)
+            .details(json!({ "name": i.name, "newCredentials": replaced.is_some() })),
+    )
+    .await?;
     tx.commit().await.map_err(|e| ApiError::Internal(e.into()))?;
     Ok(Json(db::get(&state.db, org, id).await?.into()))
 }
 
 #[utoipa::path(post, path = "/api/orgs/{org}/integrations/{integration}/check", tag = "integrations", params(("org" = Uuid, Path), ("integration" = Uuid, Path)), responses((status = 200, body = IntegrationDto)))]
-pub async fn check(State(state): State<AppState>, p: Principal, Path((org, id)): Path<(Uuid, Uuid)>) -> ApiResult<Json<IntegrationDto>> {
+pub async fn check(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((org, id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<IntegrationDto>> {
     rbac::require(&state, &p, &org_target(org), P::IntegrationManage).await?;
     let (provider, cipher) = db::secret(&state.db, org, id).await?;
-    let fields: Map<String, Value> = serde_json::from_slice(&key(&state)?.decrypt(&cipher).map_err(|e| ApiError::Internal(e.into()))?).map_err(|e| ApiError::Internal(e.into()))?;
+    let fields: Map<String, Value> =
+        serde_json::from_slice(&key(&state)?.decrypt(&cipher).map_err(|e| ApiError::Internal(e.into()))?)
+            .map_err(|e| ApiError::Internal(e.into()))?;
     let result = match cloud::verify(&provider, &fields, &state.config.provider_apis).await {
-        Result::Ok(account) => json!({ "ok": true, "account": account, "capabilities": cloud::capabilities(&provider, &fields, &state.config.provider_apis).await }),
+        Result::Ok(account) => {
+            json!({ "ok": true, "account": account, "capabilities": cloud::capabilities(&provider, &fields, &state.config.provider_apis).await })
+        }
         Err(error) => json!({ "ok": false, "error": error }),
     };
     db::record_check(&state.db, id, &result).await?;
@@ -152,22 +227,39 @@ pub(crate) async fn fields(state: &AppState, org: Uuid, id: Uuid) -> ApiResult<(
 
 /// Regions and machine sizes with prices, read live from the provider. Only for providers Tessery can create servers on.
 #[utoipa::path(get, path = "/api/orgs/{org}/integrations/{integration}/catalog", tag = "integrations", params(("org" = Uuid, Path), ("integration" = Uuid, Path)), responses((status = 200, body = tessery_cloud::Catalog)))]
-pub async fn catalog(State(state): State<AppState>, p: Principal, Path((org, id)): Path<(Uuid, Uuid)>) -> ApiResult<Json<tessery_cloud::Catalog>> {
+pub async fn catalog(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((org, id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<tessery_cloud::Catalog>> {
     rbac::require(&state, &p, &org_target(org), P::ServerManage).await?;
     let (provider, f) = fields(&state, org, id).await?;
     if !tessery_cloud::CAN_CREATE.contains(&provider.as_str()) {
-        return Err(ApiError::Conflict(format!("Tessery cannot create servers on {provider} yet; use Hetzner or DigitalOcean")));
+        return Err(ApiError::Conflict(format!(
+            "Tessery cannot create servers on {provider} yet; use Hetzner or DigitalOcean"
+        )));
     }
     Ok(Json(tessery_cloud::catalog(&provider, &f, &state.config.provider_apis).await.map_err(ApiError::Conflict)?))
 }
 
 #[utoipa::path(delete, path = "/api/orgs/{org}/integrations/{integration}", tag = "integrations", params(("org" = Uuid, Path), ("integration" = Uuid, Path)), responses((status = 200, body = Ok)))]
-pub async fn delete(State(state): State<AppState>, p: Principal, Path((org, id)): Path<(Uuid, Uuid)>) -> ApiResult<Json<Ok>> {
+pub async fn delete(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((org, id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<Ok>> {
     let d = rbac::require(&state, &p, &org_target(org), P::IntegrationManage).await?;
     let mut tx = state.db.begin().await.map_err(|e| ApiError::Internal(e.into()))?;
     let i = db::get(&mut *tx, org, id).await?;
     db::delete(&mut *tx, org, id).await?;
-    audit::record(&mut *tx, &p, Entry::new(Some(org), "integration.delete", "integration", id).decision(d).details(json!({ "provider": i.provider, "name": i.name }))).await?;
+    audit::record(
+        &mut *tx,
+        &p,
+        Entry::new(Some(org), "integration.delete", "integration", id)
+            .decision(d)
+            .details(json!({ "provider": i.provider, "name": i.name })),
+    )
+    .await?;
     tx.commit().await.map_err(|e| ApiError::Internal(e.into()))?;
     Ok(Json(OK))
 }

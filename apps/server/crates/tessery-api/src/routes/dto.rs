@@ -45,12 +45,7 @@ pub struct OrgDto {
 
 impl From<tessery_db::orgs::Org> for OrgDto {
     fn from(o: tessery_db::orgs::Org) -> Self {
-        Self {
-            id: o.id,
-            slug: o.slug,
-            name: o.name,
-            created_at: o.created_at,
-        }
+        Self { id: o.id, slug: o.slug, name: o.name, created_at: o.created_at }
     }
 }
 
@@ -65,41 +60,20 @@ pub fn normalize_email(raw: &str) -> Result<String, crate::error::ApiError> {
     let e = raw.trim().to_lowercase();
     let valid = e.len() <= 254
         && e.split_once('@').is_some_and(|(local, domain)| {
-            !local.is_empty()
-                && domain.contains('.')
-                && !domain.starts_with('.')
-                && !domain.ends_with('.')
+            !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
         });
-    if valid {
-        Result::Ok(e)
-    } else {
-        Err(crate::error::ApiError::invalid(
-            "email",
-            "is not a valid email address",
-        ))
-    }
+    if valid { Result::Ok(e) } else { Err(crate::error::ApiError::invalid("email", "is not a valid email address")) }
 }
 
-pub fn clean_name(
-    field: &'static str,
-    raw: &str,
-    max: usize,
-) -> Result<String, crate::error::ApiError> {
+pub fn clean_name(field: &'static str, raw: &str, max: usize) -> Result<String, crate::error::ApiError> {
     let s = raw.trim();
     if s.is_empty() || s.chars().count() > max {
-        return Err(crate::error::ApiError::invalid(
-            field,
-            format!("must be 1 to {max} characters"),
-        ));
+        return Err(crate::error::ApiError::invalid(field, format!("must be 1 to {max} characters")));
     }
     Result::Ok(s.to_owned())
 }
 
-pub fn slug_or_from(
-    field: &'static str,
-    slug: Option<&str>,
-    name: &str,
-) -> Result<String, crate::error::ApiError> {
+pub fn slug_or_from(field: &'static str, slug: Option<&str>, name: &str) -> Result<String, crate::error::ApiError> {
     let s = match slug {
         Some(s) if !s.trim().is_empty() => s.trim().to_owned(),
         _ => tessery_core::slug::slugify(name),
@@ -107,9 +81,6 @@ pub fn slug_or_from(
     if tessery_core::slug::is_valid(&s) {
         Result::Ok(s)
     } else {
-        Err(crate::error::ApiError::invalid(
-            field,
-            "use lowercase letters, digits and single dashes",
-        ))
+        Err(crate::error::ApiError::invalid(field, "use lowercase letters, digits and single dashes"))
     }
 }

@@ -86,46 +86,27 @@ pub async fn update(
     )
     .execute(ex)
     .await?;
-    if r.rows_affected() == 0 {
-        Err(DbError::NotFound)
-    } else {
-        Ok(())
-    }
+    if r.rows_affected() == 0 { Err(DbError::NotFound) } else { Ok(()) }
 }
 
 pub async fn delete(ex: impl PgExecutor<'_>, org_id: Uuid, id: Uuid) -> DbResult<()> {
-    let r = sqlx::query!(
-        "DELETE FROM teams WHERE org_id = $1 AND id = $2",
+    let r = sqlx::query!("DELETE FROM teams WHERE org_id = $1 AND id = $2", org_id, id).execute(ex).await?;
+    if r.rows_affected() == 0 { Err(DbError::NotFound) } else { Ok(()) }
+}
+
+pub async fn add_member(ex: impl PgExecutor<'_>, org_id: Uuid, team_id: Uuid, user_id: Uuid) -> DbResult<()> {
+    sqlx::query!(
+        "INSERT INTO team_members (org_id, team_id, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
         org_id,
-        id
+        team_id,
+        user_id
     )
     .execute(ex)
     .await?;
-    if r.rows_affected() == 0 {
-        Err(DbError::NotFound)
-    } else {
-        Ok(())
-    }
-}
-
-pub async fn add_member(
-    ex: impl PgExecutor<'_>,
-    org_id: Uuid,
-    team_id: Uuid,
-    user_id: Uuid,
-) -> DbResult<()> {
-    sqlx::query!("INSERT INTO team_members (org_id, team_id, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", org_id, team_id, user_id)
-        .execute(ex)
-        .await?;
     Ok(())
 }
 
-pub async fn remove_member(
-    ex: impl PgExecutor<'_>,
-    org_id: Uuid,
-    team_id: Uuid,
-    user_id: Uuid,
-) -> DbResult<()> {
+pub async fn remove_member(ex: impl PgExecutor<'_>, org_id: Uuid, team_id: Uuid, user_id: Uuid) -> DbResult<()> {
     let r = sqlx::query!(
         "DELETE FROM team_members WHERE org_id = $1 AND team_id = $2 AND user_id = $3",
         org_id,
@@ -134,18 +115,10 @@ pub async fn remove_member(
     )
     .execute(ex)
     .await?;
-    if r.rows_affected() == 0 {
-        Err(DbError::NotFound)
-    } else {
-        Ok(())
-    }
+    if r.rows_affected() == 0 { Err(DbError::NotFound) } else { Ok(()) }
 }
 
-pub async fn list_members(
-    ex: impl PgExecutor<'_>,
-    org_id: Uuid,
-    team_id: Uuid,
-) -> DbResult<Vec<TeamMember>> {
+pub async fn list_members(ex: impl PgExecutor<'_>, org_id: Uuid, team_id: Uuid) -> DbResult<Vec<TeamMember>> {
     Ok(sqlx::query_as!(
         TeamMember,
         "SELECT u.id AS user_id, u.email, u.name, tm.added_at FROM team_members tm JOIN users u ON u.id = tm.user_id
@@ -157,16 +130,8 @@ pub async fn list_members(
     .await?)
 }
 
-pub async fn team_ids_of_user(
-    ex: impl PgExecutor<'_>,
-    org_id: Uuid,
-    user_id: Uuid,
-) -> DbResult<Vec<Uuid>> {
-    Ok(sqlx::query_scalar!(
-        "SELECT team_id FROM team_members WHERE org_id = $1 AND user_id = $2",
-        org_id,
-        user_id
-    )
-    .fetch_all(ex)
-    .await?)
+pub async fn team_ids_of_user(ex: impl PgExecutor<'_>, org_id: Uuid, user_id: Uuid) -> DbResult<Vec<Uuid>> {
+    Ok(sqlx::query_scalar!("SELECT team_id FROM team_members WHERE org_id = $1 AND user_id = $2", org_id, user_id)
+        .fetch_all(ex)
+        .await?)
 }

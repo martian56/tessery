@@ -21,37 +21,30 @@ pub struct Member {
     pub joined_at: OffsetDateTime,
 }
 
-pub async fn create(
-    ex: impl PgExecutor<'_>,
-    slug: &str,
-    name: &str,
-    created_by: Uuid,
-) -> DbResult<Org> {
-    Ok(sqlx::query_as!(Org, "INSERT INTO organizations (slug, name, created_by) VALUES ($1, $2, $3) RETURNING id, slug, name, created_at", slug, name, created_by)
-        .fetch_one(ex)
-        .await?)
+pub async fn create(ex: impl PgExecutor<'_>, slug: &str, name: &str, created_by: Uuid) -> DbResult<Org> {
+    Ok(sqlx::query_as!(
+        Org,
+        "INSERT INTO organizations (slug, name, created_by) VALUES ($1, $2, $3) RETURNING id, slug, name, created_at",
+        slug,
+        name,
+        created_by
+    )
+    .fetch_one(ex)
+    .await?)
 }
 
 pub async fn get(ex: impl PgExecutor<'_>, id: Uuid) -> DbResult<Org> {
-    sqlx::query_as!(
-        Org,
-        "SELECT id, slug, name, created_at FROM organizations WHERE id = $1",
-        id
-    )
-    .fetch_optional(ex)
-    .await?
-    .or_not_found()
+    sqlx::query_as!(Org, "SELECT id, slug, name, created_at FROM organizations WHERE id = $1", id)
+        .fetch_optional(ex)
+        .await?
+        .or_not_found()
 }
 
 pub async fn get_by_slug(ex: impl PgExecutor<'_>, slug: &str) -> DbResult<Org> {
-    sqlx::query_as!(
-        Org,
-        "SELECT id, slug, name, created_at FROM organizations WHERE slug = $1",
-        slug
-    )
-    .fetch_optional(ex)
-    .await?
-    .or_not_found()
+    sqlx::query_as!(Org, "SELECT id, slug, name, created_at FROM organizations WHERE slug = $1", slug)
+        .fetch_optional(ex)
+        .await?
+        .or_not_found()
 }
 
 pub async fn list_for_user(ex: impl PgExecutor<'_>, user_id: Uuid) -> DbResult<Vec<Org>> {
@@ -65,56 +58,38 @@ pub async fn list_for_user(ex: impl PgExecutor<'_>, user_id: Uuid) -> DbResult<V
 }
 
 pub async fn list_all(ex: impl PgExecutor<'_>) -> DbResult<Vec<Org>> {
-    Ok(sqlx::query_as!(
-        Org,
-        "SELECT id, slug, name, created_at FROM organizations ORDER BY name"
-    )
-    .fetch_all(ex)
-    .await?)
+    Ok(sqlx::query_as!(Org, "SELECT id, slug, name, created_at FROM organizations ORDER BY name").fetch_all(ex).await?)
 }
 
 pub async fn update(ex: impl PgExecutor<'_>, id: Uuid, slug: &str, name: &str) -> DbResult<Org> {
-    sqlx::query_as!(Org, "UPDATE organizations SET slug = $2, name = $3 WHERE id = $1 RETURNING id, slug, name, created_at", id, slug, name)
-        .fetch_optional(ex)
-        .await?
-        .or_not_found()
+    sqlx::query_as!(
+        Org,
+        "UPDATE organizations SET slug = $2, name = $3 WHERE id = $1 RETURNING id, slug, name, created_at",
+        id,
+        slug,
+        name
+    )
+    .fetch_optional(ex)
+    .await?
+    .or_not_found()
 }
 
 pub async fn delete(ex: impl PgExecutor<'_>, id: Uuid) -> DbResult<()> {
-    let r = sqlx::query!("DELETE FROM organizations WHERE id = $1", id)
-        .execute(ex)
-        .await?;
-    if r.rows_affected() == 0 {
-        Err(DbError::NotFound)
-    } else {
-        Ok(())
-    }
+    let r = sqlx::query!("DELETE FROM organizations WHERE id = $1", id).execute(ex).await?;
+    if r.rows_affected() == 0 { Err(DbError::NotFound) } else { Ok(()) }
 }
 
 pub async fn add_member(ex: impl PgExecutor<'_>, org_id: Uuid, user_id: Uuid) -> DbResult<()> {
-    sqlx::query!(
-        "INSERT INTO org_members (org_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        org_id,
-        user_id
-    )
-    .execute(ex)
-    .await?;
+    sqlx::query!("INSERT INTO org_members (org_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", org_id, user_id)
+        .execute(ex)
+        .await?;
     Ok(())
 }
 
 pub async fn remove_member(ex: impl PgExecutor<'_>, org_id: Uuid, user_id: Uuid) -> DbResult<()> {
-    let r = sqlx::query!(
-        "DELETE FROM org_members WHERE org_id = $1 AND user_id = $2",
-        org_id,
-        user_id
-    )
-    .execute(ex)
-    .await?;
-    if r.rows_affected() == 0 {
-        Err(DbError::NotFound)
-    } else {
-        Ok(())
-    }
+    let r =
+        sqlx::query!("DELETE FROM org_members WHERE org_id = $1 AND user_id = $2", org_id, user_id).execute(ex).await?;
+    if r.rows_affected() == 0 { Err(DbError::NotFound) } else { Ok(()) }
 }
 
 pub async fn is_member(ex: impl PgExecutor<'_>, org_id: Uuid, user_id: Uuid) -> DbResult<bool> {

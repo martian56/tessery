@@ -25,8 +25,8 @@ use tower::ServiceBuilder;
 use tower_http::LatencyUnit;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
-use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 
@@ -36,7 +36,8 @@ async fn csrf_guard(req: Request, next: Next) -> Response {
     let safe = matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS);
     let token = req.headers().contains_key(axum::http::header::AUTHORIZATION);
     let mcp = req.uri().path().ends_with("/mcp");
-    let signed_webhook = req.uri().path().ends_with("/github/webhook") && req.headers().contains_key("x-hub-signature-256");
+    let signed_webhook =
+        req.uri().path().ends_with("/github/webhook") && req.headers().contains_key("x-hub-signature-256");
     if safe || token || mcp || signed_webhook || req.headers().contains_key(CSRF_HEADER) {
         next.run(req).await
     } else {
@@ -46,9 +47,8 @@ async fn csrf_guard(req: Request, next: Next) -> Response {
 
 pub async fn connect(config: config::Config) -> anyhow::Result<AppState> {
     use anyhow::Context;
-    let db = tessery_db::connect(&config.database_url, config.db_max_connections)
-        .await
-        .context("connecting to Postgres")?;
+    let db =
+        tessery_db::connect(&config.database_url, config.db_max_connections).await.context("connecting to Postgres")?;
     tessery_db::migrate(&db).await.context("running migrations")?;
     let redis_config = redis::aio::ConnectionManagerConfig::new()
         .set_response_timeout(Some(std::time::Duration::from_secs(5)))
@@ -57,9 +57,7 @@ pub async fn connect(config: config::Config) -> anyhow::Result<AppState> {
         .get_connection_manager_with_config(redis_config)
         .await
         .context("connecting to Redis")?;
-    let mq = tessery_mq::Mq::connect(&config.amqp_url, "tessery-server")
-        .await
-        .context("connecting to RabbitMQ")?;
+    let mq = tessery_mq::Mq::connect(&config.amqp_url, "tessery-server").await.context("connecting to RabbitMQ")?;
     Ok(AppState {
         db,
         redis,
@@ -85,34 +83,42 @@ pub fn app(state: AppState) -> Router {
                 .layer(TimeoutLayer::with_status_code(axum::http::StatusCode::GATEWAY_TIMEOUT, Duration::from_secs(30)))
                 .layer(RequestBodyLimitLayer::new(8 * 1024 * 1024)),
         );
-    let git = Router::new()
-        .route("/{repo}/{*rest}", axum::routing::any(routes::git::serve))
-        .layer(
-            ServiceBuilder::new()
-                .layer(axum::extract::DefaultBodyLimit::disable())
-                .layer(TimeoutLayer::with_status_code(axum::http::StatusCode::GATEWAY_TIMEOUT, Duration::from_secs(900)))
-                .layer(RequestBodyLimitLayer::new(256 * 1024 * 1024)),
-        );
+    let git = Router::new().route("/{repo}/{*rest}", axum::routing::any(routes::git::serve)).layer(
+        ServiceBuilder::new()
+            .layer(axum::extract::DefaultBodyLimit::disable())
+            .layer(TimeoutLayer::with_status_code(axum::http::StatusCode::GATEWAY_TIMEOUT, Duration::from_secs(900)))
+            .layer(RequestBodyLimitLayer::new(256 * 1024 * 1024)),
+    );
     let uploads = Router::new()
         .route("/api/projects/{project}/assets/upload", axum::routing::post(routes::assets::upload))
         .route_layer(middleware::from_fn(csrf_guard))
         .layer(
             ServiceBuilder::new()
                 .layer(axum::extract::DefaultBodyLimit::max(routes::assets::MAX_BYTES))
-                .layer(TimeoutLayer::with_status_code(axum::http::StatusCode::GATEWAY_TIMEOUT, Duration::from_secs(120)))
+                .layer(TimeoutLayer::with_status_code(
+                    axum::http::StatusCode::GATEWAY_TIMEOUT,
+                    Duration::from_secs(120),
+                ))
                 .layer(RequestBodyLimitLayer::new(routes::assets::MAX_BYTES)),
         );
     let mut router = Router::new().merge(uploads).nest("/api", api).nest("/git", git);
     if let Some(dir) = state.config.web_dir.clone() {
         // The page is revalidated on every load, so after an update it names the new build's files.
         let cache = |res: &axum::http::Response<_>| {
-            let html = res.headers().get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).is_some_and(|v| v.starts_with("text/html"));
+            let html = res
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .is_some_and(|v| v.starts_with("text/html"));
             html.then(|| HeaderValue::from_static("no-cache"))
         };
         // The component preview runs code people write, in an iframe sandboxed without allow-same-origin. Its own policy
         // allows evaluating that code and loading theme fonts, and lets only Tessery frame it.
         let sandbox = ServiceBuilder::new()
-            .layer(SetResponseHeaderLayer::overriding(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static(SANDBOX_CSP)))
+            .layer(SetResponseHeaderLayer::overriding(
+                header::CONTENT_SECURITY_POLICY,
+                HeaderValue::from_static(SANDBOX_CSP),
+            ))
             .layer(SetResponseHeaderLayer::overriding(header::X_FRAME_OPTIONS, HeaderValue::from_static("SAMEORIGIN")))
             .layer(SetResponseHeaderLayer::overriding(header::CACHE_CONTROL, HeaderValue::from_static("no-cache")))
             .service(ServeFile::new(dir.join("sandbox.html")));
@@ -131,12 +137,27 @@ pub fn app(state: AppState) -> Router {
     let hsts = state.config.cookie_secure.then(|| HeaderValue::from_static("max-age=31536000; includeSubDomains"));
     router.with_state(state).layer(
         ServiceBuilder::new()
-            .layer(SetResponseHeaderLayer::if_not_present(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static(CSP)))
-            .layer(SetResponseHeaderLayer::if_not_present(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff")))
+            .layer(SetResponseHeaderLayer::if_not_present(
+                header::CONTENT_SECURITY_POLICY,
+                HeaderValue::from_static(CSP),
+            ))
+            .layer(SetResponseHeaderLayer::if_not_present(
+                header::X_CONTENT_TYPE_OPTIONS,
+                HeaderValue::from_static("nosniff"),
+            ))
             .layer(SetResponseHeaderLayer::if_not_present(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY")))
-            .layer(SetResponseHeaderLayer::if_not_present(header::REFERRER_POLICY, HeaderValue::from_static("strict-origin-when-cross-origin")))
-            .layer(SetResponseHeaderLayer::if_not_present(HeaderName::from_static("permissions-policy"), HeaderValue::from_static("camera=(), microphone=(), geolocation=(), payment=()")))
-            .layer(SetResponseHeaderLayer::if_not_present(header::STRICT_TRANSPORT_SECURITY, move |_: &axum::http::Response<_>| hsts.clone()))
+            .layer(SetResponseHeaderLayer::if_not_present(
+                header::REFERRER_POLICY,
+                HeaderValue::from_static("strict-origin-when-cross-origin"),
+            ))
+            .layer(SetResponseHeaderLayer::if_not_present(
+                HeaderName::from_static("permissions-policy"),
+                HeaderValue::from_static("camera=(), microphone=(), geolocation=(), payment=()"),
+            ))
+            .layer(SetResponseHeaderLayer::if_not_present(
+                header::STRICT_TRANSPORT_SECURITY,
+                move |_: &axum::http::Response<_>| hsts.clone(),
+            ))
             .layer(SetRequestIdLayer::new(request_id.clone(), MakeRequestUuid))
             .layer(
                 TraceLayer::new_for_http()

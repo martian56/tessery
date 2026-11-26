@@ -110,11 +110,7 @@ impl PermissionSet {
     }
 
     pub fn from_keys<I: IntoIterator<Item = S>, S: AsRef<str>>(keys: I) -> Self {
-        Self(
-            keys.into_iter()
-                .filter_map(|k| k.as_ref().parse().ok())
-                .collect(),
-        )
+        Self(keys.into_iter().filter_map(|k| k.as_ref().parse().ok()).collect())
     }
 }
 

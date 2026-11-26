@@ -56,19 +56,14 @@ fn object_store() -> Option<ObjectStore> {
 impl Config {
     pub fn from_env() -> Result<Self> {
         Ok(Self {
-            bind: var("TESSERY_BIND", "127.0.0.1:8080")
-                .parse()
-                .context("TESSERY_BIND must be host:port")?,
+            bind: var("TESSERY_BIND", "127.0.0.1:8080").parse().context("TESSERY_BIND must be host:port")?,
             database_url: required("TESSERY_DATABASE_URL")?,
             db_max_connections: var("TESSERY_DB_MAX_CONNECTIONS", "20")
                 .parse()
                 .context("TESSERY_DB_MAX_CONNECTIONS must be a number")?,
             redis_url: required("TESSERY_REDIS_URL")?,
             amqp_url: required("TESSERY_AMQP_URL")?,
-            web_dir: std::env::var("TESSERY_WEB_DIR")
-                .ok()
-                .filter(|s| !s.is_empty())
-                .map(PathBuf::from),
+            web_dir: std::env::var("TESSERY_WEB_DIR").ok().filter(|s| !s.is_empty()).map(PathBuf::from),
             cookie_secure: flag("TESSERY_COOKIE_SECURE", true),
             session_ttl: Duration::from_secs(
                 var("TESSERY_SESSION_TTL_HOURS", "168")
@@ -90,7 +85,9 @@ impl Config {
             engine: tessery_engine::EngineConfig {
                 node: PathBuf::from(var("TESSERY_NODE_BIN", "node")),
                 script: engine_script(),
-                processes: var("TESSERY_ENGINE_PROCESSES", "2").parse().context("TESSERY_ENGINE_PROCESSES must be a number")?,
+                processes: var("TESSERY_ENGINE_PROCESSES", "2")
+                    .parse()
+                    .context("TESSERY_ENGINE_PROCESSES must be a number")?,
                 timeout: Duration::from_secs(30),
             },
             secret_key: tessery_core::SecretKey::from_env()?,
@@ -102,12 +99,12 @@ fn engine_script() -> PathBuf {
     if let Ok(p) = std::env::var("TESSERY_ENGINE_SCRIPT") {
         return PathBuf::from(p);
     }
-    let candidates = ["/usr/local/lib/tessery/tessery-engine.mjs", "../../packages/core/dist/tessery-engine.mjs", "packages/core/dist/tessery-engine.mjs"];
-    candidates
-        .iter()
-        .map(PathBuf::from)
-        .find(|p| p.is_file())
-        .unwrap_or_else(|| PathBuf::from(candidates[1]))
+    let candidates = [
+        "/usr/local/lib/tessery/tessery-engine.mjs",
+        "../../packages/core/dist/tessery-engine.mjs",
+        "packages/core/dist/tessery-engine.mjs",
+    ];
+    candidates.iter().map(PathBuf::from).find(|p| p.is_file()).unwrap_or_else(|| PathBuf::from(candidates[1]))
 }
 
 fn var(key: &str, default: &str) -> String {

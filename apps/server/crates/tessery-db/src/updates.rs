@@ -16,7 +16,13 @@ pub struct SystemUpdate {
     pub started_at: OffsetDateTime,
 }
 
-pub async fn record(ex: impl PgExecutor<'_>, from: &str, to: &str, kind: &str, started_by: Option<Uuid>) -> DbResult<()> {
+pub async fn record(
+    ex: impl PgExecutor<'_>,
+    from: &str,
+    to: &str,
+    kind: &str,
+    started_by: Option<Uuid>,
+) -> DbResult<()> {
     sqlx::query!(
         "INSERT INTO system_updates (from_version, to_version, kind, automatic, started_by) VALUES ($1, $2, $3, $4, $5)",
         from,

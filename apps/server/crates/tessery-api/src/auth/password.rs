@@ -9,19 +9,13 @@ static DUMMY_HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 fn dummy_hash() -> &'static str {
     DUMMY_HASH.get_or_init(|| {
-        Argon2::default()
-            .hash_password(b"tessery-timing-equalizer")
-            .map(|h| h.to_string())
-            .unwrap_or_default()
+        Argon2::default().hash_password(b"tessery-timing-equalizer").map(|h| h.to_string()).unwrap_or_default()
     })
 }
 
 pub fn validate(password: &str) -> ApiResult<()> {
     if password.chars().count() < MIN_LENGTH {
-        return Err(ApiError::invalid(
-            "password",
-            format!("must be at least {MIN_LENGTH} characters"),
-        ));
+        return Err(ApiError::invalid("password", format!("must be at least {MIN_LENGTH} characters")));
     }
     if password.len() > 1024 {
         return Err(ApiError::invalid("password", "is too long"));
@@ -48,10 +42,7 @@ pub async fn verify(password: String, stored: Option<String>) -> bool {
         let Ok(parsed) = PasswordHash::new(&hash) else {
             return false;
         };
-        Argon2::default()
-            .verify_password(password.as_bytes(), &parsed)
-            .is_ok()
-            && known
+        Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok() && known
     })
     .await
     .unwrap_or(false)

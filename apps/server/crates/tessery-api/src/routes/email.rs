@@ -27,7 +27,11 @@ pub struct EmailSettingsDto {
 pub async fn get_settings(State(state): State<AppState>, p: Principal) -> ApiResult<Json<EmailSettingsDto>> {
     p.require_instance_admin()?;
     let s = mail::settings(&state).await?;
-    Ok(Json(EmailSettingsDto { configured: s.is_some(), has_password: s.as_ref().is_some_and(|(_, pw)| pw.is_some()), settings: s.map(|(s, _)| s) }))
+    Ok(Json(EmailSettingsDto {
+        configured: s.is_some(),
+        has_password: s.as_ref().is_some_and(|(_, pw)| pw.is_some()),
+        settings: s.map(|(s, _)| s),
+    }))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -40,7 +44,11 @@ pub struct EmailSettingsInput {
 }
 
 #[utoipa::path(put, path = "/api/admin/email", tag = "admin", request_body = EmailSettingsInput, responses((status = 200, body = EmailSettingsDto)))]
-pub async fn put_settings(State(state): State<AppState>, p: Principal, Json(req): Json<EmailSettingsInput>) -> ApiResult<Json<EmailSettingsDto>> {
+pub async fn put_settings(
+    State(state): State<AppState>,
+    p: Principal,
+    Json(req): Json<EmailSettingsInput>,
+) -> ApiResult<Json<EmailSettingsDto>> {
     p.require_instance_admin()?;
     let before = mail::settings(&state).await?;
     let mut settings = req.settings;
@@ -75,7 +83,14 @@ pub async fn put_settings(State(state): State<AppState>, p: Principal, Json(req)
     // API keys arrive pasted with stray spaces; an SMTP password is kept exactly as typed.
     let secret = req.password.as_deref().map(|pw| if provider.as_deref() == Some("resend") { pw.trim() } else { pw });
     let cipher = match secret {
-        Some(pw) if !pw.is_empty() => Some(state.config.secret_key.as_ref().ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY to store the password or API key".into()))?.encrypt(pw.as_bytes())),
+        Some(pw) if !pw.is_empty() => Some(
+            state
+                .config
+                .secret_key
+                .as_ref()
+                .ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY to store the password or API key".into()))?
+                .encrypt(pw.as_bytes()),
+        ),
         _ => None,
     };
     // The update itself keeps the stored secret only while the stored provider still matches, so a save racing
@@ -84,7 +99,13 @@ pub async fn put_settings(State(state): State<AppState>, p: Principal, Json(req)
     let value = settings.as_ref().map(|s| serde_json::to_value(s).expect("settings serialize"));
     tessery_db::settings::set_smtp(&state.db, value.as_ref(), cipher.as_deref(), keep).await?;
     let host = settings.as_ref().filter(|s| s.provider == "smtp").map(|s| s.host.clone());
-    audit::record(&state.db, &p, Entry::new(None, "instance.email", "instance", p.user.id).details(json!({ "configured": settings.is_some(), "provider": provider, "host": host }))).await?;
+    audit::record(
+        &state.db,
+        &p,
+        Entry::new(None, "instance.email", "instance", p.user.id)
+            .details(json!({ "configured": settings.is_some(), "provider": provider, "host": host })),
+    )
+    .await?;
     get_settings(State(state), p).await
 }
 
@@ -96,7 +117,13 @@ pub struct TestEmail {
 #[utoipa::path(post, path = "/api/admin/email/test", tag = "admin", request_body = TestEmail, responses((status = 200, body = Ok)))]
 pub async fn test(State(state): State<AppState>, p: Principal, Json(req): Json<TestEmail>) -> ApiResult<Json<Ok>> {
     p.require_instance_admin()?;
-    mail::send(&state, req.to.trim(), "Tessery test email", "Email from your Tessery instance works.\n\nPassword resets and invitations will be sent this way.\n").await?;
+    mail::send(
+        &state,
+        req.to.trim(),
+        "Tessery test email",
+        "Email from your Tessery instance works.\n\nPassword resets and invitations will be sent this way.\n",
+    )
+    .await?;
     Ok(Json(OK))
 }
 
@@ -108,11 +135,27 @@ fn new_token() -> (String, Vec<u8>) {
     (token, hash)
 }
 
-pub async fn send_invite(state: &AppState, headers: &HeaderMap, user: Uuid, email: &str, org_name: &str, inviter: &str) -> ApiResult<()> {
+pub async fn send_invite(
+    state: &AppState,
+    headers: &HeaderMap,
+    user: Uuid,
+    email: &str,
+    org_name: &str,
+    inviter: &str,
+) -> ApiResult<()> {
     let (token, hash) = new_token();
-    tessery_db::tokens_password::create(&state.db, &hash, user, "invite", OffsetDateTime::now_utc() + Duration::days(7)).await?;
+    tessery_db::tokens_password::create(
+        &state.db,
+        &hash,
+        user,
+        "invite",
+        OffsetDateTime::now_utc() + Duration::days(7),
+    )
+    .await?;
     let link = format!("{}/reset-password?token={token}", mail::base_url(state, headers));
-    let body = format!("{inviter} added you to {org_name} on Tessery.\n\nChoose a password to sign in:\n{link}\n\nThe link works once and expires in 7 days.\n");
+    let body = format!(
+        "{inviter} added you to {org_name} on Tessery.\n\nChoose a password to sign in:\n{link}\n\nThe link works once and expires in 7 days.\n"
+    );
     mail::send(state, email, &format!("You were added to {org_name} on Tessery"), &body).await
 }
 
@@ -123,24 +166,42 @@ pub struct ForgotInput {
 
 /// Emails a link to choose a new password. Answers the same whether or not the address has an account.
 #[utoipa::path(post, path = "/api/auth/password/forgot", tag = "auth", request_body = ForgotInput, responses((status = 200, body = Ok)))]
-pub async fn forgot(State(state): State<AppState>, meta: RequestMeta, headers: HeaderMap, Json(req): Json<ForgotInput>) -> ApiResult<Json<Ok>> {
+pub async fn forgot(
+    State(state): State<AppState>,
+    meta: RequestMeta,
+    headers: HeaderMap,
+    Json(req): Json<ForgotInput>,
+) -> ApiResult<Json<Ok>> {
     let email = req.email.trim().to_lowercase();
     let mut redis = state.redis.clone();
     let ip_key = format!("forgot:ip:{}", meta.ip.as_deref().unwrap_or("unknown"));
     let email_key = format!("forgot:email:{email}");
-    if !rate_limit::allow(&mut redis, &ip_key, 10, 900).await? || !rate_limit::allow(&mut redis, &email_key, 3, 900).await? {
+    if !rate_limit::allow(&mut redis, &ip_key, 10, 900).await?
+        || !rate_limit::allow(&mut redis, &email_key, 3, 900).await?
+    {
         return Err(ApiError::RateLimited);
     }
     if mail::settings(&state).await?.is_none() {
-        return Err(ApiError::Conflict("this instance cannot send email; ask an administrator to reset your password".into()));
+        return Err(ApiError::Conflict(
+            "this instance cannot send email; ask an administrator to reset your password".into(),
+        ));
     }
     if let Some(user) = tessery_db::users::find_by_email(&state.db, &email).await?
         && user.disabled_at.is_none()
     {
         let (token, hash) = new_token();
-        tessery_db::tokens_password::create(&state.db, &hash, user.id, "reset", OffsetDateTime::now_utc() + Duration::hours(1)).await?;
+        tessery_db::tokens_password::create(
+            &state.db,
+            &hash,
+            user.id,
+            "reset",
+            OffsetDateTime::now_utc() + Duration::hours(1),
+        )
+        .await?;
         let link = format!("{}/reset-password?token={token}", mail::base_url(&state, &headers));
-        let body = format!("Someone asked to reset the password for {email} on Tessery.\n\nChoose a new password:\n{link}\n\nThe link works once and expires in an hour. If you did not ask for this, ignore this email.\n");
+        let body = format!(
+            "Someone asked to reset the password for {email} on Tessery.\n\nChoose a new password:\n{link}\n\nThe link works once and expires in an hour. If you did not ask for this, ignore this email.\n"
+        );
         if let Err(e) = mail::send(&state, &email, "Reset your Tessery password", &body).await {
             tracing::warn!(error = ?e, "sending a password reset email failed");
         }
@@ -177,14 +238,21 @@ pub struct ResetInput {
 }
 
 #[utoipa::path(post, path = "/api/auth/password/reset", tag = "auth", request_body = ResetInput, responses((status = 200, body = Ok)))]
-pub async fn reset(State(state): State<AppState>, meta: RequestMeta, Json(req): Json<ResetInput>) -> ApiResult<Json<Ok>> {
+pub async fn reset(
+    State(state): State<AppState>,
+    meta: RequestMeta,
+    Json(req): Json<ResetInput>,
+) -> ApiResult<Json<Ok>> {
     let mut redis = state.redis.clone();
-    if !rate_limit::allow(&mut redis, &format!("reset:ip:{}", meta.ip.as_deref().unwrap_or("unknown")), 20, 900).await? {
+    if !rate_limit::allow(&mut redis, &format!("reset:ip:{}", meta.ip.as_deref().unwrap_or("unknown")), 20, 900).await?
+    {
         return Err(ApiError::RateLimited);
     }
     password::validate(&req.password)?;
     let hash = Sha256::digest(req.token.trim().as_bytes()).to_vec();
-    let user = tessery_db::tokens_password::consume(&state.db, &hash).await?.ok_or_else(|| ApiError::invalid("token", "this link was already used or has expired; ask for a new one"))?;
+    let user = tessery_db::tokens_password::consume(&state.db, &hash)
+        .await?
+        .ok_or_else(|| ApiError::invalid("token", "this link was already used or has expired; ask for a new one"))?;
     let password_hash = password::hash(req.password).await?;
     tessery_db::users::set_password(&state.db, user, &password_hash).await?;
     session::destroy_all(&mut redis, user, None).await?;

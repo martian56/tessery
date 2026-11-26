@@ -35,7 +35,10 @@ async fn only_instance_admins_can_update_or_read_update_details() {
     assert_eq!(member.post("/api/system/update", json!({ "version": "0.2.0" })).await.status(), StatusCode::FORBIDDEN);
     assert_eq!(member.get("/api/system/updates").await.status(), StatusCode::FORBIDDEN);
     assert_eq!(member.get("/api/system/releases").await.status(), StatusCode::FORBIDDEN);
-    assert_eq!(app.session().post("/api/system/update", json!({ "version": "0.2.0" })).await.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        app.session().post("/api/system/update", json!({ "version": "0.2.0" })).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
 }
 
 #[tokio::test]
@@ -68,9 +71,20 @@ async fn checks_the_target_version_before_starting() {
     })
     .await;
     let (admin, _) = app.setup().await;
-    assert_eq!(admin.post("/api/system/update", json!({ "version": "latest" })).await.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(admin.post("/api/system/update", json!({ "version": "0.2.0" })).await.status(), StatusCode::CONFLICT, "already on it");
-    assert_eq!(admin.post("/api/system/update", json!({ "version": "v0.2.0" })).await.status(), StatusCode::CONFLICT, "a leading v is the same version");
+    assert_eq!(
+        admin.post("/api/system/update", json!({ "version": "latest" })).await.status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(
+        admin.post("/api/system/update", json!({ "version": "0.2.0" })).await.status(),
+        StatusCode::CONFLICT,
+        "already on it"
+    );
+    assert_eq!(
+        admin.post("/api/system/update", json!({ "version": "v0.2.0" })).await.status(),
+        StatusCode::CONFLICT,
+        "a leading v is the same version"
+    );
 }
 
 #[tokio::test]
@@ -78,13 +92,24 @@ async fn automatic_update_window_is_an_admin_setting() {
     let app = common::spawn_with(|c| c.updater.compose_dir = Some("/opt/tessery".into())).await;
     let (admin, _) = app.setup().await;
     let s: Value = admin.json("/api/admin/settings").await;
-    assert_eq!((s["autoUpdate"].clone(), s["autoUpdateFrom"].clone(), s["autoUpdateTo"].clone()), (json!(false), json!(3), json!(5)), "off by default");
+    assert_eq!(
+        (s["autoUpdate"].clone(), s["autoUpdateFrom"].clone(), s["autoUpdateTo"].clone()),
+        (json!(false), json!(3), json!(5)),
+        "off by default"
+    );
 
-    assert_eq!(admin.put("/api/admin/settings", json!({ "autoUpdateFrom": 24 })).await.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    let r = admin.put("/api/admin/settings", json!({ "autoUpdate": true, "autoUpdateFrom": 22, "autoUpdateTo": 2 })).await;
+    assert_eq!(
+        admin.put("/api/admin/settings", json!({ "autoUpdateFrom": 24 })).await.status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    let r =
+        admin.put("/api/admin/settings", json!({ "autoUpdate": true, "autoUpdateFrom": 22, "autoUpdateTo": 2 })).await;
     assert_eq!(r.status(), StatusCode::OK);
     let s: Value = r.json().await.unwrap();
-    assert_eq!((s["autoUpdate"].clone(), s["autoUpdateFrom"].clone(), s["autoUpdateTo"].clone()), (json!(true), json!(22), json!(2)));
+    assert_eq!(
+        (s["autoUpdate"].clone(), s["autoUpdateFrom"].clone(), s["autoUpdateTo"].clone()),
+        (json!(true), json!(22), json!(2))
+    );
     assert_eq!(s["allowOrgCreation"], true, "other settings keep their value");
 }
 
@@ -111,11 +136,16 @@ async fn lists_published_releases_for_the_changelog() {
 async fn rollback_only_offers_an_older_version() {
     let app = common::spawn_with(|c| c.version = "0.1.0".into()).await;
     let (admin, _) = app.setup().await;
-    let url = std::env::var("TESSERY_TEST_DATABASE_URL").unwrap_or_else(|_| "postgres://tessery:tessery@127.0.0.1:15432/tessery".into());
+    let url = std::env::var("TESSERY_TEST_DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://tessery:tessery@127.0.0.1:15432/tessery".into());
     let pool = sqlx::PgPool::connect(&format!("{}/{}", url.rsplit_once('/').unwrap().0, app.db_name)).await.unwrap();
     tessery_db::updates::record(&pool, "0.1.0", "0.2.0", "update", None).await.unwrap();
     tessery_db::updates::record(&pool, "0.2.0", "0.1.0", "rollback", None).await.unwrap();
     let info: Value = admin.json("/api/system/updates").await;
-    assert_eq!(info["rollbackTo"], Value::Null, "after rolling back from 0.2.0, going to 0.2.0 is an update, not a rollback");
+    assert_eq!(
+        info["rollbackTo"],
+        Value::Null,
+        "after rolling back from 0.2.0, going to 0.2.0 is an update, not a rollback"
+    );
     assert_eq!(info["history"].as_array().unwrap().len(), 2);
 }

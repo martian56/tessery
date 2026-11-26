@@ -51,8 +51,24 @@ pub fn check(secret: &[u8], code: &str, now: u64) -> Option<u64> {
 }
 
 pub fn otpauth_url(secret: &[u8], account: &str, issuer: &str) -> String {
-    let enc = |s: &str| s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-._~@".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect::<String>();
-    format!("otpauth://totp/{}:{}?secret={}&issuer={}&algorithm=SHA1&digits=6&period=30", enc(issuer), enc(account), encode(secret), enc(issuer))
+    let enc = |s: &str| {
+        s.bytes()
+            .map(|b| {
+                if b.is_ascii_alphanumeric() || b"-._~@".contains(&b) {
+                    (b as char).to_string()
+                } else {
+                    format!("%{b:02X}")
+                }
+            })
+            .collect::<String>()
+    };
+    format!(
+        "otpauth://totp/{}:{}?secret={}&issuer={}&algorithm=SHA1&digits=6&period=30",
+        enc(issuer),
+        enc(account),
+        encode(secret),
+        enc(issuer)
+    )
 }
 
 pub fn qr_svg(data: &str) -> String {
@@ -107,7 +123,10 @@ mod tests {
         let codes = recovery_codes();
         assert_eq!(codes.len(), 10);
         assert_eq!(hash_recovery(&codes[0]), hash_recovery(&codes[0].to_uppercase().replace('-', " ")));
-        assert!(otpauth_url(b"x", "a b@example.com", "Tessery").starts_with("otpauth://totp/Tessery:a%20b@example.com?secret="));
+        assert!(
+            otpauth_url(b"x", "a b@example.com", "Tessery")
+                .starts_with("otpauth://totp/Tessery:a%20b@example.com?secret=")
+        );
         assert!(qr_svg("otpauth://totp/x").starts_with("<?xml"));
     }
 }

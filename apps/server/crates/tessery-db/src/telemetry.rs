@@ -83,13 +83,25 @@ pub const DEFAULT_RETENTION_DAYS: i32 = 3;
 
 /// Deletes an environment's spans that started more than `days` days ago.
 pub async fn prune(ex: impl PgExecutor<'_>, project: Uuid, env: &str, days: i32) -> DbResult<u64> {
-    Ok(sqlx::query!("DELETE FROM spans WHERE project_id = $1 AND env_key = $2 AND start_at < now() - make_interval(days => $3)", project, env, days)
-        .execute(ex)
-        .await?
-        .rows_affected())
+    Ok(sqlx::query!(
+        "DELETE FROM spans WHERE project_id = $1 AND env_key = $2 AND start_at < now() - make_interval(days => $3)",
+        project,
+        env,
+        days
+    )
+    .execute(ex)
+    .await?
+    .rows_affected())
 }
 
-pub async fn traces(ex: impl PgExecutor<'_>, project: Uuid, env: &str, service: Option<&str>, errors_only: bool, limit: i64) -> DbResult<Vec<TraceSummary>> {
+pub async fn traces(
+    ex: impl PgExecutor<'_>,
+    project: Uuid,
+    env: &str,
+    service: Option<&str>,
+    errors_only: bool,
+    limit: i64,
+) -> DbResult<Vec<TraceSummary>> {
     Ok(sqlx::query_as!(
         TraceSummary,
         r#"WITH recent AS (

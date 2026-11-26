@@ -34,7 +34,12 @@ pub fn pending_migrations(running: Option<&Value>, next: &Value) -> Vec<PendingM
                 database: db["node"].as_str().unwrap_or(id).to_owned(),
                 file: file.to_owned(),
                 sql: m["sql"].as_str().unwrap_or_default().to_owned(),
-                destructive: m["destructive"].as_array().into_iter().flatten().filter_map(|d| d.as_str().map(str::to_owned)).collect(),
+                destructive: m["destructive"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|d| d.as_str().map(str::to_owned))
+                    .collect(),
             });
         }
     }
@@ -53,7 +58,10 @@ mod tests {
     #[test]
     fn lists_only_migrations_the_environment_has_not_run() {
         let running = state(&[("0001_init.sql", &[])]);
-        let next = state(&[("0001_init.sql", &[]), ("0002_drop_orders_note.sql", &["drops column orders.note and its values"])]);
+        let next = state(&[
+            ("0001_init.sql", &[]),
+            ("0002_drop_orders_note.sql", &["drops column orders.note and its values"]),
+        ]);
         let pending = pending_migrations(Some(&running), &next);
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].database, "shop-db");

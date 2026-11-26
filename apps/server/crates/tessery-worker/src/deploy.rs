@@ -1,11 +1,11 @@
 use crate::jobs::Ctx;
 use anyhow::{Context, Result, anyhow, bail};
-use tessery_db::delivery::{self as db, Release};
 use rand::Rng;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::process::Stdio;
 use std::time::Duration;
+use tessery_db::delivery::{self as db, Release};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
@@ -122,9 +122,26 @@ pub async fn deploy(ctx: &Ctx, release_id: Uuid) -> Result<()> {
         Err(_) => release.env_key.clone(),
     };
     let who = release.requester_name.clone().map(|n| format!("Requested by {n}.")).unwrap_or_default();
-    crate::github::report(ctx, release.project_id, &release.commit_sha, &release.env_key, release.id, "pending", &format!("Deploying to {env_name}")).await;
+    crate::github::report(
+        ctx,
+        release.project_id,
+        &release.commit_sha,
+        &release.env_key,
+        release.id,
+        "pending",
+        &format!("Deploying to {env_name}"),
+    )
+    .await;
     let started_title = format!("Releasing checkpoint {} to {env_name}", release.checkpoint_seq);
-    let started = crate::notify::send_quietly(ctx, release.project_id, &release.env_key, Some(release.id), "release.started", &started_title, &who);
+    let started = crate::notify::send_quietly(
+        ctx,
+        release.project_id,
+        &release.env_key,
+        Some(release.id),
+        "release.started",
+        &started_title,
+        &who,
+    );
     if tokio::time::timeout(std::time::Duration::from_secs(10), started).await.is_err() {
         tracing::warn!(%release_id, "release started notifications took longer than 10 seconds; deploying anyway");
     }
@@ -160,15 +177,63 @@ pub async fn deploy(ctx: &Ctx, release_id: Uuid) -> Result<()> {
         crate::jobs::after_release(ctx, release.project_id).await;
     }
     match &error {
-        None => crate::github::report(ctx, release.project_id, &release.commit_sha, &release.env_key, release.id, "success", &format!("Live on {env_name}")).await,
-        Some(e) => crate::github::report(ctx, release.project_id, &release.commit_sha, &release.env_key, release.id, "failure", e).await,
+        None => {
+            crate::github::report(
+                ctx,
+                release.project_id,
+                &release.commit_sha,
+                &release.env_key,
+                release.id,
+                "success",
+                &format!("Live on {env_name}"),
+            )
+            .await
+        }
+        Some(e) => {
+            crate::github::report(
+                ctx,
+                release.project_id,
+                &release.commit_sha,
+                &release.env_key,
+                release.id,
+                "failure",
+                e,
+            )
+            .await
+        }
     }
     match &error {
         None => {
-            let live = endpoints.as_array().into_iter().flatten().filter_map(|e| e["url"].as_str()).collect::<Vec<_>>().join("\n");
-            crate::notify::send_quietly(ctx, release.project_id, &release.env_key, Some(release.id), "release.succeeded", &format!("Checkpoint {} is live on {env_name}", release.checkpoint_seq), &live).await;
+            let live = endpoints
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|e| e["url"].as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            crate::notify::send_quietly(
+                ctx,
+                release.project_id,
+                &release.env_key,
+                Some(release.id),
+                "release.succeeded",
+                &format!("Checkpoint {} is live on {env_name}", release.checkpoint_seq),
+                &live,
+            )
+            .await;
         }
-        Some(e) => crate::notify::send_quietly(ctx, release.project_id, &release.env_key, Some(release.id), "release.failed", &format!("Release of checkpoint {} to {env_name} failed", release.checkpoint_seq), e).await,
+        Some(e) => {
+            crate::notify::send_quietly(
+                ctx,
+                release.project_id,
+                &release.env_key,
+                Some(release.id),
+                "release.failed",
+                &format!("Release of checkpoint {} to {env_name} failed", release.checkpoint_seq),
+                e,
+            )
+            .await
+        }
     }
     Ok(())
 }
@@ -176,21 +241,24 @@ pub async fn deploy(ctx: &Ctx, release_id: Uuid) -> Result<()> {
 async fn run(ctx: &Ctx, r: &Release, log: &Log) -> Result<Vec<Value>> {
     let cfg = &ctx.runner;
     let repo = ctx.repos.open(r.project_id).await.context("opening the project repository")?;
-    let plan_raw = repo
-        .read_file(&r.commit_sha, &format!("deploy/{}/plan.json", r.env_key))
-        .await
-        .map_err(|_| anyhow!("checkpoint {} has no deploy plan for {}; create a new checkpoint", r.checkpoint_seq, r.env_key))?;
+    let plan_raw = repo.read_file(&r.commit_sha, &format!("deploy/{}/plan.json", r.env_key)).await.map_err(|_| {
+        anyhow!("checkpoint {} has no deploy plan for {}; create a new checkpoint", r.checkpoint_seq, r.env_key)
+    })?;
     let plan: Plan = serde_json::from_slice(&plan_raw).context("reading the deploy plan")?;
     let kind = plan.target.get("kind").and_then(Value::as_str).unwrap_or("git");
 
-    let required = tessery_core::runner::required_secrets(&serde_json::from_slice(&plan_raw).context("reading the deploy plan")?);
+    let required =
+        tessery_core::runner::required_secrets(&serde_json::from_slice(&plan_raw).context("reading the deploy plan")?);
     let mut values = resolve_secrets(ctx, r, &required).await?;
     let server = server_connection(ctx, r.project_id, &plan.target).await?;
     if let Some((_, extra)) = &server {
         values.retain(|(k, _)| k != "SSH_PRIVATE_KEY" && k != "SSH_KNOWN_HOSTS");
         values.extend(extra.iter().cloned());
     }
-    let host_env = server.as_ref().map(|(address, _)| format!("TESSERY_DOCKER_HOST={address}")).unwrap_or_else(|| "TESSERY_DOCKER_HOST=".into());
+    let host_env = server
+        .as_ref()
+        .map(|(address, _)| format!("TESSERY_DOCKER_HOST={address}"))
+        .unwrap_or_else(|| "TESSERY_DOCKER_HOST=".into());
     let remote = server
         .as_ref()
         .map(|(address, _)| address.as_str())
@@ -199,7 +267,9 @@ async fn run(ctx: &Ctx, r: &Release, log: &Log) -> Result<Vec<Value>> {
     let base = if remote.is_some() { ctx.runner.public_url.as_deref() } else { ctx.runner.telemetry_url.as_deref() };
     match (base, remote) {
         (Some(url), _) if ctx.secret_key.is_some() => log.line(format!("Traces go to {url}")),
-        (None, Some(host)) => log.line(format!("Traces are off: services on {host} need TESSERY_PUBLIC_URL to reach Tessery")),
+        (None, Some(host)) => {
+            log.line(format!("Traces are off: services on {host} need TESSERY_PUBLIC_URL to reach Tessery"))
+        }
         _ => log.line("Traces are off: set TESSERY_TELEMETRY_URL and TESSERY_SECRET_KEY on the worker to collect them"),
     }
     values.extend(telemetry(ctx, base, r.project_id, &r.env_key));
@@ -218,9 +288,24 @@ async fn run(ctx: &Ctx, r: &Release, log: &Log) -> Result<Vec<Value>> {
     docker(
         cfg,
         &[
-            "create", "--name", &name, "--label", "tessery.release", "-v", &volume,
-            "-e", &format!("TESSERY_ENV={}", r.env_key), "-e", &format!("TESSERY_TAG={tag}"), "-e", &format!("TESSERY_RELEASE={}", r.id), "-e", &host_env,
-            &cfg.image(), "sh", "/work/.tessery/run.sh",
+            "create",
+            "--name",
+            &name,
+            "--label",
+            "tessery.release",
+            "-v",
+            &volume,
+            "-e",
+            &format!("TESSERY_ENV={}", r.env_key),
+            "-e",
+            &format!("TESSERY_TAG={tag}"),
+            "-e",
+            &format!("TESSERY_RELEASE={}", r.id),
+            "-e",
+            &host_env,
+            &cfg.image(),
+            "sh",
+            "/work/.tessery/run.sh",
         ],
     )
     .await
@@ -314,7 +399,28 @@ pub async fn teardown(ctx: &Ctx, req: TeardownRequest<'_>) -> Result<()> {
     let _ = docker(cfg, &["rm", "-f", &name]).await;
     let volume = format!("{}:/var/run/docker.sock", cfg.socket);
     let action = if destroy { "TESSERY_ACTION=destroy" } else { "TESSERY_ACTION=stop" };
-    docker(cfg, &["create", "--name", &name, "-v", &volume, "-e", action, "-e", &format!("TESSERY_ENV={env}"), "-e", "TESSERY_TAG=none", "-e", &host_env, &cfg.image(), "sh", "/work/.tessery/run.sh"]).await?;
+    docker(
+        cfg,
+        &[
+            "create",
+            "--name",
+            &name,
+            "-v",
+            &volume,
+            "-e",
+            action,
+            "-e",
+            &format!("TESSERY_ENV={env}"),
+            "-e",
+            "TESSERY_TAG=none",
+            "-e",
+            &host_env,
+            &cfg.image(),
+            "sh",
+            "/work/.tessery/run.sh",
+        ],
+    )
+    .await?;
     let result = async {
         let mut b = tar::Builder::new(Vec::new());
         let body = serde_json::to_vec(plan)?;
@@ -333,18 +439,33 @@ pub async fn teardown(ctx: &Ctx, req: TeardownRequest<'_>) -> Result<()> {
     result.map(drop)
 }
 
-pub(crate) async fn server_connection(ctx: &Ctx, project: Uuid, target: &Value) -> Result<Option<(String, Vec<(String, String)>)>> {
+pub(crate) async fn server_connection(
+    ctx: &Ctx,
+    project: Uuid,
+    target: &Value,
+) -> Result<Option<(String, Vec<(String, String)>)>> {
     let Some(id) = target.get("server").and_then(Value::as_str) else { return Ok(None) };
     let id: Uuid = id.parse().context("the environment names an invalid server id")?;
     let org = tessery_db::servers::org_of_project(&ctx.db, project).await?;
-    let creds = tessery_db::servers::credentials(&ctx.db, org, id)
-        .await
-        .map_err(|_| anyhow!("the server this environment deploys to was removed; pick another one in the environment settings"))?;
-    decrypt_server(ctx, &tessery_mq::ServerConnection { address: creds.address, private_key: creds.private_key, known_hosts: creds.known_hosts }).map(Some)
+    let creds = tessery_db::servers::credentials(&ctx.db, org, id).await.map_err(|_| {
+        anyhow!("the server this environment deploys to was removed; pick another one in the environment settings")
+    })?;
+    decrypt_server(
+        ctx,
+        &tessery_mq::ServerConnection {
+            address: creds.address,
+            private_key: creds.private_key,
+            known_hosts: creds.known_hosts,
+        },
+    )
+    .map(Some)
 }
 
 fn decrypt_server(ctx: &Ctx, s: &tessery_mq::ServerConnection) -> Result<(String, Vec<(String, String)>)> {
-    let key = ctx.secret_key.as_ref().ok_or_else(|| anyhow!("TESSERY_SECRET_KEY is not set on the worker, so server keys cannot be read"))?;
+    let key = ctx
+        .secret_key
+        .as_ref()
+        .ok_or_else(|| anyhow!("TESSERY_SECRET_KEY is not set on the worker, so server keys cannot be read"))?;
     let pem = String::from_utf8(key.decrypt(&s.private_key)?).context("a stored server key is not UTF-8")?;
     let mut values = vec![("SSH_PRIVATE_KEY".to_owned(), pem)];
     if !s.known_hosts.trim().is_empty() {
@@ -356,15 +477,24 @@ fn decrypt_server(ctx: &Ctx, s: &tessery_mq::ServerConnection) -> Result<(String
 fn telemetry(ctx: &Ctx, base: Option<&str>, project: Uuid, env: &str) -> [(String, String); 2] {
     let on = base.zip(ctx.secret_key.as_ref());
     let endpoint = on.map(|(url, _)| format!("{url}/api/otlp/{project}/{env}")).unwrap_or_default();
-    let headers = on.map(|(_, key)| format!("authorization=Bearer {}", tessery_core::runner::telemetry_token(key, project, env))).unwrap_or_default();
+    let headers = on
+        .map(|(_, key)| format!("authorization=Bearer {}", tessery_core::runner::telemetry_token(key, project, env)))
+        .unwrap_or_default();
     [("TESSERY_OTLP_ENDPOINT".into(), endpoint), ("TESSERY_OTLP_HEADERS".into(), headers)]
 }
 
-async fn resolve_secrets(ctx: &Ctx, r: &Release, needed: &[tessery_core::runner::RequiredSecret]) -> Result<Vec<(String, String)>> {
+async fn resolve_secrets(
+    ctx: &Ctx,
+    r: &Release,
+    needed: &[tessery_core::runner::RequiredSecret],
+) -> Result<Vec<(String, String)>> {
     if needed.is_empty() {
         return Ok(Vec::new());
     }
-    let key = ctx.secret_key.as_ref().ok_or_else(|| anyhow!("TESSERY_SECRET_KEY is not set on the worker, so environment secrets cannot be read"))?;
+    let key = ctx
+        .secret_key
+        .as_ref()
+        .ok_or_else(|| anyhow!("TESSERY_SECRET_KEY is not set on the worker, so environment secrets cannot be read"))?;
     let stored = db::secrets(&ctx.db, r.project_id, &r.env_key).await?;
     for secret in needed {
         if secret.generate && !stored.iter().any(|s| s.name == secret.name) {
@@ -507,7 +637,11 @@ async fn pump(child: tokio::process::Child, log: &Log) -> Result<std::process::E
     pump_with(child, log, |_| true).await
 }
 
-async fn pump_with(mut child: tokio::process::Child, log: &Log, keep: impl Fn(&str) -> bool) -> Result<std::process::ExitStatus> {
+async fn pump_with(
+    mut child: tokio::process::Child,
+    log: &Log,
+    keep: impl Fn(&str) -> bool,
+) -> Result<std::process::ExitStatus> {
     let mut out = BufReader::new(child.stdout.take().expect("piped")).lines();
     let mut err = BufReader::new(child.stderr.take().expect("piped")).lines();
     let (mut out_done, mut err_done) = (false, false);
@@ -521,7 +655,12 @@ async fn pump_with(mut child: tokio::process::Child, log: &Log, keep: impl Fn(&s
 }
 
 async fn docker(cfg: &RunnerConfig, args: &[&str]) -> Result<String> {
-    let out = Command::new(&cfg.docker).args(args).stdin(Stdio::null()).output().await.context("running docker; is Docker installed and running?")?;
+    let out = Command::new(&cfg.docker)
+        .args(args)
+        .stdin(Stdio::null())
+        .output()
+        .await
+        .context("running docker; is Docker installed and running?")?;
     if !out.status.success() {
         bail!("docker {} failed: {}", args.first().unwrap_or(&""), String::from_utf8_lossy(&out.stderr).trim());
     }

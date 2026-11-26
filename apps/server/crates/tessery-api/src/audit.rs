@@ -1,8 +1,8 @@
 use crate::auth::Principal;
-use tessery_core::Decision;
-use tessery_db::audit::NewEvent;
 use serde_json::Value;
 use sqlx::PgExecutor;
+use tessery_core::Decision;
+use tessery_db::audit::NewEvent;
 use uuid::Uuid;
 
 pub struct Entry<'a> {
@@ -15,12 +15,7 @@ pub struct Entry<'a> {
 }
 
 impl<'a> Entry<'a> {
-    pub fn new(
-        org: Option<Uuid>,
-        action: &'a str,
-        resource_type: &'a str,
-        resource_id: impl ToString,
-    ) -> Self {
+    pub fn new(org: Option<Uuid>, action: &'a str, resource_type: &'a str, resource_id: impl ToString) -> Self {
         Self {
             org,
             action,
@@ -42,11 +37,7 @@ impl<'a> Entry<'a> {
     }
 }
 
-pub async fn record(
-    ex: impl PgExecutor<'_>,
-    actor: &Principal,
-    e: Entry<'_>,
-) -> Result<(), tessery_db::DbError> {
+pub async fn record(ex: impl PgExecutor<'_>, actor: &Principal, e: Entry<'_>) -> Result<(), tessery_db::DbError> {
     tessery_db::audit::insert(
         ex,
         NewEvent {

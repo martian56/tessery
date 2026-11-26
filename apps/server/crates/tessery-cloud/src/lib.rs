@@ -52,14 +52,28 @@ pub const PROVIDERS: &[ProviderSpec] = &[
         fields: &[
             field("accessKeyId", "Access key ID", false, "AKIA..."),
             field("secretAccessKey", "Secret access key", true, ""),
-            FieldSpec { key: "region", label: "Default region", secret: false, multiline: false, optional: true, placeholder: "us-east-1" },
+            FieldSpec {
+                key: "region",
+                label: "Default region",
+                secret: false,
+                multiline: false,
+                optional: true,
+                placeholder: "us-east-1",
+            },
         ],
     },
     ProviderSpec {
         id: "gcp",
         name: "Google Cloud",
         help: "In IAM & Admin, Service accounts, create a service account with the roles Tessery needs, then add a JSON key and paste the file.",
-        fields: &[FieldSpec { key: "serviceAccount", label: "Service account key (JSON)", secret: true, multiline: true, optional: false, placeholder: "{\"type\": \"service_account\", ...}" }],
+        fields: &[FieldSpec {
+            key: "serviceAccount",
+            label: "Service account key (JSON)",
+            secret: true,
+            multiline: true,
+            optional: false,
+            placeholder: "{\"type\": \"service_account\", ...}",
+        }],
     },
     ProviderSpec {
         id: "azure",
@@ -79,8 +93,22 @@ pub const PROVIDERS: &[ProviderSpec] = &[
         fields: &[
             field("accountId", "Account ID", false, "49a99400cf3d841e0c19e70c629ef483"),
             field("token", "API token", true, ""),
-            FieldSpec { key: "r2AccessKeyId", label: "R2 access key ID", secret: false, multiline: false, optional: true, placeholder: "for backups to R2" },
-            FieldSpec { key: "r2SecretAccessKey", label: "R2 secret access key", secret: true, multiline: false, optional: true, placeholder: "" },
+            FieldSpec {
+                key: "r2AccessKeyId",
+                label: "R2 access key ID",
+                secret: false,
+                multiline: false,
+                optional: true,
+                placeholder: "for backups to R2",
+            },
+            FieldSpec {
+                key: "r2SecretAccessKey",
+                label: "R2 secret access key",
+                secret: true,
+                multiline: false,
+                optional: true,
+                placeholder: "",
+            },
         ],
     },
 ];
@@ -109,16 +137,28 @@ pub fn clean(spec: &ProviderSpec, input: &Map<String, Value>) -> Result<Map<Stri
 
 fn mask(v: &str) -> String {
     let n = v.chars().count();
-    if n <= 8 { "••••".into() } else { format!("{}…{}", v.chars().take(4).collect::<String>(), v.chars().skip(n - 4).collect::<String>()) }
+    if n <= 8 {
+        "••••".into()
+    } else {
+        format!("{}…{}", v.chars().take(4).collect::<String>(), v.chars().skip(n - 4).collect::<String>())
+    }
 }
 
 pub fn summary(provider: &str, f: &Map<String, Value>) -> Value {
     let s = |k: &str| f.get(k).and_then(Value::as_str).unwrap_or_default();
     match provider {
-        "aws" => json!({ "accessKeyId": mask(s("accessKeyId")), "region": f.get("region").and_then(Value::as_str).unwrap_or("us-east-1") }),
-        "azure" => json!({ "tenantId": s("tenantId"), "clientId": s("clientId"), "subscriptionId": s("subscriptionId") }),
-        "cloudflare" => json!({ "accountId": s("accountId"), "token": mask(s("token")), "r2": if s("r2AccessKeyId").is_empty() { Value::Null } else { Value::String(mask(s("r2AccessKeyId"))) } }),
-        "gcp" => serde_json::from_str::<Value>(s("serviceAccount")).map(|j| json!({ "clientEmail": j["client_email"], "projectId": j["project_id"] })).unwrap_or(json!({})),
+        "aws" => {
+            json!({ "accessKeyId": mask(s("accessKeyId")), "region": f.get("region").and_then(Value::as_str).unwrap_or("us-east-1") })
+        }
+        "azure" => {
+            json!({ "tenantId": s("tenantId"), "clientId": s("clientId"), "subscriptionId": s("subscriptionId") })
+        }
+        "cloudflare" => {
+            json!({ "accountId": s("accountId"), "token": mask(s("token")), "r2": if s("r2AccessKeyId").is_empty() { Value::Null } else { Value::String(mask(s("r2AccessKeyId"))) } })
+        }
+        "gcp" => serde_json::from_str::<Value>(s("serviceAccount"))
+            .map(|j| json!({ "clientEmail": j["client_email"], "projectId": j["project_id"] }))
+            .unwrap_or(json!({})),
         _ => json!({ "token": mask(s("token")) }),
     }
 }
@@ -143,7 +183,14 @@ fn client() -> reqwest::Client {
 fn status_error(name: &str, status: reqwest::StatusCode, body: &str) -> String {
     let detail: String = serde_json::from_str::<Value>(body)
         .ok()
-        .and_then(|v| v.pointer("/error/message").or(v.pointer("/errors/0/message")).or(v.get("message")).or(v.get("error_description")).and_then(Value::as_str).map(str::to_owned))
+        .and_then(|v| {
+            v.pointer("/error/message")
+                .or(v.pointer("/errors/0/message"))
+                .or(v.get("message"))
+                .or(v.get("error_description"))
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
         .or_else(|| between(body, "<Message>", "</Message>"))
         .unwrap_or_else(|| status.canonical_reason().unwrap_or("error").to_owned());
     match status.as_u16() {
@@ -153,7 +200,17 @@ fn status_error(name: &str, status: reqwest::StatusCode, body: &str) -> String {
 }
 
 fn form_body(pairs: &[(&str, &str)]) -> String {
-    let enc = |v: &str| v.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-._~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect::<String>();
+    let enc = |v: &str| {
+        v.bytes()
+            .map(|b| {
+                if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
+                    (b as char).to_string()
+                } else {
+                    format!("%{b:02X}")
+                }
+            })
+            .collect::<String>()
+    };
     pairs.iter().map(|(k, v)| format!("{}={}", enc(k), enc(v))).collect::<Vec<_>>().join("&")
 }
 
@@ -189,21 +246,56 @@ pub async fn verify(provider: &str, f: &Map<String, Value>, apis: &Endpoints) ->
         }
         "aws" => {
             let base = endpoint(apis, "aws", "https://sts.amazonaws.com");
-            let host = base.trim_start_matches("https://").trim_start_matches("http://").trim_end_matches('/').to_owned();
+            let host =
+                base.trim_start_matches("https://").trim_start_matches("http://").trim_end_matches('/').to_owned();
             let body = "Action=GetCallerIdentity&Version=2011-06-15";
             let now = OffsetDateTime::now_utc();
-            let amz = format!("{:04}{:02}{:02}T{:02}{:02}{:02}Z", now.year(), now.month() as u8, now.day(), now.hour(), now.minute(), now.second());
-            let headers = [("content-type", "application/x-www-form-urlencoded; charset=utf-8"), ("host", host.as_str()), ("x-amz-date", amz.as_str())];
-            let auth = sigv4(&SigV4 { method: "POST", path: "/", query: "", headers: &headers, payload: body.as_bytes(), region: "us-east-1", service: "sts", access_key: &s("accessKeyId"), secret: &s("secretAccessKey"), amz_date: &amz });
-            let resp = send("AWS", http.post(format!("{base}/")).header("content-type", headers[0].1).header("x-amz-date", &amz).header("authorization", auth).body(body)).await?;
+            let amz = format!(
+                "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
+                now.year(),
+                now.month() as u8,
+                now.day(),
+                now.hour(),
+                now.minute(),
+                now.second()
+            );
+            let headers = [
+                ("content-type", "application/x-www-form-urlencoded; charset=utf-8"),
+                ("host", host.as_str()),
+                ("x-amz-date", amz.as_str()),
+            ];
+            let auth = sigv4(&SigV4 {
+                method: "POST",
+                path: "/",
+                query: "",
+                headers: &headers,
+                payload: body.as_bytes(),
+                region: "us-east-1",
+                service: "sts",
+                access_key: &s("accessKeyId"),
+                secret: &s("secretAccessKey"),
+                amz_date: &amz,
+            });
+            let resp = send(
+                "AWS",
+                http.post(format!("{base}/"))
+                    .header("content-type", headers[0].1)
+                    .header("x-amz-date", &amz)
+                    .header("authorization", auth)
+                    .body(body),
+            )
+            .await?;
             let arn = between(&resp, "<Arn>", "</Arn>").unwrap_or_default();
             let account = between(&resp, "<Account>", "</Account>").unwrap_or_default();
             Ok(if arn.is_empty() { format!("AWS account {account}") } else { arn })
         }
         "gcp" => {
-            let j: Value = serde_json::from_str(&s("serviceAccount")).map_err(|_| "the service account key is not valid JSON".to_owned())?;
+            let j: Value = serde_json::from_str(&s("serviceAccount"))
+                .map_err(|_| "the service account key is not valid JSON".to_owned())?;
             if j["type"] != "service_account" {
-                return Err("this is not a service account key; download a JSON key from IAM & Admin, Service accounts".into());
+                return Err(
+                    "this is not a service account key; download a JSON key from IAM & Admin, Service accounts".into(),
+                );
             }
             let email = j["client_email"].as_str().ok_or("the key has no client_email")?;
             if !j["private_key"].as_str().is_some_and(|k| k.contains("BEGIN PRIVATE KEY")) {
@@ -214,10 +306,29 @@ pub async fn verify(provider: &str, f: &Map<String, Value>, apis: &Endpoints) ->
         "azure" => {
             let login = endpoint(apis, "azure_login", "https://login.microsoftonline.com");
             let mgmt = endpoint(apis, "azure", "https://management.azure.com");
-            let form = [("grant_type", "client_credentials"), ("client_id", &s("clientId")), ("client_secret", &s("clientSecret")), ("scope", "https://management.azure.com/.default")];
-            let token = send("Microsoft Entra ID", http.post(format!("{login}/{}/oauth2/v2.0/token", s("tenantId"))).header("content-type", "application/x-www-form-urlencoded").body(form_body(&form))).await?;
-            let token = serde_json::from_str::<Value>(&token).ok().and_then(|v| v["access_token"].as_str().map(str::to_owned)).ok_or("Microsoft Entra ID returned no token")?;
-            let sub = send("Azure", http.get(format!("{mgmt}/subscriptions/{}?api-version=2022-12-01", s("subscriptionId"))).bearer_auth(token)).await?;
+            let form = [
+                ("grant_type", "client_credentials"),
+                ("client_id", &s("clientId")),
+                ("client_secret", &s("clientSecret")),
+                ("scope", "https://management.azure.com/.default"),
+            ];
+            let token = send(
+                "Microsoft Entra ID",
+                http.post(format!("{login}/{}/oauth2/v2.0/token", s("tenantId")))
+                    .header("content-type", "application/x-www-form-urlencoded")
+                    .body(form_body(&form)),
+            )
+            .await?;
+            let token = serde_json::from_str::<Value>(&token)
+                .ok()
+                .and_then(|v| v["access_token"].as_str().map(str::to_owned))
+                .ok_or("Microsoft Entra ID returned no token")?;
+            let sub = send(
+                "Azure",
+                http.get(format!("{mgmt}/subscriptions/{}?api-version=2022-12-01", s("subscriptionId")))
+                    .bearer_auth(token),
+            )
+            .await?;
             let v: Value = serde_json::from_str(&sub).unwrap_or_default();
             Ok(v["displayName"].as_str().map_or_else(|| format!("subscription {}", s("subscriptionId")), str::to_owned))
         }
@@ -225,12 +336,18 @@ pub async fn verify(provider: &str, f: &Map<String, Value>, apis: &Endpoints) ->
             let zones = cloudflare_zones(f, apis).await?;
             let mut out = match zones.len() {
                 0 => "no zones yet".to_owned(),
-                n => format!("{n} zone{}: {}", if n == 1 { "" } else { "s" }, zones.iter().map(|z| z.name.as_str()).collect::<Vec<_>>().join(", ")),
+                n => format!(
+                    "{n} zone{}: {}",
+                    if n == 1 { "" } else { "s" },
+                    zones.iter().map(|z| z.name.as_str()).collect::<Vec<_>>().join(", ")
+                ),
             };
             if !s("r2AccessKeyId").is_empty() {
                 match r2_list_buckets(f, apis).await {
                     Ok(_) => out.push_str(", R2 ready"),
-                    Err(_) => out.push_str(", R2 keys saved (they cannot list buckets, which is fine for keys limited to one bucket)"),
+                    Err(_) => out.push_str(
+                        ", R2 keys saved (they cannot list buckets, which is fine for keys limited to one bucket)",
+                    ),
                 }
             }
             Ok(out)
@@ -255,14 +372,27 @@ pub async fn cloudflare_zones(f: &Map<String, Value>, apis: &Endpoints) -> Resul
     let http = client();
     let base = cloudflare_base(apis);
     let account = s("accountId");
-    if send("Cloudflare", http.get(format!("{base}/accounts/{account}/tokens/verify")).bearer_auth(s("token"))).await.is_err() {
+    if send("Cloudflare", http.get(format!("{base}/accounts/{account}/tokens/verify")).bearer_auth(s("token")))
+        .await
+        .is_err()
+    {
         send("Cloudflare", http.get(format!("{base}/user/tokens/verify")).bearer_auth(s("token"))).await?;
     }
     let mut zones = Vec::new();
     for page in 1..=100 {
-        let body = send("Cloudflare", http.get(format!("{base}/zones?account.id={account}&per_page=50&page={page}")).bearer_auth(s("token"))).await?;
+        let body = send(
+            "Cloudflare",
+            http.get(format!("{base}/zones?account.id={account}&per_page=50&page={page}")).bearer_auth(s("token")),
+        )
+        .await?;
         let v: Value = serde_json::from_str(&body).unwrap_or_default();
-        zones.extend(v["result"].as_array().into_iter().flatten().filter_map(|z| Some(Zone { id: z["id"].as_str()?.to_owned(), name: z["name"].as_str()?.to_owned() })));
+        zones.extend(
+            v["result"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|z| Some(Zone { id: z["id"].as_str()?.to_owned(), name: z["name"].as_str()?.to_owned() })),
+        );
         if page >= v.pointer("/result_info/total_pages").and_then(Value::as_u64).unwrap_or(1) {
             break;
         }
@@ -280,11 +410,38 @@ pub async fn r2_list_buckets(f: &Map<String, Value>, apis: &Endpoints) -> Result
     let base = endpoint(apis, "r2", &format!("https://{}.r2.cloudflarestorage.com", s("accountId")));
     let host = base.trim_start_matches("https://").trim_start_matches("http://").trim_end_matches('/').to_owned();
     let now = OffsetDateTime::now_utc();
-    let amz = format!("{:04}{:02}{:02}T{:02}{:02}{:02}Z", now.year(), now.month() as u8, now.day(), now.hour(), now.minute(), now.second());
+    let amz = format!(
+        "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
+        now.year(),
+        now.month() as u8,
+        now.day(),
+        now.hour(),
+        now.minute(),
+        now.second()
+    );
     let empty = hex::encode(Sha256::digest(b""));
     let headers = [("host", host.as_str()), ("x-amz-content-sha256", empty.as_str()), ("x-amz-date", amz.as_str())];
-    let auth = sigv4(&SigV4 { method: "GET", path: "/", query: "", headers: &headers, payload: b"", region: "auto", service: "s3", access_key: &s("r2AccessKeyId"), secret: &s("r2SecretAccessKey"), amz_date: &amz });
-    let body = send("Cloudflare R2", client().get(format!("{base}/")).header("x-amz-content-sha256", &empty).header("x-amz-date", &amz).header("authorization", auth)).await?;
+    let auth = sigv4(&SigV4 {
+        method: "GET",
+        path: "/",
+        query: "",
+        headers: &headers,
+        payload: b"",
+        region: "auto",
+        service: "s3",
+        access_key: &s("r2AccessKeyId"),
+        secret: &s("r2SecretAccessKey"),
+        amz_date: &amz,
+    });
+    let body = send(
+        "Cloudflare R2",
+        client()
+            .get(format!("{base}/"))
+            .header("x-amz-content-sha256", &empty)
+            .header("x-amz-date", &amz)
+            .header("authorization", auth),
+    )
+    .await?;
     let mut out = Vec::new();
     let mut rest = body.as_str();
     while let Some(name) = between(rest, "<Name>", "</Name>") {
@@ -323,13 +480,37 @@ impl S3 {
     }
 
     fn signed(&self, method: reqwest::Method, path: &str, query: &str, body: &[u8]) -> reqwest::RequestBuilder {
-        let host = self.endpoint.trim_start_matches("https://").trim_start_matches("http://").trim_end_matches('/').to_owned();
+        let host =
+            self.endpoint.trim_start_matches("https://").trim_start_matches("http://").trim_end_matches('/').to_owned();
         let now = OffsetDateTime::now_utc();
-        let amz = format!("{:04}{:02}{:02}T{:02}{:02}{:02}Z", now.year(), now.month() as u8, now.day(), now.hour(), now.minute(), now.second());
+        let amz = format!(
+            "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
+            now.year(),
+            now.month() as u8,
+            now.day(),
+            now.hour(),
+            now.minute(),
+            now.second()
+        );
         let hash = hex::encode(Sha256::digest(body));
         let headers = [("host", host.as_str()), ("x-amz-content-sha256", hash.as_str()), ("x-amz-date", amz.as_str())];
-        let auth = sigv4(&SigV4 { method: method.as_str(), path, query, headers: &headers, payload: body, region: &self.region, service: "s3", access_key: &self.access_key, secret: &self.secret, amz_date: &amz });
-        let url = format!("{}{path}{}", self.endpoint.trim_end_matches('/'), if query.is_empty() { String::new() } else { format!("?{query}") });
+        let auth = sigv4(&SigV4 {
+            method: method.as_str(),
+            path,
+            query,
+            headers: &headers,
+            payload: body,
+            region: &self.region,
+            service: "s3",
+            access_key: &self.access_key,
+            secret: &self.secret,
+            amz_date: &amz,
+        });
+        let url = format!(
+            "{}{path}{}",
+            self.endpoint.trim_end_matches('/'),
+            if query.is_empty() { String::new() } else { format!("?{query}") }
+        );
         reqwest::Client::builder()
             .timeout(Duration::from_secs(600))
             .user_agent("tessery")
@@ -344,7 +525,11 @@ impl S3 {
 
     pub async fn ensure_bucket(&self, bucket: &str) -> Result<(), String> {
         let path = format!("/{}", s3_encode(bucket));
-        let r = self.signed(reqwest::Method::HEAD, &path, "", b"").send().await.map_err(|e| format!("could not reach the bucket: {e}"))?;
+        let r = self
+            .signed(reqwest::Method::HEAD, &path, "", b"")
+            .send()
+            .await
+            .map_err(|e| format!("could not reach the bucket: {e}"))?;
         if r.status().is_success() {
             return Ok(());
         }
@@ -356,10 +541,18 @@ impl S3 {
     }
 
     pub async fn get(&self, bucket: &str, key: &str) -> Result<Vec<u8>, String> {
-        let r = self.signed(reqwest::Method::GET, &object_path(bucket, key), "", b"").send().await.map_err(|e| format!("could not reach object storage: {e}"))?;
+        let r = self
+            .signed(reqwest::Method::GET, &object_path(bucket, key), "", b"")
+            .send()
+            .await
+            .map_err(|e| format!("could not reach object storage: {e}"))?;
         let status = r.status();
         let bytes = r.bytes().await.map_err(|e| e.to_string())?;
-        if status.is_success() { Ok(bytes.to_vec()) } else { Err(status_error("object storage", status, &String::from_utf8_lossy(&bytes))) }
+        if status.is_success() {
+            Ok(bytes.to_vec())
+        } else {
+            Err(status_error("object storage", status, &String::from_utf8_lossy(&bytes)))
+        }
     }
 
     pub async fn delete(&self, bucket: &str, key: &str) -> Result<(), String> {
@@ -368,14 +561,19 @@ impl S3 {
 
     pub async fn list(&self, bucket: &str, prefix: &str) -> Result<Vec<S3Object>, String> {
         let query = format!("list-type=2&prefix={}", s3_encode(prefix));
-        let body = send("object storage", self.signed(reqwest::Method::GET, &format!("/{}", s3_encode(bucket)), &query, b"")).await?;
+        let body =
+            send("object storage", self.signed(reqwest::Method::GET, &format!("/{}", s3_encode(bucket)), &query, b""))
+                .await?;
         let mut out = Vec::new();
         let mut rest = body.as_str();
         while let Some(start) = rest.find("<Contents>") {
             let end = rest[start..].find("</Contents>").map_or(rest.len(), |i| start + i + 11);
             let item = &rest[start..end];
             if let Some(key) = between(item, "<Key>", "</Key>") {
-                out.push(S3Object { key, size: between(item, "<Size>", "</Size>").and_then(|s| s.parse().ok()).unwrap_or(0) });
+                out.push(S3Object {
+                    key,
+                    size: between(item, "<Size>", "</Size>").and_then(|s| s.parse().ok()).unwrap_or(0),
+                });
             }
             rest = &rest[end..];
         }
@@ -384,7 +582,15 @@ impl S3 {
 }
 
 pub fn s3_encode(v: &str) -> String {
-    v.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-._~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+    v.bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect()
 }
 
 fn object_path(bucket: &str, key: &str) -> String {
@@ -403,33 +609,56 @@ fn token_of(f: &Map<String, Value>) -> String {
     f.get("token").and_then(Value::as_str).unwrap_or_default().to_owned()
 }
 
-pub async fn ensure_a_record(f: &Map<String, Value>, apis: &Endpoints, zone: &str, name: &str, ip: &str, tag: &str) -> Result<DnsChange, String> {
+pub async fn ensure_a_record(
+    f: &Map<String, Value>,
+    apis: &Endpoints,
+    zone: &str,
+    name: &str,
+    ip: &str,
+    tag: &str,
+) -> Result<DnsChange, String> {
     let http = client();
     let base = cloudflare_base(apis);
     let token = token_of(f);
-    let found = send("Cloudflare", http.get(format!("{base}/zones/{zone}/dns_records?type=A&name={name}")).bearer_auth(&token)).await?;
+    let found =
+        send("Cloudflare", http.get(format!("{base}/zones/{zone}/dns_records?type=A&name={name}")).bearer_auth(&token))
+            .await?;
     let found: Value = serde_json::from_str(&found).unwrap_or_default();
     let body = json!({ "type": "A", "name": name, "content": ip, "ttl": 120, "proxied": false, "comment": tag });
     match found["result"].as_array().and_then(|r| r.first()) {
         None => {
-            send("Cloudflare", http.post(format!("{base}/zones/{zone}/dns_records")).bearer_auth(&token).json(&body)).await?;
+            send("Cloudflare", http.post(format!("{base}/zones/{zone}/dns_records")).bearer_auth(&token).json(&body))
+                .await?;
             Ok(DnsChange::Created)
         }
-        Some(r) if r["comment"].as_str() != Some(tag) => Ok(DnsChange::Taken { content: r["content"].as_str().unwrap_or_default().to_owned() }),
+        Some(r) if r["comment"].as_str() != Some(tag) => {
+            Ok(DnsChange::Taken { content: r["content"].as_str().unwrap_or_default().to_owned() })
+        }
         Some(r) if r["content"].as_str() == Some(ip) => Ok(DnsChange::Unchanged),
         Some(r) => {
             let id = r["id"].as_str().unwrap_or_default();
-            send("Cloudflare", http.patch(format!("{base}/zones/{zone}/dns_records/{id}")).bearer_auth(&token).json(&body)).await?;
+            send(
+                "Cloudflare",
+                http.patch(format!("{base}/zones/{zone}/dns_records/{id}")).bearer_auth(&token).json(&body),
+            )
+            .await?;
             Ok(DnsChange::Updated)
         }
     }
 }
 
-pub async fn delete_tagged_records(f: &Map<String, Value>, apis: &Endpoints, zone: &str, tag: &str) -> Result<Vec<String>, String> {
+pub async fn delete_tagged_records(
+    f: &Map<String, Value>,
+    apis: &Endpoints,
+    zone: &str,
+    tag: &str,
+) -> Result<Vec<String>, String> {
     let http = client();
     let base = cloudflare_base(apis);
     let token = token_of(f);
-    let list = send("Cloudflare", http.get(format!("{base}/zones/{zone}/dns_records?per_page=100")).bearer_auth(&token)).await?;
+    let list =
+        send("Cloudflare", http.get(format!("{base}/zones/{zone}/dns_records?per_page=100")).bearer_auth(&token))
+            .await?;
     let list: Value = serde_json::from_str(&list).unwrap_or_default();
     let mut removed = Vec::new();
     for r in list["result"].as_array().into_iter().flatten().filter(|r| r["comment"].as_str() == Some(tag)) {
@@ -450,7 +679,9 @@ pub fn dns_names(plan: &Value) -> Vec<String> {
         out.push(format!("*.{domain}"));
         for e in plan["endpoints"].as_array().into_iter().flatten() {
             let Some(host) = e["url"].as_str().and_then(|u| u.strip_prefix("https://")) else { continue };
-            let covered = host.strip_suffix(domain).is_some_and(|rest| rest.ends_with('.') && !rest[..rest.len() - 1].contains('.'));
+            let covered = host
+                .strip_suffix(domain)
+                .is_some_and(|rest| rest.ends_with('.') && !rest[..rest.len() - 1].contains('.'));
             if !covered {
                 out.push(host.to_owned());
             }
@@ -495,7 +726,12 @@ pub async fn capabilities(provider: &str, f: &Map<String, Value>, apis: &Endpoin
         "digitalocean" => {
             let base = endpoint(apis, "digitalocean", "https://api.digitalocean.com/v2");
             let write = probe(http.post(format!("{base}/droplets")).bearer_auth(s("token")).json(&json!({}))).await;
-            vec![cap("servers", "Create and delete servers", write, "a token with write scope, or droplet create and delete in a custom scope")]
+            vec![cap(
+                "servers",
+                "Create and delete servers",
+                write,
+                "a token with write scope, or droplet create and delete in a custom scope",
+            )]
         }
         "cloudflare" => {
             let base = cloudflare_base(apis);
@@ -508,12 +744,24 @@ pub async fn capabilities(provider: &str, f: &Map<String, Value>, apis: &Endpoin
             };
             let per_zone = futures_util::future::join_all(zones.iter().take(25).map(|z| async {
                 futures_util::join!(
-                    zone_probe(format!("{base}/zones/{}/dns_records", z.id), json!({ "type": "A", "name": "tessery-permission-check", "content": "not-an-address" }), false),
+                    zone_probe(
+                        format!("{base}/zones/{}/dns_records", z.id),
+                        json!({ "type": "A", "name": "tessery-permission-check", "content": "not-an-address" }),
+                        false
+                    ),
                     zone_probe(format!("{base}/zones/{}/settings/ssl", z.id), json!({ "value": "not-a-mode" }), true),
                 )
             }))
             .await;
-            let any = |results: Vec<Option<bool>>| if results.contains(&Some(true)) { Some(true) } else if !results.is_empty() && results.iter().all(|r| *r == Some(false)) { Some(false) } else { None };
+            let any = |results: Vec<Option<bool>>| {
+                if results.contains(&Some(true)) {
+                    Some(true)
+                } else if !results.is_empty() && results.iter().all(|r| *r == Some(false)) {
+                    Some(false)
+                } else {
+                    None
+                }
+            };
             let dns = any(per_zone.iter().map(|(d, _)| *d).collect());
             let settings = any(per_zone.iter().map(|(_, z)| *z).collect());
             let has_r2_keys = !s("r2AccessKeyId").is_empty() && !s("r2SecretAccessKey").is_empty();
@@ -521,7 +769,16 @@ pub async fn capabilities(provider: &str, f: &Map<String, Value>, apis: &Endpoin
                 probe(http.post(format!("{base}/accounts/{account}/cfd_tunnel")).bearer_auth(&token).json(&json!({}))),
                 probe(http.post(format!("{base}/accounts/{account}/access/apps")).bearer_auth(&token).json(&json!({}))),
                 async {
-                    if has_r2_keys { Some(true) } else { probe(http.post(format!("{base}/accounts/{account}/r2/buckets")).bearer_auth(&token).json(&json!({ "name": "Not A Valid Name" }))).await }
+                    if has_r2_keys {
+                        Some(true)
+                    } else {
+                        probe(
+                            http.post(format!("{base}/accounts/{account}/r2/buckets"))
+                                .bearer_auth(&token)
+                                .json(&json!({ "name": "Not A Valid Name" })),
+                        )
+                        .await
+                    }
                 },
             );
             vec![
@@ -565,15 +822,23 @@ fn hmac(key: &[u8], msg: &[u8]) -> Vec<u8> {
 }
 
 pub fn sigv4(r: &SigV4) -> String {
-    let mut headers: Vec<(String, String)> = r.headers.iter().map(|(k, v)| (k.to_lowercase(), v.trim().to_owned())).collect();
+    let mut headers: Vec<(String, String)> =
+        r.headers.iter().map(|(k, v)| (k.to_lowercase(), v.trim().to_owned())).collect();
     headers.sort();
     let canonical_headers: String = headers.iter().map(|(k, v)| format!("{k}:{v}\n")).collect();
     let signed: Vec<&str> = headers.iter().map(|(k, _)| k.as_str()).collect();
     let signed = signed.join(";");
-    let canonical = format!("{}\n{}\n{}\n{canonical_headers}\n{signed}\n{}", r.method, r.path, r.query, hex::encode(Sha256::digest(r.payload)));
+    let canonical = format!(
+        "{}\n{}\n{}\n{canonical_headers}\n{signed}\n{}",
+        r.method,
+        r.path,
+        r.query,
+        hex::encode(Sha256::digest(r.payload))
+    );
     let date = &r.amz_date[..8];
     let scope = format!("{date}/{}/{}/aws4_request", r.region, r.service);
-    let to_sign = format!("AWS4-HMAC-SHA256\n{}\n{scope}\n{}", r.amz_date, hex::encode(Sha256::digest(canonical.as_bytes())));
+    let to_sign =
+        format!("AWS4-HMAC-SHA256\n{}\n{scope}\n{}", r.amz_date, hex::encode(Sha256::digest(canonical.as_bytes())));
     let k = hmac(format!("AWS4{}", r.secret).as_bytes(), date.as_bytes());
     let k = hmac(&k, r.region.as_bytes());
     let k = hmac(&k, r.service.as_bytes());
@@ -670,7 +935,10 @@ pub fn digitalocean_catalog(regions: &Value, sizes: &Value) -> Catalog {
         .into_iter()
         .flatten()
         .filter(|r| r["available"].as_bool().unwrap_or(true))
-        .map(|r| Region { id: r["slug"].as_str().unwrap_or_default().to_owned(), name: r["name"].as_str().unwrap_or_default().to_owned() })
+        .map(|r| Region {
+            id: r["slug"].as_str().unwrap_or_default().to_owned(),
+            name: r["name"].as_str().unwrap_or_default().to_owned(),
+        })
         .collect();
     let mut sizes: Vec<Size> = sizes["sizes"]
         .as_array()
@@ -679,7 +947,11 @@ pub fn digitalocean_catalog(regions: &Value, sizes: &Value) -> Catalog {
         .filter(|s| s["available"].as_bool().unwrap_or(true) && s["memory"].as_u64().unwrap_or(0) >= 1024)
         .map(|s| Size {
             id: s["slug"].as_str().unwrap_or_default().to_owned(),
-            name: s["description"].as_str().filter(|d| !d.is_empty()).unwrap_or_else(|| s["slug"].as_str().unwrap_or_default()).to_owned(),
+            name: s["description"]
+                .as_str()
+                .filter(|d| !d.is_empty())
+                .unwrap_or_else(|| s["slug"].as_str().unwrap_or_default())
+                .to_owned(),
             cpus: s["vcpus"].as_u64().unwrap_or(0) as u32,
             memory_gb: s["memory"].as_f64().unwrap_or(0.0) / 1024.0,
             disk_gb: s["disk"].as_u64().unwrap_or(0) as u32,
@@ -687,7 +959,12 @@ pub fn digitalocean_catalog(regions: &Value, sizes: &Value) -> Catalog {
             hourly: f64_of(&s["price_hourly"]),
             currency: "USD",
             region_prices: Vec::new(),
-            regions: s["regions"].as_array().into_iter().flatten().filter_map(|r| r.as_str().map(str::to_owned)).collect(),
+            regions: s["regions"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|r| r.as_str().map(str::to_owned))
+                .collect(),
         })
         .collect();
     sizes.sort_by(|a, b| a.monthly.total_cmp(&b.monthly));
@@ -699,7 +976,10 @@ pub fn hetzner_catalog(locations: &Value, types: &Value) -> Catalog {
         .as_array()
         .into_iter()
         .flatten()
-        .map(|l| Region { id: l["name"].as_str().unwrap_or_default().to_owned(), name: l["city"].as_str().unwrap_or_default().to_owned() })
+        .map(|l| Region {
+            id: l["name"].as_str().unwrap_or_default().to_owned(),
+            name: l["city"].as_str().unwrap_or_default().to_owned(),
+        })
         .collect();
     let mut sizes: Vec<Size> = types["server_types"]
         .as_array()
@@ -712,7 +992,11 @@ pub fn hetzner_catalog(locations: &Value, types: &Value) -> Catalog {
             let hourly = prices.iter().map(|p| f64_of(&p["price_hourly"]["gross"])).fold(f64::INFINITY, f64::min);
             Some(Size {
                 id: t["name"].as_str()?.to_owned(),
-                name: format!("{} ({})", t["name"].as_str()?.to_uppercase(), t["architecture"].as_str().unwrap_or("x86")),
+                name: format!(
+                    "{} ({})",
+                    t["name"].as_str()?.to_uppercase(),
+                    t["architecture"].as_str().unwrap_or("x86")
+                ),
                 cpus: t["cores"].as_u64().unwrap_or(0) as u32,
                 memory_gb: f64_of(&t["memory"]),
                 disk_gb: t["disk"].as_u64().unwrap_or(0) as u32,
@@ -722,7 +1006,13 @@ pub fn hetzner_catalog(locations: &Value, types: &Value) -> Catalog {
                 regions: prices.iter().filter_map(|p| p["location"].as_str().map(str::to_owned)).collect(),
                 region_prices: prices
                     .iter()
-                    .filter_map(|p| Some(RegionPrice { region: p["location"].as_str()?.to_owned(), monthly: f64_of(&p["price_monthly"]["gross"]), hourly: f64_of(&p["price_hourly"]["gross"]) }))
+                    .filter_map(|p| {
+                        Some(RegionPrice {
+                            region: p["location"].as_str()?.to_owned(),
+                            monthly: f64_of(&p["price_monthly"]["gross"]),
+                            hourly: f64_of(&p["price_hourly"]["gross"]),
+                        })
+                    })
                     .collect(),
             })
         })
@@ -736,21 +1026,29 @@ pub async fn catalog(provider: &str, f: &Map<String, Value>, apis: &Endpoints) -
     match provider {
         "digitalocean" => {
             let base = endpoint(apis, "digitalocean", "https://api.digitalocean.com/v2");
-            let regions = send("DigitalOcean", http.get(format!("{base}/regions?per_page=200")).bearer_auth(token(f))).await?;
-            let sizes = send("DigitalOcean", http.get(format!("{base}/sizes?per_page=200")).bearer_auth(token(f))).await?;
+            let regions =
+                send("DigitalOcean", http.get(format!("{base}/regions?per_page=200")).bearer_auth(token(f))).await?;
+            let sizes =
+                send("DigitalOcean", http.get(format!("{base}/sizes?per_page=200")).bearer_auth(token(f))).await?;
             Ok(digitalocean_catalog(&json(&regions), &json(&sizes)))
         }
         "hetzner" => {
             let base = endpoint(apis, "hetzner", "https://api.hetzner.cloud/v1");
             let locations = send("Hetzner", http.get(format!("{base}/locations")).bearer_auth(token(f))).await?;
-            let types = send("Hetzner", http.get(format!("{base}/server_types?per_page=50")).bearer_auth(token(f))).await?;
+            let types =
+                send("Hetzner", http.get(format!("{base}/server_types?per_page=50")).bearer_auth(token(f))).await?;
             Ok(hetzner_catalog(&json(&locations), &json(&types)))
         }
         other => Err(format!("Tessery cannot create servers on {other} yet")),
     }
 }
 
-pub async fn create_machine(provider: &str, f: &Map<String, Value>, apis: &Endpoints, m: &NewMachine<'_>) -> Result<String, String> {
+pub async fn create_machine(
+    provider: &str,
+    f: &Map<String, Value>,
+    apis: &Endpoints,
+    m: &NewMachine<'_>,
+) -> Result<String, String> {
     let http = client();
     let user_data = cloud_init(m.public_key);
     let name = machine_name(m.name);
@@ -758,23 +1056,38 @@ pub async fn create_machine(provider: &str, f: &Map<String, Value>, apis: &Endpo
         "digitalocean" => {
             let base = endpoint(apis, "digitalocean", "https://api.digitalocean.com/v2");
             let body = json!({ "name": name, "region": m.region, "size": m.size, "image": "ubuntu-24-04-x64", "user_data": user_data });
-            let r = send("DigitalOcean", http.post(format!("{base}/droplets")).bearer_auth(token(f)).json(&body)).await?;
-            json(&r).pointer("/droplet/id").map(|id| id.to_string()).ok_or_else(|| "DigitalOcean did not return the new Droplet".into())
+            let r =
+                send("DigitalOcean", http.post(format!("{base}/droplets")).bearer_auth(token(f)).json(&body)).await?;
+            json(&r)
+                .pointer("/droplet/id")
+                .map(|id| id.to_string())
+                .ok_or_else(|| "DigitalOcean did not return the new Droplet".into())
         }
         "hetzner" => {
             let base = endpoint(apis, "hetzner", "https://api.hetzner.cloud/v1");
             let body = json!({ "name": name, "location": m.region, "server_type": m.size, "image": "ubuntu-24.04", "user_data": user_data, "labels": { "tessery": "true" } });
             let r = send("Hetzner", http.post(format!("{base}/servers")).bearer_auth(token(f)).json(&body)).await?;
-            json(&r).pointer("/server/id").map(|id| id.to_string()).ok_or_else(|| "Hetzner did not return the new server".into())
+            json(&r)
+                .pointer("/server/id")
+                .map(|id| id.to_string())
+                .ok_or_else(|| "Hetzner did not return the new server".into())
         }
         other => Err(format!("Tessery cannot create servers on {other} yet")),
     }
 }
 
-pub async fn machine_state(provider: &str, f: &Map<String, Value>, apis: &Endpoints, id: &str) -> Result<MachineState, String> {
+pub async fn machine_state(
+    provider: &str,
+    f: &Map<String, Value>,
+    apis: &Endpoints,
+    id: &str,
+) -> Result<MachineState, String> {
     let http = client();
     let (name, url) = match provider {
-        "digitalocean" => ("DigitalOcean", format!("{}/droplets/{id}", endpoint(apis, "digitalocean", "https://api.digitalocean.com/v2"))),
+        "digitalocean" => (
+            "DigitalOcean",
+            format!("{}/droplets/{id}", endpoint(apis, "digitalocean", "https://api.digitalocean.com/v2")),
+        ),
         "hetzner" => ("Hetzner", format!("{}/servers/{id}", endpoint(apis, "hetzner", "https://api.hetzner.cloud/v1"))),
         other => return Err(format!("Tessery cannot manage servers on {other} yet")),
     };
@@ -791,7 +1104,11 @@ pub async fn machine_state(provider: &str, f: &Map<String, Value>, apis: &Endpoi
     let (running, ip) = match provider {
         "digitalocean" => (
             v.pointer("/droplet/status").and_then(Value::as_str) == Some("active"),
-            v.pointer("/droplet/networks/v4").and_then(Value::as_array).and_then(|n| n.iter().find(|x| x["type"] == "public")).and_then(|x| x["ip_address"].as_str()).map(str::to_owned),
+            v.pointer("/droplet/networks/v4")
+                .and_then(Value::as_array)
+                .and_then(|n| n.iter().find(|x| x["type"] == "public"))
+                .and_then(|x| x["ip_address"].as_str())
+                .map(str::to_owned),
         ),
         _ => (
             v.pointer("/server/status").and_then(Value::as_str) == Some("running"),
@@ -807,7 +1124,10 @@ pub async fn machine_state(provider: &str, f: &Map<String, Value>, apis: &Endpoi
 pub async fn delete_machine(provider: &str, f: &Map<String, Value>, apis: &Endpoints, id: &str) -> Result<(), String> {
     let http = client();
     let (name, url) = match provider {
-        "digitalocean" => ("DigitalOcean", format!("{}/droplets/{id}", endpoint(apis, "digitalocean", "https://api.digitalocean.com/v2"))),
+        "digitalocean" => (
+            "DigitalOcean",
+            format!("{}/droplets/{id}", endpoint(apis, "digitalocean", "https://api.digitalocean.com/v2")),
+        ),
         "hetzner" => ("Hetzner", format!("{}/servers/{id}", endpoint(apis, "hetzner", "https://api.hetzner.cloud/v1"))),
         other => return Err(format!("Tessery cannot manage servers on {other} yet")),
     };
@@ -837,20 +1157,30 @@ mod tests {
             secret: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
             amz_date: "20150830T123600Z",
         });
-        assert_eq!(auth, "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/service/aws4_request, SignedHeaders=host;x-amz-date, Signature=5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31");
+        assert_eq!(
+            auth,
+            "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/service/aws4_request, SignedHeaders=host;x-amz-date, Signature=5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31"
+        );
     }
 
     #[test]
     fn hmac_matches_rfc_4231() {
-        assert_eq!(hex::encode(hmac(&[0x0b; 20], b"Hi There")), "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7");
+        assert_eq!(
+            hex::encode(hmac(&[0x0b; 20], b"Hi There")),
+            "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+        );
     }
 
     #[test]
     fn requires_fields_and_hides_secrets_in_summaries() {
         let aws = provider("aws").unwrap();
-        let input: Map<String, Value> = serde_json::from_value(json!({ "accessKeyId": "AKIAIOSFODNN7EXAMPLE", "secretAccessKey": "" })).unwrap();
+        let input: Map<String, Value> =
+            serde_json::from_value(json!({ "accessKeyId": "AKIAIOSFODNN7EXAMPLE", "secretAccessKey": "" })).unwrap();
         assert_eq!(clean(aws, &input).unwrap_err(), "Secret access key is required");
-        let input: Map<String, Value> = serde_json::from_value(json!({ "accessKeyId": "AKIAIOSFODNN7EXAMPLE", "secretAccessKey": "s3cr3t-value-here" })).unwrap();
+        let input: Map<String, Value> = serde_json::from_value(
+            json!({ "accessKeyId": "AKIAIOSFODNN7EXAMPLE", "secretAccessKey": "s3cr3t-value-here" }),
+        )
+        .unwrap();
         let f = clean(aws, &input).unwrap();
         let shown = summary("aws", &f).to_string();
         assert!(shown.contains("AKIA…MPLE") && !shown.contains("s3cr3t"));
@@ -866,7 +1196,11 @@ mod tests {
         ] });
         let c = digitalocean_catalog(&regions, &sizes);
         assert_eq!(c.regions.len(), 1);
-        assert_eq!(c.sizes.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["s-1vcpu-1gb", "s-2vcpu-4gb"], "too small for Docker builds is left out");
+        assert_eq!(
+            c.sizes.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(),
+            ["s-1vcpu-1gb", "s-2vcpu-4gb"],
+            "too small for Docker builds is left out"
+        );
         let types = json!({ "server_types": [
             { "name": "cx23", "cores": 2, "memory": 4.0, "disk": 40, "architecture": "x86", "deprecation": null, "prices": [{ "location": "fsn1", "price_monthly": { "gross": "4.1400" }, "price_hourly": { "gross": "0.0066" } }] },
             { "name": "cx22", "cores": 2, "memory": 4.0, "disk": 40, "architecture": "x86", "deprecation": { "announced": "2025" }, "prices": [] }
@@ -892,7 +1226,8 @@ mod tests {
         assert_eq!(judge(reqwest::StatusCode::UNPROCESSABLE_ENTITY), Some(true));
         assert_eq!(judge(reqwest::StatusCode::BAD_REQUEST), Some(true));
         assert_eq!(judge(reqwest::StatusCode::BAD_GATEWAY), None);
-        let check = json!({ "capabilities": [{ "key": "servers", "allowed": false }, { "key": "dns", "allowed": null }] });
+        let check =
+            json!({ "capabilities": [{ "key": "servers", "allowed": false }, { "key": "dns", "allowed": null }] });
         assert!(!allows(Some(&check), "servers"));
         assert!(allows(Some(&check), "dns"), "unknown is not a refusal");
         assert!(allows(None, "servers"), "accounts checked before capabilities existed keep working");
@@ -900,7 +1235,10 @@ mod tests {
 
     #[test]
     fn picks_the_closest_cloudflare_zone() {
-        let zones = vec![Zone { id: "a".into(), name: "fermohost.dev".into() }, Zone { id: "b".into(), name: "lab.fermohost.dev".into() }];
+        let zones = vec![
+            Zone { id: "a".into(), name: "fermohost.dev".into() },
+            Zone { id: "b".into(), name: "lab.fermohost.dev".into() },
+        ];
         assert_eq!(zone_for(&zones, "web.lab.fermohost.dev").unwrap().id, "b");
         assert_eq!(zone_for(&zones, "fermohost.dev").unwrap().id, "a");
         assert!(zone_for(&zones, "notfermohost.dev").is_none());
@@ -908,12 +1246,18 @@ mod tests {
 
     #[test]
     fn cloud_init_sets_up_docker_for_the_deploy_user() {
-        let c = cloud_init("ssh-ed25519 AAAA tessery vps
-");
-        assert!(c.starts_with("#cloud-config
-"));
-        assert!(c.contains("      - ssh-ed25519 AAAA tessery vps
-"));
+        let c = cloud_init(
+            "ssh-ed25519 AAAA tessery vps
+",
+        );
+        assert!(c.starts_with(
+            "#cloud-config
+"
+        ));
+        assert!(c.contains(
+            "      - ssh-ed25519 AAAA tessery vps
+"
+        ));
         assert!(c.contains("usermod -aG docker deploy"));
         assert_eq!(machine_name("My VPS #1"), "my-vps--1");
     }

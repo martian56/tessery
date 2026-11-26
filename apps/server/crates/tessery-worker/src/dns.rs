@@ -41,7 +41,14 @@ fn public_host(url: &str) -> Option<String> {
 
 /// Records must lead somewhere people can reach, so loopback, private and link-local addresses are never published.
 fn reachable(ip: &str) -> bool {
-    ip.parse::<std::net::Ipv4Addr>().is_ok_and(|a| !(a.is_loopback() || a.is_private() || a.is_link_local() || a.is_unspecified() || a.is_broadcast() || (a.octets()[0] == 100 && (a.octets()[1] & 0xc0) == 64)))
+    ip.parse::<std::net::Ipv4Addr>().is_ok_and(|a| {
+        !(a.is_loopback()
+            || a.is_private()
+            || a.is_link_local()
+            || a.is_unspecified()
+            || a.is_broadcast()
+            || (a.octets()[0] == 100 && (a.octets()[1] & 0xc0) == 64))
+    })
 }
 
 async fn ipv4(host: &str) -> Option<String> {
@@ -83,7 +90,9 @@ pub async fn publish(ctx: &Ctx, project: Uuid, env: &str, plan: &Value, remote: 
     let tag = tessery_cloud::dns_tag(&project.to_string(), env);
     for name in names {
         let bare = name.trim_start_matches("*.");
-        let Some((fields, zone)) = accounts.iter().find_map(|(f, zones)| tessery_cloud::zone_for(zones, bare).map(|z| (f, z))) else {
+        let Some((fields, zone)) =
+            accounts.iter().find_map(|(f, zones)| tessery_cloud::zone_for(zones, bare).map(|z| (f, z)))
+        else {
             log.line(format!("DNS: {name} is not in a connected Cloudflare zone; add its record by hand"));
             continue;
         };
@@ -127,7 +136,8 @@ mod tests {
     #[test]
     fn only_public_addresses_get_records() {
         assert!(reachable("167.233.46.141"));
-        for ip in ["127.0.0.1", "10.0.0.5", "192.168.1.9", "172.17.0.1", "169.254.1.1", "100.64.0.1", "0.0.0.0", "nope"] {
+        for ip in ["127.0.0.1", "10.0.0.5", "192.168.1.9", "172.17.0.1", "169.254.1.1", "100.64.0.1", "0.0.0.0", "nope"]
+        {
             assert!(!reachable(ip), "{ip}");
         }
     }

@@ -75,9 +75,26 @@ impl Updater {
         let env_dir = format!("TESSERY_COMPOSE_DIR={dir}");
         let env_target = format!("TESSERY_TARGET={target}");
         self.docker(&[
-            "run", "--detach", "--name", CONTAINER, "--label", "tessery.updater=true",
-            "--volume", "/var/run/docker.sock:/var/run/docker.sock", "--volume", &mount, "--workdir", dir,
-            "--env", &env_dir, "--env", &env_target, &self.image, "sh", "-c", SCRIPT,
+            "run",
+            "--detach",
+            "--name",
+            CONTAINER,
+            "--label",
+            "tessery.updater=true",
+            "--volume",
+            "/var/run/docker.sock:/var/run/docker.sock",
+            "--volume",
+            &mount,
+            "--workdir",
+            dir,
+            "--env",
+            &env_dir,
+            "--env",
+            &env_target,
+            &self.image,
+            "sh",
+            "-c",
+            SCRIPT,
         ])
         .await?;
         tracing::info!(target, "started the updater");
@@ -85,7 +102,8 @@ impl Updater {
     }
 
     async fn docker(&self, args: &[&str]) -> Result<String, UpdateError> {
-        let out = Command::new(&self.docker).args(args).output().await.map_err(|e| UpdateError::Failed(e.to_string()))?;
+        let out =
+            Command::new(&self.docker).args(args).output().await.map_err(|e| UpdateError::Failed(e.to_string()))?;
         if out.status.success() {
             Ok(String::from_utf8_lossy(&out.stdout).into_owned())
         } else {

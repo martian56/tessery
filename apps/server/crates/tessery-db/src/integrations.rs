@@ -49,7 +49,10 @@ pub async fn get(ex: impl PgExecutor<'_>, org: Uuid, id: Uuid) -> DbResult<Integ
 }
 
 pub async fn secret(ex: impl PgExecutor<'_>, org: Uuid, id: Uuid) -> DbResult<(String, Vec<u8>)> {
-    let r = sqlx::query!("SELECT provider, secret FROM integrations WHERE org_id = $1 AND id = $2", org, id).fetch_optional(ex).await?.or_not_found()?;
+    let r = sqlx::query!("SELECT provider, secret FROM integrations WHERE org_id = $1 AND id = $2", org, id)
+        .fetch_optional(ex)
+        .await?
+        .or_not_found()?;
     Ok((r.provider, r.secret))
 }
 
@@ -71,7 +74,13 @@ pub async fn create(ex: impl PgExecutor<'_>, n: NewIntegration<'_>) -> DbResult<
     .await?)
 }
 
-pub async fn update(ex: impl PgExecutor<'_>, org: Uuid, id: Uuid, name: Option<&str>, secret: Option<(&[u8], &Value)>) -> DbResult<Integration> {
+pub async fn update(
+    ex: impl PgExecutor<'_>,
+    org: Uuid,
+    id: Uuid,
+    name: Option<&str>,
+    secret: Option<(&[u8], &Value)>,
+) -> DbResult<Integration> {
     let (cipher, summary) = secret.map_or((None, None), |(c, s)| (Some(c), Some(s)));
     sqlx::query_as!(
         Integration,
@@ -90,7 +99,9 @@ pub async fn update(ex: impl PgExecutor<'_>, org: Uuid, id: Uuid, name: Option<&
 }
 
 pub async fn record_check(ex: impl PgExecutor<'_>, id: Uuid, check: &Value) -> DbResult<()> {
-    sqlx::query!("UPDATE integrations SET last_check = $2, checked_at = now() WHERE id = $1", id, check).execute(ex).await?;
+    sqlx::query!("UPDATE integrations SET last_check = $2, checked_at = now() WHERE id = $1", id, check)
+        .execute(ex)
+        .await?;
     Ok(())
 }
 

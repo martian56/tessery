@@ -124,16 +124,7 @@ pub struct SaveDoc<'a> {
 }
 
 pub async fn save_doc(tx: &mut sqlx::PgConnection, s: SaveDoc<'_>) -> DbResult<Project> {
-    let SaveDoc {
-        id,
-        expected_version,
-        doc,
-        name,
-        description,
-        icon,
-        message,
-        user,
-    } = s;
+    let SaveDoc { id, expected_version, doc, name, description, icon, message, user } = s;
     let row = sqlx::query_as!(
         Project,
         "UPDATE projects SET doc = $3, name = $4, description = $5, icon = $6, version = version + 1, updated_at = now(), updated_by = $7
@@ -150,48 +141,32 @@ pub async fn save_doc(tx: &mut sqlx::PgConnection, s: SaveDoc<'_>) -> DbResult<P
     .fetch_optional(&mut *tx)
     .await?;
     let Some(row) = row else {
-        let exists = sqlx::query_scalar!(
-            r#"SELECT EXISTS (SELECT 1 FROM projects WHERE id = $1) AS "e!""#,
-            id
-        )
-        .fetch_one(&mut *tx)
-        .await?;
-        return Err(if exists {
-            DbError::StaleVersion
-        } else {
-            DbError::NotFound
-        });
+        let exists = sqlx::query_scalar!(r#"SELECT EXISTS (SELECT 1 FROM projects WHERE id = $1) AS "e!""#, id)
+            .fetch_one(&mut *tx)
+            .await?;
+        return Err(if exists { DbError::StaleVersion } else { DbError::NotFound });
     };
-    sqlx::query!("INSERT INTO project_versions (project_id, version, doc, message, created_by) VALUES ($1, $2, $3, $4, $5)", id, row.version, doc, message, user)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query!(
+        "INSERT INTO project_versions (project_id, version, doc, message, created_by) VALUES ($1, $2, $3, $4, $5)",
+        id,
+        row.version,
+        doc,
+        message,
+        user
+    )
+    .execute(&mut *tx)
+    .await?;
     Ok(row)
 }
 
 pub async fn set_team(ex: impl PgExecutor<'_>, id: Uuid, team_id: Option<Uuid>) -> DbResult<()> {
-    let r = sqlx::query!(
-        "UPDATE projects SET team_id = $2 WHERE id = $1",
-        id,
-        team_id
-    )
-    .execute(ex)
-    .await?;
-    if r.rows_affected() == 0 {
-        Err(DbError::NotFound)
-    } else {
-        Ok(())
-    }
+    let r = sqlx::query!("UPDATE projects SET team_id = $2 WHERE id = $1", id, team_id).execute(ex).await?;
+    if r.rows_affected() == 0 { Err(DbError::NotFound) } else { Ok(()) }
 }
 
 pub async fn delete(ex: impl PgExecutor<'_>, id: Uuid) -> DbResult<()> {
-    let r = sqlx::query!("DELETE FROM projects WHERE id = $1", id)
-        .execute(ex)
-        .await?;
-    if r.rows_affected() == 0 {
-        Err(DbError::NotFound)
-    } else {
-        Ok(())
-    }
+    let r = sqlx::query!("DELETE FROM projects WHERE id = $1", id).execute(ex).await?;
+    if r.rows_affected() == 0 { Err(DbError::NotFound) } else { Ok(()) }
 }
 
 pub async fn list_versions(ex: impl PgExecutor<'_>, id: Uuid) -> DbResult<Vec<VersionInfo>> {
@@ -207,12 +182,8 @@ pub async fn list_versions(ex: impl PgExecutor<'_>, id: Uuid) -> DbResult<Vec<Ve
 }
 
 pub async fn get_version(ex: impl PgExecutor<'_>, id: Uuid, version: i32) -> DbResult<Value> {
-    sqlx::query_scalar!(
-        "SELECT doc FROM project_versions WHERE project_id = $1 AND version = $2",
-        id,
-        version
-    )
-    .fetch_optional(ex)
-    .await?
-    .or_not_found()
+    sqlx::query_scalar!("SELECT doc FROM project_versions WHERE project_id = $1 AND version = $2", id, version)
+        .fetch_optional(ex)
+        .await?
+        .or_not_found()
 }

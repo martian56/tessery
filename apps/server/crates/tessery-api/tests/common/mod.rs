@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
-use tessery_api::config::Config;
 use reqwest::{Client, Method, Response, StatusCode};
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 use std::net::SocketAddr;
 use std::time::Duration;
+use tessery_api::config::Config;
 use uuid::Uuid;
 
 fn env(key: &str, default: &str) -> String {
@@ -22,41 +22,24 @@ pub async fn spawn() -> TestApp {
 }
 
 pub async fn spawn_with(customize: impl FnOnce(&mut Config)) -> TestApp {
-    let admin_url = env(
-        "TESSERY_TEST_DATABASE_URL",
-        "postgres://tessery:tessery@127.0.0.1:15432/tessery",
-    );
+    let admin_url = env("TESSERY_TEST_DATABASE_URL", "postgres://tessery:tessery@127.0.0.1:15432/tessery");
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
-    let db_name = format!(
-        "tessery_test_{now}_{}",
-        &Uuid::new_v4().simple().to_string()[..12]
-    );
-    let mut admin = PgConnection::connect(&admin_url)
-        .await
-        .expect("connect to test Postgres; is `docker compose up -d` running?");
-    let stale: Vec<String> =
-        sqlx::query_scalar("SELECT datname FROM pg_database WHERE datname LIKE 'tessery_test_%'")
-            .fetch_all(&mut admin)
-            .await
-            .unwrap();
-    for name in stale {
-        let created = name
-            .split('_')
-            .nth(2)
-            .and_then(|t| t.parse::<i64>().ok())
-            .unwrap_or(0);
-        if now - created > 3600 {
-            let _ = sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-                "DROP DATABASE IF EXISTS {name} WITH (FORCE)"
-            )))
-            .execute(&mut admin)
-            .await;
-        }
-    }
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE DATABASE {db_name}")))
-        .execute(&mut admin)
+    let db_name = format!("tessery_test_{now}_{}", &Uuid::new_v4().simple().to_string()[..12]);
+    let mut admin =
+        PgConnection::connect(&admin_url).await.expect("connect to test Postgres; is `docker compose up -d` running?");
+    let stale: Vec<String> = sqlx::query_scalar("SELECT datname FROM pg_database WHERE datname LIKE 'tessery_test_%'")
+        .fetch_all(&mut admin)
         .await
         .unwrap();
+    for name in stale {
+        let created = name.split('_').nth(2).and_then(|t| t.parse::<i64>().ok()).unwrap_or(0);
+        if now - created > 3600 {
+            let _ = sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)")))
+                .execute(&mut admin)
+                .await;
+        }
+    }
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE DATABASE {db_name}"))).execute(&mut admin).await.unwrap();
     let base_url = admin_url.rsplit_once('/').unwrap().0;
 
     let mut config = Config {
@@ -76,7 +59,12 @@ pub async fn spawn_with(customize: impl FnOnce(&mut Config)) -> TestApp {
         releases_url: "http://127.0.0.1:9/releases/latest".into(),
         updater: tessery_update::Updater { compose_dir: None, image: "docker:28-cli".into(), docker: "docker".into() },
         object_store: std::env::var("TESSERY_TEST_S3_ENDPOINT").ok().map(|endpoint| tessery_api::config::ObjectStore {
-            s3: tessery_cloud::S3 { endpoint, region: "us-east-1".into(), access_key: "tessery".into(), secret: "tessery-dev-secret".into() },
+            s3: tessery_cloud::S3 {
+                endpoint,
+                region: "us-east-1".into(),
+                access_key: "tessery".into(),
+                secret: "tessery-dev-secret".into(),
+            },
             bucket: format!("test-{}", Uuid::new_v4().simple()),
         }),
         data_dir: std::env::temp_dir().join("tessery-tests").join(&db_name),
@@ -85,7 +73,8 @@ pub async fn spawn_with(customize: impl FnOnce(&mut Config)) -> TestApp {
         provider_apis: Default::default(),
         engine: tessery_engine::EngineConfig {
             node: "node".into(),
-            script: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../packages/core/dist/tessery-engine.mjs"),
+            script: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../../packages/core/dist/tessery-engine.mjs"),
             processes: 1,
             timeout: Duration::from_secs(30),
         },
@@ -95,17 +84,11 @@ pub async fn spawn_with(customize: impl FnOnce(&mut Config)) -> TestApp {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
-        axum::serve(
-            listener,
-            tessery_api::app(state).into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .unwrap();
+        axum::serve(listener, tessery_api::app(state).into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap();
     });
-    TestApp {
-        base: format!("http://{addr}"),
-        db_name,
-    }
+    TestApp { base: format!("http://{addr}"), db_name }
 }
 
 pub struct Session {
@@ -169,36 +152,15 @@ impl Session {
         r.json().await.unwrap()
     }
     pub async fn login(&self, email: &str, password: &str) -> StatusCode {
-        self.post(
-            "/api/auth/login",
-            json!({ "email": email, "password": password }),
-        )
-        .await
-        .status()
+        self.post("/api/auth/login", json!({ "email": email, "password": password })).await.status()
     }
 }
 
-pub async fn add_member(
-    app: &TestApp,
-    admin: &Session,
-    org: Uuid,
-    email: &str,
-    role: &str,
-) -> (Session, Uuid) {
+pub async fn add_member(app: &TestApp, admin: &Session, org: Uuid, email: &str, role: &str) -> (Session, Uuid) {
     let r = admin.post(&format!("/api/orgs/{org}/members"), json!({ "email": email, "name": email.split('@').next().unwrap(), "password": "member-password-1", "role": role })).await;
-    assert_eq!(
-        r.status(),
-        StatusCode::CREATED,
-        "adding {email}: {}",
-        r.text().await.unwrap_or_default()
-    );
+    assert_eq!(r.status(), StatusCode::CREATED, "adding {email}: {}", r.text().await.unwrap_or_default());
     let user: Value = admin.json(&format!("/api/orgs/{org}/members")).await;
-    let id = user
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|m| m["email"] == email)
-        .unwrap()["userId"]
+    let id = user.as_array().unwrap().iter().find(|m| m["email"] == email).unwrap()["userId"]
         .as_str()
         .unwrap()
         .parse()
@@ -214,16 +176,7 @@ pub fn doc(name: &str) -> Value {
 
 pub async fn role_id(s: &Session, org: Uuid, key: &str) -> Uuid {
     let roles: Value = s.json(&format!("/api/orgs/{org}/roles")).await;
-    roles
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|r| r["key"] == key)
-        .unwrap()["id"]
-        .as_str()
-        .unwrap()
-        .parse()
-        .unwrap()
+    roles.as_array().unwrap().iter().find(|r| r["key"] == key).unwrap()["id"].as_str().unwrap().parse().unwrap()
 }
 
 /// Pretends a worker is running by writing its heartbeat.

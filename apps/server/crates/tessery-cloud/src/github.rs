@@ -72,7 +72,9 @@ async fn check(r: reqwest::Response, what: &str) -> Result<Value, String> {
 impl App {
     pub fn new(id: u64, pem: &str) -> Result<Self, String> {
         let der = pem_der(pem)?;
-        let key = RsaKeyPair::from_der(&der).or_else(|_| RsaKeyPair::from_pkcs8(&der)).map_err(|_| "the GitHub App private key could not be read".to_owned())?;
+        let key = RsaKeyPair::from_der(&der)
+            .or_else(|_| RsaKeyPair::from_pkcs8(&der))
+            .map_err(|_| "the GitHub App private key could not be read".to_owned())?;
         Ok(Self { id, key: std::sync::Arc::new(key) })
     }
 
@@ -80,32 +82,60 @@ impl App {
     pub fn jwt(&self) -> String {
         let now = time::OffsetDateTime::now_utc().unix_timestamp();
         let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"RS256","typ":"JWT"}"#);
-        let claims = URL_SAFE_NO_PAD.encode(json!({ "iat": now - 60, "exp": now + 540, "iss": self.id.to_string() }).to_string());
+        let claims = URL_SAFE_NO_PAD
+            .encode(json!({ "iat": now - 60, "exp": now + 540, "iss": self.id.to_string() }).to_string());
         let input = format!("{header}.{claims}");
         let mut sig = vec![0u8; self.key.public().modulus_len()];
-        self.key.sign(&RSA_PKCS1_SHA256, &SystemRandom::new(), input.as_bytes(), &mut sig).expect("RSA signing does not fail with a valid key");
+        self.key
+            .sign(&RSA_PKCS1_SHA256, &SystemRandom::new(), input.as_bytes(), &mut sig)
+            .expect("RSA signing does not fail with a valid key");
         format!("{input}.{}", URL_SAFE_NO_PAD.encode(sig))
     }
 
     pub async fn installation_token(&self, installation: i64) -> Result<String, String> {
-        let r = client().post(format!("{API}/app/installations/{installation}/access_tokens")).bearer_auth(self.jwt()).header("accept", "application/vnd.github+json").send().await.map_err(|e| format!("could not reach GitHub: {}", e.without_url()))?;
+        let r = client()
+            .post(format!("{API}/app/installations/{installation}/access_tokens"))
+            .bearer_auth(self.jwt())
+            .header("accept", "application/vnd.github+json")
+            .send()
+            .await
+            .map_err(|e| format!("could not reach GitHub: {}", e.without_url()))?;
         let v = check(r, "issue an installation token").await?;
         v["token"].as_str().map(str::to_owned).ok_or_else(|| "GitHub returned no token".into())
     }
 
     /// Every repository the app was installed on, across all installations.
     pub async fn repos(&self) -> Result<Vec<Repo>, String> {
-        let r = client().get(format!("{API}/app/installations?per_page=100")).bearer_auth(self.jwt()).header("accept", "application/vnd.github+json").send().await.map_err(|e| format!("could not reach GitHub: {}", e.without_url()))?;
+        let r = client()
+            .get(format!("{API}/app/installations?per_page=100"))
+            .bearer_auth(self.jwt())
+            .header("accept", "application/vnd.github+json")
+            .send()
+            .await
+            .map_err(|e| format!("could not reach GitHub: {}", e.without_url()))?;
         let installs = check(r, "list installations").await?;
         let mut out = Vec::new();
         for inst in installs.as_array().into_iter().flatten() {
             let Some(id) = inst["id"].as_i64() else { continue };
             let token = self.installation_token(id).await?;
             for page in 1..=10 {
-                let r = client().get(format!("{API}/installation/repositories?per_page=100&page={page}")).bearer_auth(&token).header("accept", "application/vnd.github+json").send().await.map_err(|e| format!("could not reach GitHub: {}", e.without_url()))?;
+                let r = client()
+                    .get(format!("{API}/installation/repositories?per_page=100&page={page}"))
+                    .bearer_auth(&token)
+                    .header("accept", "application/vnd.github+json")
+                    .send()
+                    .await
+                    .map_err(|e| format!("could not reach GitHub: {}", e.without_url()))?;
                 let v = check(r, "list repositories").await?;
                 let repos = v["repositories"].as_array().cloned().unwrap_or_default();
-                out.extend(repos.iter().filter_map(|r| Some(Repo { full_name: r["full_name"].as_str()?.to_owned(), private: r["private"].as_bool().unwrap_or(true), default_branch: r["default_branch"].as_str().unwrap_or("main").to_owned(), installation: id })));
+                out.extend(repos.iter().filter_map(|r| {
+                    Some(Repo {
+                        full_name: r["full_name"].as_str()?.to_owned(),
+                        private: r["private"].as_bool().unwrap_or(true),
+                        default_branch: r["default_branch"].as_str().unwrap_or("main").to_owned(),
+                        installation: id,
+                    })
+                }));
                 if repos.len() < 100 {
                     break;
                 }
@@ -122,7 +152,14 @@ impl App {
         if let Some(url) = s.target_url {
             body["target_url"] = json!(url);
         }
-        let r = client().post(format!("{API}/repos/{repo}/statuses/{sha}")).bearer_auth(token).header("accept", "application/vnd.github+json").json(&body).send().await.map_err(|e| format!("could not reach GitHub: {}", e.without_url()))?;
+        let r = client()
+            .post(format!("{API}/repos/{repo}/statuses/{sha}"))
+            .bearer_auth(token)
+            .header("accept", "application/vnd.github+json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("could not reach GitHub: {}", e.without_url()))?;
         check(r, "set a commit status").await.map(drop)
     }
 }
@@ -144,11 +181,22 @@ pub fn manifest(name: &str, public_url: &str) -> Value {
 /// Trades the code GitHub redirects back with for the new app's id and keys.
 pub async fn convert_manifest(code: &str) -> Result<Created, String> {
     let code: String = code.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
-    let r = client().post(format!("{API}/app-manifests/{code}/conversions")).header("accept", "application/vnd.github+json").send().await.map_err(|e| format!("could not reach GitHub: {}", e.without_url()))?;
+    let r = client()
+        .post(format!("{API}/app-manifests/{code}/conversions"))
+        .header("accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| format!("could not reach GitHub: {}", e.without_url()))?;
     let v = check(r, "create the app").await?;
     let get = |k: &str| v[k].as_str().map(str::to_owned).ok_or_else(|| format!("GitHub did not return {k}"));
     Ok(Created {
-        info: AppInfo { id: v["id"].as_u64().ok_or("GitHub did not return an id")?, slug: get("slug")?, name: get("name")?, html_url: get("html_url")?, owner: v["owner"]["login"].as_str().unwrap_or_default().to_owned() },
+        info: AppInfo {
+            id: v["id"].as_u64().ok_or("GitHub did not return an id")?,
+            slug: get("slug")?,
+            name: get("name")?,
+            html_url: get("html_url")?,
+            owner: v["owner"]["login"].as_str().unwrap_or_default().to_owned(),
+        },
         pem: get("pem")?,
         webhook_secret: get("webhook_secret")?,
     })
@@ -176,7 +224,10 @@ mod tests {
         assert!(!verify_webhook(b"another secret", body, &sig));
         assert!(!verify_webhook(b"It's a Secret to Everybody", b"tampered", &sig));
         assert!(!verify_webhook(b"It's a Secret to Everybody", body, "sha1=abc"));
-        assert_eq!(sign_webhook(b"It's a Secret to Everybody", b"Hello, World!"), "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17");
+        assert_eq!(
+            sign_webhook(b"It's a Secret to Everybody", b"Hello, World!"),
+            "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17"
+        );
     }
 
     #[test]

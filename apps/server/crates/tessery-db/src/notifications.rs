@@ -30,11 +30,20 @@ pub struct NewChannel<'a> {
 }
 
 pub async fn list(ex: impl PgExecutor<'_>, project: Uuid) -> DbResult<Vec<Channel>> {
-    Ok(sqlx::query_as!(Channel, "SELECT * FROM notification_channels WHERE project_id = $1 ORDER BY created_at", project).fetch_all(ex).await?)
+    Ok(sqlx::query_as!(
+        Channel,
+        "SELECT * FROM notification_channels WHERE project_id = $1 ORDER BY created_at",
+        project
+    )
+    .fetch_all(ex)
+    .await?)
 }
 
 pub async fn get(ex: impl PgExecutor<'_>, project: Uuid, id: Uuid) -> DbResult<Channel> {
-    sqlx::query_as!(Channel, "SELECT * FROM notification_channels WHERE project_id = $1 AND id = $2", project, id).fetch_optional(ex).await?.ok_or(DbError::NotFound)
+    sqlx::query_as!(Channel, "SELECT * FROM notification_channels WHERE project_id = $1 AND id = $2", project, id)
+        .fetch_optional(ex)
+        .await?
+        .ok_or(DbError::NotFound)
 }
 
 pub async fn create(ex: impl PgExecutor<'_>, c: NewChannel<'_>) -> DbResult<Channel> {
@@ -54,7 +63,15 @@ pub async fn create(ex: impl PgExecutor<'_>, c: NewChannel<'_>) -> DbResult<Chan
     .await?)
 }
 
-pub async fn update(ex: impl PgExecutor<'_>, project: Uuid, id: Uuid, name: &str, events: &[String], envs: &[String], enabled: bool) -> DbResult<Channel> {
+pub async fn update(
+    ex: impl PgExecutor<'_>,
+    project: Uuid,
+    id: Uuid,
+    name: &str,
+    events: &[String],
+    envs: &[String],
+    enabled: bool,
+) -> DbResult<Channel> {
     sqlx::query_as!(
         Channel,
         "UPDATE notification_channels SET name = $3, events = $4, envs = $5, enabled = $6 WHERE project_id = $1 AND id = $2 RETURNING *",
@@ -71,7 +88,10 @@ pub async fn update(ex: impl PgExecutor<'_>, project: Uuid, id: Uuid, name: &str
 }
 
 pub async fn delete(ex: impl PgExecutor<'_>, project: Uuid, id: Uuid) -> DbResult<()> {
-    let n = sqlx::query!("DELETE FROM notification_channels WHERE project_id = $1 AND id = $2", project, id).execute(ex).await?.rows_affected();
+    let n = sqlx::query!("DELETE FROM notification_channels WHERE project_id = $1 AND id = $2", project, id)
+        .execute(ex)
+        .await?
+        .rows_affected();
     if n == 0 { Err(DbError::NotFound) } else { Ok(()) }
 }
 
@@ -88,6 +108,8 @@ pub async fn subscribed(ex: impl PgExecutor<'_>, project: Uuid, event: &str, env
 }
 
 pub async fn record(ex: impl PgExecutor<'_>, id: Uuid, error: Option<&str>) -> DbResult<()> {
-    sqlx::query!("UPDATE notification_channels SET last_sent_at = now(), last_error = $2 WHERE id = $1", id, error).execute(ex).await?;
+    sqlx::query!("UPDATE notification_channels SET last_sent_at = now(), last_error = $2 WHERE id = $1", id, error)
+        .execute(ex)
+        .await?;
     Ok(())
 }

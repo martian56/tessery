@@ -24,11 +24,7 @@ async fn health_follows_the_worker_heartbeat() {
     let app = common::spawn_with(|c| c.redis_url = redis_url()).await;
     let mut conn = redis().await;
 
-    let _: () = redis::cmd("DEL")
-        .arg(WORKER_HEARTBEAT_KEY)
-        .query_async(&mut conn)
-        .await
-        .unwrap();
+    let _: () = redis::cmd("DEL").arg(WORKER_HEARTBEAT_KEY).query_async(&mut conn).await.unwrap();
     let res = app.session().get("/api/health").await;
     assert_eq!(res.status(), reqwest::StatusCode::SERVICE_UNAVAILABLE);
     let body: serde_json::Value = res.json().await.unwrap();
@@ -46,9 +42,5 @@ async fn health_follows_the_worker_heartbeat() {
     let body: serde_json::Value = app.session().get("/api/health").await.json().await.unwrap();
     assert_eq!(body["worker"], true);
 
-    let _: () = redis::cmd("DEL")
-        .arg(WORKER_HEARTBEAT_KEY)
-        .query_async(&mut conn)
-        .await
-        .unwrap();
+    let _: () = redis::cmd("DEL").arg(WORKER_HEARTBEAT_KEY).query_async(&mut conn).await.unwrap();
 }

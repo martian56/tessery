@@ -19,7 +19,14 @@ pub struct Backup {
     pub finished_at: Option<OffsetDateTime>,
 }
 
-pub async fn create(ex: impl PgExecutor<'_>, project: Uuid, env: &str, node: &str, kind: &str, by: Option<Uuid>) -> DbResult<Backup> {
+pub async fn create(
+    ex: impl PgExecutor<'_>,
+    project: Uuid,
+    env: &str,
+    node: &str,
+    kind: &str,
+    by: Option<Uuid>,
+) -> DbResult<Backup> {
     Ok(sqlx::query_as!(
         Backup,
         r#"INSERT INTO backups (project_id, env_key, node, kind, created_by) VALUES ($1, $2, $3, $4, $5)

@@ -4,12 +4,12 @@ use crate::error::{ApiError, ApiResult};
 use crate::rbac::{self, org_target};
 use crate::routes::dto::{OK, Ok, clean_name, slug_or_from};
 use crate::state::AppState;
-use tessery_core::{OrgId, Permission as P, Target, TeamId};
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tessery_core::{OrgId, Permission as P, Target, TeamId};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -81,10 +81,7 @@ impl From<tessery_db::projects::Project> for ProjectDto {
         if let Value::Object(map) = &mut doc {
             map.insert("id".into(), json!(p.id));
             map.insert("name".into(), json!(p.name));
-            map.insert(
-                "updatedAt".into(),
-                json!(p.updated_at.unix_timestamp() * 1000),
-            );
+            map.insert("updatedAt".into(), json!(p.updated_at.unix_timestamp() * 1000));
         }
         Self {
             id: p.id,
@@ -108,19 +105,12 @@ fn validate_doc(doc: &Value) -> ApiResult<DocMeta> {
     let Value::Object(map) = doc else {
         return Err(ApiError::invalid("doc", "must be an object"));
     };
-    if serde_json::to_vec(doc)
-        .map(|b| b.len())
-        .unwrap_or(usize::MAX)
-        > MAX_DOC_BYTES
-    {
+    if serde_json::to_vec(doc).map(|b| b.len()).unwrap_or(usize::MAX) > MAX_DOC_BYTES {
         return Err(ApiError::invalid("doc", "is larger than 5 MB"));
     }
     for key in ["nodes", "edges"] {
         if !map.get(key).is_some_and(Value::is_array) {
-            return Err(ApiError::invalid(
-                "doc",
-                format!("`{key}` must be an array"),
-            ));
+            return Err(ApiError::invalid("doc", format!("`{key}` must be an array")));
         }
     }
     for key in ["groups", "pages", "environments"] {
@@ -133,13 +123,7 @@ fn validate_doc(doc: &Value) -> ApiResult<DocMeta> {
             return Err(ApiError::invalid("doc", format!("`{key}` must be an object")));
         }
     }
-    let text = |k: &str| {
-        map.get(k)
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .trim()
-            .to_owned()
-    };
+    let text = |k: &str| map.get(k).and_then(Value::as_str).unwrap_or("").trim().to_owned();
     Ok(DocMeta {
         name: clean_name("doc.name", &text("name"), 120)?,
         description: text("description").chars().take(2000).collect(),
@@ -230,10 +214,7 @@ pub async fn create(
             tessery_db::teams::get(&state.db, org, team)
                 .await
                 .map_err(|_| ApiError::invalid("teamId", "team not found in this organization"))?;
-            Target::Team {
-                org: OrgId(org),
-                team: TeamId(team),
-            }
+            Target::Team { org: OrgId(org), team: TeamId(team) }
         }
         None => org_target(org),
     };
@@ -275,9 +256,7 @@ pub async fn get(
 ) -> ApiResult<Json<ProjectDto>> {
     let target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &target, P::ProjectRead).await?;
-    Ok(Json(
-        tessery_db::projects::get(&state.db, project).await?.into(),
-    ))
+    Ok(Json(tessery_db::projects::get(&state.db, project).await?.into()))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -349,25 +328,14 @@ pub async fn move_to_team(
         tessery_db::teams::get(&state.db, org, team)
             .await
             .map_err(|_| ApiError::invalid("teamId", "team not found in this organization"))?;
-        rbac::require(
-            &state,
-            &p,
-            &Target::Team {
-                org: OrgId(org),
-                team: TeamId(team),
-            },
-            P::ProjectCreate,
-        )
-        .await?;
+        rbac::require(&state, &p, &Target::Team { org: OrgId(org), team: TeamId(team) }, P::ProjectCreate).await?;
     }
     let mut tx = state.db.begin().await.map_err(tessery_db::DbError::from)?;
     tessery_db::projects::set_team(&mut *tx, project, req.team_id).await?;
     audit::record(
         &mut *tx,
         &p,
-        Entry::new(Some(org), "project.move", "project", project)
-            .decision(d)
-            .details(json!({ "teamId": req.team_id })),
+        Entry::new(Some(org), "project.move", "project", project).decision(d).details(json!({ "teamId": req.team_id })),
     )
     .await?;
     tx.commit().await.map_err(tessery_db::DbError::from)?;
@@ -375,11 +343,7 @@ pub async fn move_to_team(
 }
 
 #[utoipa::path(delete, path = "/api/projects/{project}", tag = "projects", params(("project" = Uuid, Path)), responses((status = 200, body = Ok)))]
-pub async fn delete(
-    State(state): State<AppState>,
-    p: Principal,
-    Path(project): Path<Uuid>,
-) -> ApiResult<Json<Ok>> {
+pub async fn delete(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>) -> ApiResult<Json<Ok>> {
     let target = rbac::project_target(&state, project).await?;
     let d = rbac::require(&state, &p, &target, P::ProjectDelete).await?;
     let mut teardowns = Vec::new();
@@ -390,12 +354,8 @@ pub async fn delete(
     }
     let mut tx = state.db.begin().await.map_err(tessery_db::DbError::from)?;
     tessery_db::projects::delete(&mut *tx, project).await?;
-    audit::record(
-        &mut *tx,
-        &p,
-        Entry::new(Some(target.org().0), "project.delete", "project", project).decision(d),
-    )
-    .await?;
+    audit::record(&mut *tx, &p, Entry::new(Some(target.org().0), "project.delete", "project", project).decision(d))
+        .await?;
     tx.commit().await.map_err(tessery_db::DbError::from)?;
     for job in teardowns {
         if let Err(e) = state.mq.publish(job).await {
@@ -455,10 +415,7 @@ pub async fn version(
 ) -> ApiResult<Json<VersionDoc>> {
     let target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &target, P::ProjectRead).await?;
-    Ok(Json(VersionDoc {
-        version,
-        doc: tessery_db::projects::get_version(&state.db, project, version).await?,
-    }))
+    Ok(Json(VersionDoc { version, doc: tessery_db::projects::get_version(&state.db, project, version).await? }))
 }
 
 #[derive(Serialize, ToSchema)]

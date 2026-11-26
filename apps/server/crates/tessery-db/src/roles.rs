@@ -95,16 +95,6 @@ pub async fn update_custom(
 }
 
 pub async fn delete_custom(ex: impl PgExecutor<'_>, org_id: Uuid, id: Uuid) -> DbResult<()> {
-    let r = sqlx::query!(
-        "DELETE FROM roles WHERE org_id = $1 AND id = $2",
-        org_id,
-        id
-    )
-    .execute(ex)
-    .await?;
-    if r.rows_affected() == 0 {
-        Err(DbError::NotFound)
-    } else {
-        Ok(())
-    }
+    let r = sqlx::query!("DELETE FROM roles WHERE org_id = $1 AND id = $2", org_id, id).execute(ex).await?;
+    if r.rows_affected() == 0 { Err(DbError::NotFound) } else { Ok(()) }
 }

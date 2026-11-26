@@ -1,11 +1,6 @@
 use redis::aio::ConnectionManager;
 
-pub async fn allow(
-    redis: &mut ConnectionManager,
-    key: &str,
-    limit: u32,
-    window_secs: u64,
-) -> redis::RedisResult<bool> {
+pub async fn allow(redis: &mut ConnectionManager, key: &str, limit: u32, window_secs: u64) -> redis::RedisResult<bool> {
     let k = format!("tessery:rl:{key}");
     let (count,): (u32,) = redis::pipe()
         .atomic()
@@ -20,9 +15,6 @@ pub async fn allow(
 }
 
 pub async fn reset(redis: &mut ConnectionManager, key: &str) -> redis::RedisResult<()> {
-    let _: () = redis::cmd("DEL")
-        .arg(format!("tessery:rl:{key}"))
-        .query_async(redis)
-        .await?;
+    let _: () = redis::cmd("DEL").arg(format!("tessery:rl:{key}")).query_async(redis).await?;
     Ok(())
 }

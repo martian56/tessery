@@ -36,7 +36,17 @@ pub struct ChannelDto {
 
 impl From<db::Channel> for ChannelDto {
     fn from(c: db::Channel) -> Self {
-        Self { id: c.id, name: c.name, kind: c.kind, target_hint: c.target_hint, events: c.events, envs: c.envs, enabled: c.enabled, last_sent_at: c.last_sent_at, last_error: c.last_error }
+        Self {
+            id: c.id,
+            name: c.name,
+            kind: c.kind,
+            target_hint: c.target_hint,
+            events: c.events,
+            envs: c.envs,
+            enabled: c.enabled,
+            last_sent_at: c.last_sent_at,
+            last_error: c.last_error,
+        }
     }
 }
 
@@ -52,7 +62,11 @@ pub async fn events(_p: Principal) -> Json<Vec<EventDto>> {
 }
 
 #[utoipa::path(get, path = "/api/projects/{project}/notifications", tag = "notifications", params(("project" = Uuid, Path)), responses((status = 200, body = [ChannelDto])))]
-pub async fn list(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>) -> ApiResult<Json<Vec<ChannelDto>>> {
+pub async fn list(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+) -> ApiResult<Json<Vec<ChannelDto>>> {
     let target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &target, P::ProjectRead).await?;
     Ok(Json(db::list(&state.db, project).await?.into_iter().map(Into::into).collect()))
@@ -80,7 +94,12 @@ pub struct NewChannelInput {
 }
 
 #[utoipa::path(post, path = "/api/projects/{project}/notifications", tag = "notifications", params(("project" = Uuid, Path)), request_body = NewChannelInput, responses((status = 201, body = ChannelDto)))]
-pub async fn create(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>, Json(req): Json<NewChannelInput>) -> ApiResult<(StatusCode, Json<ChannelDto>)> {
+pub async fn create(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+    Json(req): Json<NewChannelInput>,
+) -> ApiResult<(StatusCode, Json<ChannelDto>)> {
     let target = rbac::project_target(&state, project).await?;
     let d = rbac::require(&state, &p, &target, P::ProjectEdit).await?;
     let name = req.name.trim();
@@ -92,14 +111,33 @@ pub async fn create(State(state): State<AppState>, p: Principal, Path(project): 
     }
     tessery_notify::check_target(&req.kind, &req.target).map_err(|e| ApiError::invalid("target", e))?;
     check_events(&req.events)?;
-    let key = state.config.secret_key.as_ref().ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY to store notification targets".into()))?;
+    let key = state
+        .config
+        .secret_key
+        .as_ref()
+        .ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY to store notification targets".into()))?;
     let cipher = key.encrypt(req.target.trim().as_bytes());
     let c = db::create(
         &state.db,
-        db::NewChannel { project_id: project, name, kind: &req.kind, target: &cipher, target_hint: &tessery_notify::preview(&req.kind, &req.target), events: &req.events, envs: &req.envs },
+        db::NewChannel {
+            project_id: project,
+            name,
+            kind: &req.kind,
+            target: &cipher,
+            target_hint: &tessery_notify::preview(&req.kind, &req.target),
+            events: &req.events,
+            envs: &req.envs,
+        },
     )
     .await?;
-    audit::record(&state.db, &p, Entry::new(Some(target.org().0), "notification.create", "project", project).decision(d).details(json!({ "channel": c.id, "kind": c.kind, "name": c.name }))).await?;
+    audit::record(
+        &state.db,
+        &p,
+        Entry::new(Some(target.org().0), "notification.create", "project", project)
+            .decision(d)
+            .details(json!({ "channel": c.id, "kind": c.kind, "name": c.name })),
+    )
+    .await?;
     Ok((StatusCode::CREATED, Json(c.into())))
 }
 
@@ -113,7 +151,12 @@ pub struct UpdateChannelInput {
 }
 
 #[utoipa::path(put, path = "/api/projects/{project}/notifications/{channel}", tag = "notifications", params(("project" = Uuid, Path), ("channel" = Uuid, Path)), request_body = UpdateChannelInput, responses((status = 200, body = ChannelDto)))]
-pub async fn update(State(state): State<AppState>, p: Principal, Path((project, channel)): Path<(Uuid, Uuid)>, Json(req): Json<UpdateChannelInput>) -> ApiResult<Json<ChannelDto>> {
+pub async fn update(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((project, channel)): Path<(Uuid, Uuid)>,
+    Json(req): Json<UpdateChannelInput>,
+) -> ApiResult<Json<ChannelDto>> {
     let target = rbac::project_target(&state, project).await?;
     let d = rbac::require(&state, &p, &target, P::ProjectEdit).await?;
     let name = req.name.trim();
@@ -122,29 +165,60 @@ pub async fn update(State(state): State<AppState>, p: Principal, Path((project, 
     }
     check_events(&req.events)?;
     let c = db::update(&state.db, project, channel, name, &req.events, &req.envs, req.enabled).await?;
-    audit::record(&state.db, &p, Entry::new(Some(target.org().0), "notification.update", "project", project).decision(d).details(json!({ "channel": c.id, "enabled": c.enabled }))).await?;
+    audit::record(
+        &state.db,
+        &p,
+        Entry::new(Some(target.org().0), "notification.update", "project", project)
+            .decision(d)
+            .details(json!({ "channel": c.id, "enabled": c.enabled })),
+    )
+    .await?;
     Ok(Json(c.into()))
 }
 
 #[utoipa::path(delete, path = "/api/projects/{project}/notifications/{channel}", tag = "notifications", params(("project" = Uuid, Path), ("channel" = Uuid, Path)), responses((status = 200, body = Ok)))]
-pub async fn delete(State(state): State<AppState>, p: Principal, Path((project, channel)): Path<(Uuid, Uuid)>) -> ApiResult<Json<Ok>> {
+pub async fn delete(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((project, channel)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<Ok>> {
     let target = rbac::project_target(&state, project).await?;
     let d = rbac::require(&state, &p, &target, P::ProjectEdit).await?;
     db::delete(&state.db, project, channel).await?;
-    audit::record(&state.db, &p, Entry::new(Some(target.org().0), "notification.delete", "project", project).decision(d).details(json!({ "channel": channel }))).await?;
+    audit::record(
+        &state.db,
+        &p,
+        Entry::new(Some(target.org().0), "notification.delete", "project", project)
+            .decision(d)
+            .details(json!({ "channel": channel })),
+    )
+    .await?;
     Ok(Json(OK))
 }
 
 /// Sends a sample message to the channel now and reports what the other side answered.
 #[utoipa::path(post, path = "/api/projects/{project}/notifications/{channel}/test", tag = "notifications", params(("project" = Uuid, Path), ("channel" = Uuid, Path)), responses((status = 200, body = Ok), (status = 409)))]
-pub async fn test(State(state): State<AppState>, p: Principal, Path((project, channel)): Path<(Uuid, Uuid)>) -> ApiResult<Json<Ok>> {
+pub async fn test(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((project, channel)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<Ok>> {
     let target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &target, P::ProjectEdit).await?;
     let c = db::get(&state.db, project, channel).await?;
-    let key = state.config.secret_key.as_ref().ok_or_else(|| ApiError::Conflict("TESSERY_SECRET_KEY is not set".into()))?;
-    let to = String::from_utf8(key.decrypt(&c.target).map_err(|e| ApiError::Internal(e.into()))?).map_err(|e| ApiError::Internal(e.into()))?;
+    let key =
+        state.config.secret_key.as_ref().ok_or_else(|| ApiError::Conflict("TESSERY_SECRET_KEY is not set".into()))?;
+    let to = String::from_utf8(key.decrypt(&c.target).map_err(|e| ApiError::Internal(e.into()))?)
+        .map_err(|e| ApiError::Internal(e.into()))?;
     let saved = tessery_db::projects::get(&state.db, project).await?;
-    let e = Event { kind: "test".into(), project: saved.name, env: String::new(), title: format!("Test message for {}", c.name), detail: format!("{} sent this from Tessery to check the channel.", p.user.name), link: None };
+    let e = Event {
+        kind: "test".into(),
+        project: saved.name,
+        env: String::new(),
+        title: format!("Test message for {}", c.name),
+        detail: format!("{} sent this from Tessery to check the channel.", p.user.name),
+        link: None,
+    };
     let smtp = if c.kind == "email" { crate::mail::settings(&state).await? } else { None };
     let delivery = Delivery {
         kind: &c.kind,

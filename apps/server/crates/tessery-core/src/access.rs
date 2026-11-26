@@ -22,21 +22,9 @@ pub struct Grant {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
     Org(OrgId),
-    Team {
-        org: OrgId,
-        team: TeamId,
-    },
-    Project {
-        org: OrgId,
-        team: Option<TeamId>,
-        project: ProjectId,
-    },
-    Environment {
-        org: OrgId,
-        team: Option<TeamId>,
-        project: ProjectId,
-        env: String,
-    },
+    Team { org: OrgId, team: TeamId },
+    Project { org: OrgId, team: Option<TeamId>, project: ProjectId },
+    Environment { org: OrgId, team: Option<TeamId>, project: ProjectId, env: String },
 }
 
 impl Target {
@@ -63,12 +51,9 @@ impl GrantScope {
                 GrantScope::Project { project },
                 Target::Project { project: p, .. } | Target::Environment { project: p, .. },
             ) => project == p,
-            (
-                GrantScope::Environment { project, env },
-                Target::Environment {
-                    project: p, env: e, ..
-                },
-            ) => project == p && env == e,
+            (GrantScope::Environment { project, env }, Target::Environment { project: p, env: e, .. }) => {
+                project == p && env == e
+            }
             _ => false,
         }
     }
@@ -114,21 +99,11 @@ mod tests {
     use time::Duration;
 
     fn grant(role: crate::role::BuiltinRole, scope: GrantScope) -> Grant {
-        Grant {
-            permissions: role.permissions(),
-            scope,
-            expires_at: None,
-        }
+        Grant { permissions: role.permissions(), scope, expires_at: None }
     }
 
     fn ids() -> (OrgId, TeamId, TeamId, ProjectId, ProjectId) {
-        (
-            OrgId::new(),
-            TeamId::new(),
-            TeamId::new(),
-            ProjectId::new(),
-            ProjectId::new(),
-        )
+        (OrgId::new(), TeamId::new(), TeamId::new(), ProjectId::new(), ProjectId::new())
     }
 
     #[test]
@@ -139,17 +114,8 @@ mod tests {
         for target in [
             Target::Org(o),
             Target::Team { org: o, team: t },
-            Target::Project {
-                org: o,
-                team: None,
-                project: p,
-            },
-            Target::Environment {
-                org: o,
-                team: Some(t),
-                project: p,
-                env: "prod".into(),
-            },
+            Target::Project { org: o, team: None, project: p },
+            Target::Environment { org: o, team: Some(t), project: p, env: "prod".into() },
         ] {
             assert!(effective_permissions(&g, &target, now).contains(Permission::ProjectRead));
         }
@@ -161,80 +127,26 @@ mod tests {
         let g = [grant(EDITOR, GrantScope::Team { team: t1 })];
         let now = OffsetDateTime::now_utc();
         assert!(
-            effective_permissions(
-                &g,
-                &Target::Project {
-                    org: o,
-                    team: Some(t1),
-                    project: p1
-                },
-                now
-            )
-            .contains(Permission::ProjectEdit)
+            effective_permissions(&g, &Target::Project { org: o, team: Some(t1), project: p1 }, now)
+                .contains(Permission::ProjectEdit)
         );
-        assert!(
-            effective_permissions(
-                &g,
-                &Target::Project {
-                    org: o,
-                    team: Some(t2),
-                    project: p2
-                },
-                now
-            )
-            .is_empty()
-        );
-        assert!(
-            effective_permissions(
-                &g,
-                &Target::Project {
-                    org: o,
-                    team: None,
-                    project: p2
-                },
-                now
-            )
-            .is_empty()
-        );
+        assert!(effective_permissions(&g, &Target::Project { org: o, team: Some(t2), project: p2 }, now).is_empty());
+        assert!(effective_permissions(&g, &Target::Project { org: o, team: None, project: p2 }, now).is_empty());
         assert!(effective_permissions(&g, &Target::Org(o), now).is_empty());
     }
 
     #[test]
     fn environment_grant_is_limited_to_that_environment() {
         let (o, _, _, p, _) = ids();
-        let g = [grant(
-            DEPLOYER,
-            GrantScope::Environment {
-                project: p,
-                env: "staging".into(),
-            },
-        )];
+        let g = [grant(DEPLOYER, GrantScope::Environment { project: p, env: "staging".into() })];
         let now = OffsetDateTime::now_utc();
-        let staging = Target::Environment {
-            org: o,
-            team: None,
-            project: p,
-            env: "staging".into(),
-        };
-        let prod = Target::Environment {
-            org: o,
-            team: None,
-            project: p,
-            env: "prod".into(),
-        };
+        let staging = Target::Environment { org: o, team: None, project: p, env: "staging".into() };
+        let prod = Target::Environment { org: o, team: None, project: p, env: "prod".into() };
         assert!(effective_permissions(&g, &staging, now).contains(Permission::DeploymentRun));
         assert!(!effective_permissions(&g, &prod, now).contains(Permission::DeploymentRun));
         assert!(
-            !effective_permissions(
-                &g,
-                &Target::Project {
-                    org: o,
-                    team: None,
-                    project: p
-                },
-                now
-            )
-            .contains(Permission::DeploymentRun)
+            !effective_permissions(&g, &Target::Project { org: o, team: None, project: p }, now)
+                .contains(Permission::DeploymentRun)
         );
     }
 
@@ -259,17 +171,8 @@ mod tests {
     #[test]
     fn instance_admin_bypasses_but_is_distinguished() {
         let none = PermissionSet::empty();
-        assert_eq!(
-            decide(true, &none, Permission::OrgDelete),
-            Decision::Bypassed
-        );
-        assert_eq!(
-            decide(false, &none, Permission::OrgDelete),
-            Decision::Denied
-        );
-        assert_eq!(
-            decide(true, &PermissionSet::all(), Permission::OrgDelete),
-            Decision::Allowed
-        );
+        assert_eq!(decide(true, &none, Permission::OrgDelete), Decision::Bypassed);
+        assert_eq!(decide(false, &none, Permission::OrgDelete), Decision::Denied);
+        assert_eq!(decide(true, &PermissionSet::all(), Permission::OrgDelete), Decision::Allowed);
     }
 }

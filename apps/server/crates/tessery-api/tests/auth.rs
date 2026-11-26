@@ -13,13 +13,15 @@ async fn first_run_setup_happens_exactly_once() {
     let me = admin.json("/api/auth/me").await;
     assert_eq!(me["email"], "admin@example.com");
     assert_eq!(me["instanceAdmin"], true);
-    assert_eq!(
-        admin.json(&format!("/api/orgs/{org}")).await["name"],
-        "Acme"
-    );
+    assert_eq!(admin.json(&format!("/api/orgs/{org}")).await["name"], "Acme");
 
     assert_eq!(anon.json("/api/setup").await["required"], false);
-    let again = anon.post("/api/setup", json!({ "email": "evil@example.com", "name": "Evil", "password": "evil-password-1", "orgName": "Evil" })).await;
+    let again = anon
+        .post(
+            "/api/setup",
+            json!({ "email": "evil@example.com", "name": "Evil", "password": "evil-password-1", "orgName": "Evil" }),
+        )
+        .await;
     assert_eq!(again.status(), StatusCode::CONFLICT);
 }
 
@@ -28,31 +30,13 @@ async fn login_logout_and_bad_credentials() {
     let app = common::spawn().await;
     app.setup().await;
     let s = app.session();
-    assert_eq!(
-        s.get("/api/auth/me").await.status(),
-        StatusCode::UNAUTHORIZED
-    );
-    assert_eq!(
-        s.login("admin@example.com", "wrong-password-xx").await,
-        StatusCode::UNAUTHORIZED
-    );
-    assert_eq!(
-        s.login("nobody@example.com", "whatever-password").await,
-        StatusCode::UNAUTHORIZED
-    );
-    assert_eq!(
-        s.login("ADMIN@example.com", "admin-password-1").await,
-        StatusCode::OK
-    );
+    assert_eq!(s.get("/api/auth/me").await.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(s.login("admin@example.com", "wrong-password-xx").await, StatusCode::UNAUTHORIZED);
+    assert_eq!(s.login("nobody@example.com", "whatever-password").await, StatusCode::UNAUTHORIZED);
+    assert_eq!(s.login("ADMIN@example.com", "admin-password-1").await, StatusCode::OK);
     assert_eq!(s.get("/api/auth/me").await.status(), StatusCode::OK);
-    assert_eq!(
-        s.post("/api/auth/logout", json!({})).await.status(),
-        StatusCode::OK
-    );
-    assert_eq!(
-        s.get("/api/auth/me").await.status(),
-        StatusCode::UNAUTHORIZED
-    );
+    assert_eq!(s.post("/api/auth/logout", json!({})).await.status(), StatusCode::OK);
+    assert_eq!(s.get("/api/auth/me").await.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -93,10 +77,7 @@ async fn changing_password_signs_out_other_sessions() {
     let app = common::spawn().await;
     let (a, _) = app.setup().await;
     let b = app.session();
-    assert_eq!(
-        b.login("admin@example.com", "admin-password-1").await,
-        StatusCode::OK
-    );
+    assert_eq!(b.login("admin@example.com", "admin-password-1").await, StatusCode::OK);
     let r = a
         .post(
             "/api/auth/password",
@@ -105,33 +86,26 @@ async fn changing_password_signs_out_other_sessions() {
         .await;
     assert_eq!(r.status(), StatusCode::OK);
     assert_eq!(a.get("/api/auth/me").await.status(), StatusCode::OK);
-    assert_eq!(
-        b.get("/api/auth/me").await.status(),
-        StatusCode::UNAUTHORIZED
-    );
-    assert_eq!(
-        b.login("admin@example.com", "a-brand-new-password").await,
-        StatusCode::OK
-    );
+    assert_eq!(b.get("/api/auth/me").await.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(b.login("admin@example.com", "a-brand-new-password").await, StatusCode::OK);
 }
 
 #[tokio::test]
 async fn validation_errors_name_the_field() {
     let app = common::spawn().await;
     let s = app.session();
-    let r = s.post("/api/setup", json!({ "email": "not-an-email", "name": "A", "password": "long-enough-pw", "orgName": "A" })).await;
-    assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(r.json::<Value>().await.unwrap()["error"]["field"], "email");
     let r = s
         .post(
             "/api/setup",
-            json!({ "email": "a@example.com", "name": "A", "password": "short", "orgName": "A" }),
+            json!({ "email": "not-an-email", "name": "A", "password": "long-enough-pw", "orgName": "A" }),
         )
         .await;
-    assert_eq!(
-        r.json::<Value>().await.unwrap()["error"]["field"],
-        "password"
-    );
+    assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(r.json::<Value>().await.unwrap()["error"]["field"], "email");
+    let r = s
+        .post("/api/setup", json!({ "email": "a@example.com", "name": "A", "password": "short", "orgName": "A" }))
+        .await;
+    assert_eq!(r.json::<Value>().await.unwrap()["error"]["field"], "password");
 }
 
 #[tokio::test]

@@ -55,7 +55,9 @@ pub async fn insert(ex: impl PgExecutor<'_>, a: NewAsset<'_>) -> DbResult<Asset>
 }
 
 pub async fn list(ex: impl PgExecutor<'_>, project: Uuid) -> DbResult<Vec<Asset>> {
-    Ok(sqlx::query_as!(Asset, "SELECT * FROM assets WHERE project_id = $1 ORDER BY created_at DESC", project).fetch_all(ex).await?)
+    Ok(sqlx::query_as!(Asset, "SELECT * FROM assets WHERE project_id = $1 ORDER BY created_at DESC", project)
+        .fetch_all(ex)
+        .await?)
 }
 
 pub async fn get(ex: impl PgExecutor<'_>, id: Uuid) -> DbResult<Asset> {
@@ -63,9 +65,14 @@ pub async fn get(ex: impl PgExecutor<'_>, id: Uuid) -> DbResult<Asset> {
 }
 
 pub async fn many(ex: impl PgExecutor<'_>, project: Uuid, ids: &[Uuid]) -> DbResult<Vec<Asset>> {
-    Ok(sqlx::query_as!(Asset, "SELECT * FROM assets WHERE project_id = $1 AND id = ANY($2)", project, ids).fetch_all(ex).await?)
+    Ok(sqlx::query_as!(Asset, "SELECT * FROM assets WHERE project_id = $1 AND id = ANY($2)", project, ids)
+        .fetch_all(ex)
+        .await?)
 }
 
 pub async fn delete(ex: impl PgExecutor<'_>, project: Uuid, id: Uuid) -> DbResult<Asset> {
-    sqlx::query_as!(Asset, "DELETE FROM assets WHERE project_id = $1 AND id = $2 RETURNING *", project, id).fetch_optional(ex).await?.ok_or(DbError::NotFound)
+    sqlx::query_as!(Asset, "DELETE FROM assets WHERE project_id = $1 AND id = $2 RETURNING *", project, id)
+        .fetch_optional(ex)
+        .await?
+        .ok_or(DbError::NotFound)
 }

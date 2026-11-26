@@ -4,13 +4,13 @@ use crate::error::{ApiError, ApiResult};
 use crate::rbac;
 use crate::routes::dto::{OK, Ok, UserDto, clean_name};
 use crate::state::AppState;
-use tessery_core::{OrgId, Target, TeamId};
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum_extra::extract::CookieJar;
 use serde::{Deserialize, Serialize};
+use tessery_core::{OrgId, Target, TeamId};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -37,11 +37,7 @@ pub async fn login(
         return Err(ApiError::RateLimited);
     }
     let user = tessery_db::users::find_by_email(&state.db, &email).await?;
-    let ok = password::verify(
-        req.password,
-        user.as_ref().and_then(|u| u.password_hash.clone()),
-    )
-    .await;
+    let ok = password::verify(req.password, user.as_ref().and_then(|u| u.password_hash.clone())).await;
     let user = match user {
         Some(u) if ok && u.disabled_at.is_none() => u,
         _ => {
@@ -65,39 +61,32 @@ pub async fn login(
     rate_limit::reset(&mut redis, &email_key).await?;
     if user.two_factor_enabled_at.is_some() {
         let ticket = crate::routes::two_factor::new_ticket(&state, user.id).await?;
-        return Ok((StatusCode::ACCEPTED, Json(crate::routes::two_factor::TwoFactorChallenge { two_factor_ticket: ticket })).into_response());
+        return Ok((
+            StatusCode::ACCEPTED,
+            Json(crate::routes::two_factor::TwoFactorChallenge { two_factor_ticket: ticket }),
+        )
+            .into_response());
     }
     Ok(start_session(&state, meta, jar, user, serde_json::json!({})).await?.into_response())
 }
 
-pub async fn start_session(state: &AppState, meta: RequestMeta, jar: CookieJar, user: tessery_db::users::User, details: serde_json::Value) -> ApiResult<(CookieJar, Json<UserDto>)> {
+pub async fn start_session(
+    state: &AppState,
+    meta: RequestMeta,
+    jar: CookieJar,
+    user: tessery_db::users::User,
+    details: serde_json::Value,
+) -> ApiResult<(CookieJar, Json<UserDto>)> {
     let mut redis = state.redis.clone();
     let token = session::create(&mut redis, user.id, state.config.session_ttl).await?;
     tessery_db::users::touch_login(&state.db, user.id).await?;
-    let actor = Principal {
-        user: user.clone(),
-        token: token.clone(),
-        meta,
-        scope: None,
-    };
-    audit::record(
-        &state.db,
-        &actor,
-        Entry::new(None, "auth.login", "session", user.id).details(details),
-    )
-    .await?;
-    Ok((
-        jar.add(auth::session_cookie(state, token)),
-        Json(user.into()),
-    ))
+    let actor = Principal { user: user.clone(), token: token.clone(), meta, scope: None };
+    audit::record(&state.db, &actor, Entry::new(None, "auth.login", "session", user.id).details(details)).await?;
+    Ok((jar.add(auth::session_cookie(state, token)), Json(user.into())))
 }
 
 #[utoipa::path(post, path = "/api/auth/logout", tag = "auth", responses((status = 200, body = Ok)))]
-pub async fn logout(
-    State(state): State<AppState>,
-    p: Principal,
-    jar: CookieJar,
-) -> ApiResult<(CookieJar, Json<Ok>)> {
+pub async fn logout(State(state): State<AppState>, p: Principal, jar: CookieJar) -> ApiResult<(CookieJar, Json<Ok>)> {
     let mut redis = state.redis.clone();
     session::destroy(&mut redis, &p.token).await?;
     Ok((jar.add(auth::clear_cookie()), Json(OK)))
@@ -121,9 +110,7 @@ pub async fn update_me(
 ) -> ApiResult<Json<UserDto>> {
     let name = clean_name("name", &req.name, 120)?;
     tessery_db::users::update_profile(&state.db, p.user.id, &name).await?;
-    Ok(Json(
-        tessery_db::users::get(&state.db, p.user.id).await?.into(),
-    ))
+    Ok(Json(tessery_db::users::get(&state.db, p.user.id).await?.into()))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -141,21 +128,14 @@ pub async fn change_password(
     Json(req): Json<ChangePassword>,
 ) -> ApiResult<Json<Ok>> {
     if !password::verify(req.current_password, p.user.password_hash.clone()).await {
-        return Err(ApiError::ForbiddenMsg(
-            "current password is incorrect".into(),
-        ));
+        return Err(ApiError::ForbiddenMsg("current password is incorrect".into()));
     }
     password::validate(&req.new_password)?;
     let hash = password::hash(req.new_password).await?;
     tessery_db::users::set_password(&state.db, p.user.id, &hash).await?;
     let mut redis = state.redis.clone();
     session::destroy_all(&mut redis, p.user.id, Some(&p.token)).await?;
-    audit::record(
-        &state.db,
-        &p,
-        Entry::new(None, "auth.password_changed", "user", p.user.id),
-    )
-    .await?;
+    audit::record(&state.db, &p, Entry::new(None, "auth.password_changed", "user", p.user.id)).await?;
     Ok(Json(OK))
 }
 
@@ -191,24 +171,13 @@ pub async fn my_permissions(
                 return Err(ApiError::NotFound);
             }
             match (t, q.env) {
-                (Target::Project { org, team, project }, Some(env)) => Target::Environment {
-                    org,
-                    team,
-                    project,
-                    env,
-                },
+                (Target::Project { org, team, project }, Some(env)) => Target::Environment { org, team, project, env },
                 (t, _) => t,
             }
         }
-        (None, Some(team)) => Target::Team {
-            org,
-            team: TeamId(team),
-        },
+        (None, Some(team)) => Target::Team { org, team: TeamId(team) },
         (None, None) => Target::Org(org),
     };
     let eff = rbac::effective(&state, p.user.id, &target).await?;
-    Ok(Json(MyPermissions {
-        permissions: eff.to_strings(),
-        bypass: p.is_instance_admin(),
-    }))
+    Ok(Json(MyPermissions { permissions: eff.to_strings(), bypass: p.is_instance_admin() }))
 }

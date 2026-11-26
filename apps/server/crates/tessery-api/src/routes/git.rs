@@ -3,12 +3,12 @@ use crate::auth::Principal;
 use crate::error::ApiError;
 use crate::rbac;
 use crate::state::AppState;
-use tessery_core::Permission as P;
 use axum::body::{Body, Bytes};
 use axum::extract::{Path, RawQuery, State};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
+use tessery_core::Permission as P;
 use uuid::Uuid;
 
 fn plain(status: StatusCode, msg: &str) -> Response {
@@ -29,7 +29,10 @@ fn pushed_refs(body: &[u8]) -> Vec<String> {
     let mut refs = Vec::new();
     let mut at = 0;
     while at + 4 <= body.len() {
-        let Some(len) = std::str::from_utf8(&body[at..at + 4]).ok().and_then(|h| usize::from_str_radix(h, 16).ok()) else { break };
+        let Some(len) = std::str::from_utf8(&body[at..at + 4]).ok().and_then(|h| usize::from_str_radix(h, 16).ok())
+        else {
+            break;
+        };
         if len == 0 || len < 4 || at + len > body.len() {
             break;
         }
@@ -57,7 +60,9 @@ pub async fn serve(
     };
     let query = query.unwrap_or_default();
     let service = match (rest.as_str(), &method) {
-        ("info/refs", &Method::GET) => query.split('&').find_map(|kv| kv.strip_prefix("service=")).unwrap_or("").to_owned(),
+        ("info/refs", &Method::GET) => {
+            query.split('&').find_map(|kv| kv.strip_prefix("service=")).unwrap_or("").to_owned()
+        }
         ("git-upload-pack", &Method::POST) => "git-upload-pack".into(),
         ("git-receive-pack", &Method::POST) => "git-receive-pack".into(),
         _ => return plain(StatusCode::NOT_FOUND, "Only the smart HTTP protocol is supported."),
@@ -83,13 +88,19 @@ pub async fn serve(
         };
     }
 
-    let encoded = headers.get(header::CONTENT_ENCODING).and_then(|v| v.to_str().ok()).is_some_and(|e| !e.eq_ignore_ascii_case("identity"));
+    let encoded = headers
+        .get(header::CONTENT_ENCODING)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|e| !e.eq_ignore_ascii_case("identity"));
     if push && method == Method::POST && encoded {
         return plain(StatusCode::UNSUPPORTED_MEDIA_TYPE, "Compressed pushes are not accepted.");
     }
     let refs = if push && method == Method::POST { pushed_refs(&body) } else { Vec::new() };
     if let Some(r) = refs.iter().find(|r| protected(r)) {
-        return plain(StatusCode::FORBIDDEN, &format!("{r} is managed by Tessery and cannot be pushed to. Push to main or a feature branch."));
+        return plain(
+            StatusCode::FORBIDDEN,
+            &format!("{r} is managed by Tessery and cannot be pushed to. Push to main or a feature branch."),
+        );
     }
     let exists = state.repos.path(project).join("HEAD").exists();
     if !exists {
@@ -137,5 +148,6 @@ pub async fn serve(
     for (k, v) in &out.headers {
         resp = resp.header(k.as_str(), v.as_str());
     }
-    resp.body(Body::from(out.body)).unwrap_or_else(|_| plain(StatusCode::INTERNAL_SERVER_ERROR, "Bad response from git."))
+    resp.body(Body::from(out.body))
+        .unwrap_or_else(|_| plain(StatusCode::INTERNAL_SERVER_ERROR, "Bad response from git."))
 }

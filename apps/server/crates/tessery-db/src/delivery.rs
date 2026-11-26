@@ -143,7 +143,14 @@ pub async fn insert_release(tx: &mut Transaction<'_, Postgres>, r: NewRelease<'_
     Ok(sqlx::query_scalar!(
         r#"INSERT INTO releases (project_id, env_key, checkpoint_id, from_env, status, note, requested_by, commit_sha)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id"#,
-        r.project_id, r.env_key, r.checkpoint_id, r.from_env, r.status as ReleaseStatus, r.note, r.requested_by, r.commit_sha
+        r.project_id,
+        r.env_key,
+        r.checkpoint_id,
+        r.from_env,
+        r.status as ReleaseStatus,
+        r.note,
+        r.requested_by,
+        r.commit_sha
     )
     .fetch_one(&mut **tx)
     .await?)
@@ -213,11 +220,17 @@ pub async fn heads(ex: impl PgExecutor<'_>, project_id: Uuid) -> DbResult<Vec<He
            FROM environment_heads h JOIN releases r ON r.id = h.release_id WHERE h.project_id = $1"#,
         project_id
     )
-        .fetch_all(ex)
-        .await?)
+    .fetch_all(ex)
+    .await?)
 }
 
-pub async fn set_head(tx: &mut Transaction<'_, Postgres>, project_id: Uuid, env_key: &str, checkpoint_id: Uuid, release_id: Uuid) -> DbResult<()> {
+pub async fn set_head(
+    tx: &mut Transaction<'_, Postgres>,
+    project_id: Uuid,
+    env_key: &str,
+    checkpoint_id: Uuid,
+    release_id: Uuid,
+) -> DbResult<()> {
     sqlx::query!(
         r#"INSERT INTO environment_heads (project_id, env_key, checkpoint_id, release_id) VALUES ($1, $2, $3, $4)
            ON CONFLICT (project_id, env_key) DO UPDATE SET checkpoint_id = $3, release_id = $4, updated_at = now()"#,
@@ -283,7 +296,12 @@ pub async fn clear_head(ex: impl PgExecutor<'_>, project_id: Uuid, env_key: &str
         == 1)
 }
 
-pub async fn was_released(ex: impl PgExecutor<'_>, project_id: Uuid, env_key: &str, checkpoint_id: Uuid) -> DbResult<bool> {
+pub async fn was_released(
+    ex: impl PgExecutor<'_>,
+    project_id: Uuid,
+    env_key: &str,
+    checkpoint_id: Uuid,
+) -> DbResult<bool> {
     Ok(sqlx::query_scalar!(
         r#"SELECT EXISTS (SELECT 1 FROM releases WHERE project_id = $1 AND env_key = $2 AND checkpoint_id = $3 AND status = 'released') AS "e!""#,
         project_id,
@@ -294,7 +312,10 @@ pub async fn was_released(ex: impl PgExecutor<'_>, project_id: Uuid, env_key: &s
     .await?)
 }
 
-pub async fn ref_targets(ex: impl PgExecutor<'_> + Copy, project_id: Uuid) -> DbResult<(Vec<(String, String)>, Vec<(String, String)>)> {
+pub async fn ref_targets(
+    ex: impl PgExecutor<'_> + Copy,
+    project_id: Uuid,
+) -> DbResult<(Vec<(String, String)>, Vec<(String, String)>)> {
     let branches = sqlx::query!(
         r#"SELECT h.env_key, coalesce(r.commit_sha, c.commit_sha) AS "commit_sha!" FROM environment_heads h JOIN checkpoints c ON c.id = h.checkpoint_id
            LEFT JOIN releases r ON r.id = h.release_id WHERE h.project_id = $1"#,
@@ -359,7 +380,8 @@ pub async fn upsert_remote(ex: impl PgExecutor<'_>, r: RemoteUpdate<'_>) -> DbRe
 }
 
 pub async fn delete_remote(ex: impl PgExecutor<'_>, project_id: Uuid) -> DbResult<bool> {
-    Ok(sqlx::query!("DELETE FROM project_remotes WHERE project_id = $1", project_id).execute(ex).await?.rows_affected() > 0)
+    Ok(sqlx::query!("DELETE FROM project_remotes WHERE project_id = $1", project_id).execute(ex).await?.rows_affected()
+        > 0)
 }
 
 pub async fn record_push(ex: impl PgExecutor<'_>, project_id: Uuid, error: Option<&str>) -> DbResult<()> {
@@ -375,14 +397,22 @@ pub async fn record_push(ex: impl PgExecutor<'_>, project_id: Uuid, error: Optio
 }
 
 pub async fn start_deploy(ex: impl PgExecutor<'_>, id: Uuid) -> DbResult<bool> {
-    Ok(sqlx::query!("UPDATE releases SET status = 'deploying', started_at = now() WHERE id = $1 AND status = 'queued'", id)
-        .execute(ex)
-        .await?
-        .rows_affected()
+    Ok(sqlx::query!(
+        "UPDATE releases SET status = 'deploying', started_at = now() WHERE id = $1 AND status = 'queued'",
+        id
+    )
+    .execute(ex)
+    .await?
+    .rows_affected()
         == 1)
 }
 
-pub async fn finish_deploy(tx: &mut Transaction<'_, Postgres>, r: &Release, error: Option<&str>, endpoints: &serde_json::Value) -> DbResult<()> {
+pub async fn finish_deploy(
+    tx: &mut Transaction<'_, Postgres>,
+    r: &Release,
+    error: Option<&str>,
+    endpoints: &serde_json::Value,
+) -> DbResult<()> {
     let status = if error.is_none() { ReleaseStatus::Released } else { ReleaseStatus::Failed };
     sqlx::query!(
         "UPDATE releases SET status = $2, finished_at = now(), error = $3, endpoints = $4 WHERE id = $1",
@@ -459,7 +489,15 @@ pub async fn secrets(ex: impl PgExecutor<'_>, project_id: Uuid, env_key: &str) -
     .await?)
 }
 
-pub async fn put_secret(ex: impl PgExecutor<'_>, project_id: Uuid, env_key: &str, name: &str, cipher: &[u8], generated: bool, by: Option<Uuid>) -> DbResult<()> {
+pub async fn put_secret(
+    ex: impl PgExecutor<'_>,
+    project_id: Uuid,
+    env_key: &str,
+    name: &str,
+    cipher: &[u8],
+    generated: bool,
+    by: Option<Uuid>,
+) -> DbResult<()> {
     sqlx::query!(
         r#"INSERT INTO environment_secrets (project_id, env_key, name, cipher, generated, updated_by) VALUES ($1, $2, $3, $4, $5, $6)
            ON CONFLICT (project_id, env_key, name) DO UPDATE SET cipher = $4, generated = $5, updated_by = $6, updated_at = now()"#,
@@ -475,7 +513,13 @@ pub async fn put_secret(ex: impl PgExecutor<'_>, project_id: Uuid, env_key: &str
     Ok(())
 }
 
-pub async fn insert_generated_secret(ex: impl PgExecutor<'_>, project_id: Uuid, env_key: &str, name: &str, cipher: &[u8]) -> DbResult<()> {
+pub async fn insert_generated_secret(
+    ex: impl PgExecutor<'_>,
+    project_id: Uuid,
+    env_key: &str,
+    name: &str,
+    cipher: &[u8],
+) -> DbResult<()> {
     sqlx::query!(
         r#"INSERT INTO environment_secrets (project_id, env_key, name, cipher, generated) VALUES ($1, $2, $3, $4, true)
            ON CONFLICT (project_id, env_key, name) DO NOTHING"#,
@@ -490,9 +534,14 @@ pub async fn insert_generated_secret(ex: impl PgExecutor<'_>, project_id: Uuid, 
 }
 
 pub async fn delete_secret(ex: impl PgExecutor<'_>, project_id: Uuid, env_key: &str, name: &str) -> DbResult<bool> {
-    Ok(sqlx::query!("DELETE FROM environment_secrets WHERE project_id = $1 AND env_key = $2 AND name = $3", project_id, env_key, name)
-        .execute(ex)
-        .await?
-        .rows_affected()
+    Ok(sqlx::query!(
+        "DELETE FROM environment_secrets WHERE project_id = $1 AND env_key = $2 AND name = $3",
+        project_id,
+        env_key,
+        name
+    )
+    .execute(ex)
+    .await?
+    .rows_affected()
         == 1)
 }

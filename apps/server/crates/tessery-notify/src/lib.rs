@@ -46,7 +46,11 @@ fn transport(s: &MailSettings, password: Option<&str>) -> Result<AsyncSmtpTransp
         _ => AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&s.host),
     };
     let builder = builder.port(s.port).timeout(Some(Duration::from_secs(15)));
-    let builder = if s.username.is_empty() { builder } else { builder.credentials(Credentials::new(s.username.clone(), password.unwrap_or_default().to_owned())) };
+    let builder = if s.username.is_empty() {
+        builder
+    } else {
+        builder.credentials(Credentials::new(s.username.clone(), password.unwrap_or_default().to_owned()))
+    };
     Ok(builder.build())
 }
 
@@ -54,13 +58,20 @@ pub const RESEND_URL: &str = "https://api.resend.com";
 
 /// `TESSERY_RESEND_URL`, for a proxy in front of Resend or a stand-in during tests.
 pub fn resend_url_from_env() -> Option<String> {
-    std::env::var("TESSERY_RESEND_URL").ok().map(|u| u.trim().trim_end_matches('/').to_owned()).filter(|u| !u.is_empty())
+    std::env::var("TESSERY_RESEND_URL")
+        .ok()
+        .map(|u| u.trim().trim_end_matches('/').to_owned())
+        .filter(|u| !u.is_empty())
 }
 
 async fn send_resend(s: &MailSettings, key: Option<&str>, to: &str, subject: &str, body: &str) -> Result<(), String> {
     let key = key.filter(|k| !k.is_empty()).ok_or("no Resend API key is saved")?;
     to.parse::<lettre::message::Mailbox>().map_err(|e| format!("{to} is not a valid address: {e}"))?;
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(15)).user_agent("tessery").build().map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .user_agent("tessery")
+        .build()
+        .map_err(|e| e.to_string())?;
     let res = client
         .post(format!("{}/emails", s.resend_url.as_deref().unwrap_or(RESEND_URL)))
         .bearer_auth(key)
@@ -72,12 +83,23 @@ async fn send_resend(s: &MailSettings, key: Option<&str>, to: &str, subject: &st
         return Ok(());
     }
     let status = res.status();
-    let reason = res.json::<Value>().await.ok().and_then(|v| v["message"].as_str().map(str::to_owned)).unwrap_or_else(|| status.to_string());
+    let reason = res
+        .json::<Value>()
+        .await
+        .ok()
+        .and_then(|v| v["message"].as_str().map(str::to_owned))
+        .unwrap_or_else(|| status.to_string());
     Err(format!("Resend refused the message: {reason}"))
 }
 
 /// Sends a plain-text email with the instance's provider. `secret` is the SMTP password or the Resend API key.
-pub async fn send_email(s: &MailSettings, secret: Option<&str>, to: &str, subject: &str, body: &str) -> Result<(), String> {
+pub async fn send_email(
+    s: &MailSettings,
+    secret: Option<&str>,
+    to: &str,
+    subject: &str,
+    body: &str,
+) -> Result<(), String> {
     if s.provider == "resend" {
         return send_resend(s, secret, to, subject, body).await;
     }
@@ -89,7 +111,11 @@ pub async fn send_email(s: &MailSettings, secret: Option<&str>, to: &str, subjec
         .header(ContentType::TEXT_PLAIN)
         .body(body.to_owned())
         .map_err(|e| e.to_string())?;
-    transport(s, password)?.send(message).await.map(drop).map_err(|e| format!("the mail server refused the message: {e}"))
+    transport(s, password)?
+        .send(message)
+        .await
+        .map(drop)
+        .map_err(|e| format!("the mail server refused the message: {e}"))
 }
 
 pub fn valid_sender(from: &str) -> bool {
@@ -144,31 +170,56 @@ pub fn public(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v) => {
             let o = v.octets();
-            !(v.is_loopback() || v.is_private() || v.is_link_local() || v.is_unspecified() || v.is_broadcast() || v.is_documentation() || o[0] == 0 || (o[0] == 100 && (o[1] & 0xc0) == 64))
+            !(v.is_loopback()
+                || v.is_private()
+                || v.is_link_local()
+                || v.is_unspecified()
+                || v.is_broadcast()
+                || v.is_documentation()
+                || o[0] == 0
+                || (o[0] == 100 && (o[1] & 0xc0) == 64))
         }
         IpAddr::V6(v) => {
             let first = v.segments()[0];
-            !(v.is_loopback() || v.is_unspecified() || (first & 0xfe00) == 0xfc00 || (first & 0xffc0) == 0xfe80 || v.to_ipv4_mapped().is_some_and(|m| !public(IpAddr::V4(m))))
+            !(v.is_loopback()
+                || v.is_unspecified()
+                || (first & 0xfe00) == 0xfc00
+                || (first & 0xffc0) == 0xfe80
+                || v.to_ipv4_mapped().is_some_and(|m| !public(IpAddr::V4(m))))
         }
     }
 }
 
 fn host_of(url: &str) -> String {
-    reqwest::Url::parse(url).ok().and_then(|u| u.host_str().map(|h| match u.port() {
-        Some(p) => format!("{h}:{p}"),
-        None => h.to_owned(),
-    })).unwrap_or_else(|| "the webhook".into())
+    reqwest::Url::parse(url)
+        .ok()
+        .and_then(|u| {
+            u.host_str().map(|h| match u.port() {
+                Some(p) => format!("{h}:{p}"),
+                None => h.to_owned(),
+            })
+        })
+        .unwrap_or_else(|| "the webhook".into())
 }
 
 async fn client_for(url: &str, allow_private: bool) -> Result<reqwest::Client, String> {
     let parsed = reqwest::Url::parse(url).map_err(|_| "the URL is not valid".to_owned())?;
     let host = parsed.host_str().ok_or("the URL has no host")?.trim_matches(['[', ']']).to_owned();
     let port = parsed.port_or_known_default().unwrap_or(443);
-    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(15)).user_agent("tessery").redirect(reqwest::redirect::Policy::none());
+    let mut builder = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .user_agent("tessery")
+        .redirect(reqwest::redirect::Policy::none());
     if !allow_private {
-        let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host.as_str(), port)).await.map_err(|_| format!("{} does not resolve", host_of(url)))?.collect();
+        let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host.as_str(), port))
+            .await
+            .map_err(|_| format!("{} does not resolve", host_of(url)))?
+            .collect();
         if addrs.is_empty() || addrs.iter().any(|a| !public(a.ip())) {
-            return Err(format!("{} is on a private network; set TESSERY_NOTIFY_ALLOW_PRIVATE=1 on the server and worker to allow that", host_of(url)));
+            return Err(format!(
+                "{} is on a private network; set TESSERY_NOTIFY_ALLOW_PRIVATE=1 on the server and worker to allow that",
+                host_of(url)
+            ));
         }
         builder = builder.resolve_to_addrs(&host, &addrs);
     }
@@ -176,7 +227,13 @@ async fn client_for(url: &str, allow_private: bool) -> Result<reqwest::Client, S
 }
 
 async fn post(url: &str, body: Value, allow_private: bool) -> Result<(), String> {
-    let r = client_for(url, allow_private).await?.post(url).json(&body).send().await.map_err(|e| format!("could not reach {}: {}", host_of(url), e.without_url()))?;
+    let r = client_for(url, allow_private)
+        .await?
+        .post(url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("could not reach {}: {}", host_of(url), e.without_url()))?;
     if r.status().is_success() { Ok(()) } else { Err(format!("{} answered {}", host_of(url), r.status().as_u16())) }
 }
 
@@ -198,10 +255,19 @@ pub fn payload(kind: &str, target: &str, e: &Event) -> Result<(String, Value), S
         "slack" => Ok((target.to_owned(), json!({ "text": e.text() }))),
         "discord" => Ok((target.to_owned(), json!({ "content": e.text() }))),
         "telegram" => {
-            let (token, chat) = target.split_once(':').and_then(|(bot, rest)| rest.rsplit_once('@').map(|(secret, chat)| (format!("{bot}:{secret}"), chat))).ok_or("use bot-token@chat-id")?;
-            Ok((format!("https://api.telegram.org/bot{token}/sendMessage"), json!({ "chat_id": chat, "text": e.text(), "disable_web_page_preview": true })))
+            let (token, chat) = target
+                .split_once(':')
+                .and_then(|(bot, rest)| rest.rsplit_once('@').map(|(secret, chat)| (format!("{bot}:{secret}"), chat)))
+                .ok_or("use bot-token@chat-id")?;
+            Ok((
+                format!("https://api.telegram.org/bot{token}/sendMessage"),
+                json!({ "chat_id": chat, "text": e.text(), "disable_web_page_preview": true }),
+            ))
         }
-        "webhook" => Ok((target.to_owned(), json!({ "event": e.kind, "project": e.project, "env": e.env, "title": e.title, "detail": e.detail, "link": e.link }))),
+        "webhook" => Ok((
+            target.to_owned(),
+            json!({ "event": e.kind, "project": e.project, "env": e.env, "title": e.title, "detail": e.detail, "link": e.link }),
+        )),
         other => Err(format!("unknown channel {other}")),
     }
 }
@@ -221,7 +287,12 @@ pub async fn deliver(d: &Delivery<'_>, e: &Event) -> Result<(), String> {
 pub fn check_target(kind: &str, target: &str) -> Result<(), String> {
     let t = target.trim();
     match kind {
-        "email" if !recipients(t).is_empty() && recipients(t).iter().all(|x| x.parse::<lettre::message::Mailbox>().is_ok()) => Ok(()),
+        "email"
+            if !recipients(t).is_empty()
+                && recipients(t).iter().all(|x| x.parse::<lettre::message::Mailbox>().is_ok()) =>
+        {
+            Ok(())
+        }
         "email" => Err("use one or more email addresses separated by commas".into()),
         "slack" | "discord" | "webhook" if t.starts_with("https://") || t.starts_with("http://") => Ok(()),
         "slack" | "discord" | "webhook" => Err("use the full webhook URL".into()),
@@ -236,7 +307,14 @@ mod tests {
     use super::*;
 
     fn event() -> Event {
-        Event { kind: "release.failed".into(), project: "shop".into(), env: "prod".into(), title: "Release to Production failed".into(), detail: "web did not become healthy".into(), link: Some("https://t.example/projects/1".into()) }
+        Event {
+            kind: "release.failed".into(),
+            project: "shop".into(),
+            env: "prod".into(),
+            title: "Release to Production failed".into(),
+            detail: "web did not become healthy".into(),
+            link: Some("https://t.example/projects/1".into()),
+        }
     }
 
     #[test]
