@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  typescript:
+    name: Core and web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install core
+        working-directory: packages/core
+        run: npm ci
+
+      - name: Typecheck core
+        working-directory: packages/core
+        run: npm run typecheck
+
+      - name: Test core
+        working-directory: packages/core
+        run: npm test
+
+      - name: Build the engine
+        working-directory: packages/core
+        run: npm run build:engine
+
+      - name: Install web
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Typecheck web
+        working-directory: apps/web
+        run: npm run typecheck
+
+      - name: Build web
+        working-directory: apps/web
+        run: npm run build
