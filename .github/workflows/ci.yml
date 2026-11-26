@@ -45,7 +45,7 @@ jobs:
       run:
         working-directory: packages/core
     env:
-      TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform-plugins
+      TF_PROVIDER_MIRROR: ${{ github.workspace }}/.terraform-mirror
     steps:
       - uses: actions/checkout@v4
 
@@ -62,9 +62,9 @@ jobs:
 
       - uses: actions/cache@v4
         with:
-          path: .terraform-plugins
-          key: terraform-plugins-${{ matrix.provider }}-${{ hashFiles('packages/core/src/codegen/terraform/*.ts') }}
-          restore-keys: terraform-plugins-${{ matrix.provider }}-
+          path: .terraform-mirror
+          key: terraform-mirror-${{ matrix.provider }}-${{ hashFiles('packages/core/src/codegen/terraform/*.ts') }}
+          restore-keys: terraform-mirror-${{ matrix.provider }}-
 
       - run: npm ci
       - run: npm run terraform:fixtures -- dist/terraform ${{ matrix.provider }}
