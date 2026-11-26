@@ -54,6 +54,12 @@ function service(ns: string, w: Workload) {
   }
 }
 
+export function replicaRange(w: Workload, env: Environment): { min: number; max: number } {
+  const scaled = (n: number) => Math.max(1, Math.round(n * env.scale))
+  const min = scaled(w.node.replicas)
+  return { min, max: Math.max(min, w.node.maxReplicas ? scaled(w.node.maxReplicas) : min) }
+}
+
 export function manifests(doc: ProjectDoc, env: Environment): string {
   const t: K8sTarget = env.target?.kind === 'kubernetes' ? env.target : { kind: 'kubernetes' }
   const ns = namespaceOf(doc, env)
@@ -75,22 +81,45 @@ export function manifests(doc: ProjectDoc, env: Environment): string {
         },
       })
     } else {
+      const { min, max } = replicaRange(w, env)
       docs.push({
         apiVersion: 'apps/v1', kind: 'Deployment', metadata: { name: w.name, namespace: ns, labels: labels(w) },
         spec: {
-          replicas: Math.max(1, Math.round(w.node.replicas * env.scale)),
+          // Left out when autoscaled, or every deploy would reset the count the autoscaler chose.
+          replicas: max > min ? undefined : min,
           selector: { matchLabels: { app: w.name } },
           strategy: env.strategy === 'recreate' ? { type: 'Recreate' } : { type: 'RollingUpdate', rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } },
           template: pod,
         },
       })
+      if (max > min) {
+        docs.push({
+          apiVersion: 'autoscaling/v2', kind: 'HorizontalPodAutoscaler', metadata: { name: w.name, namespace: ns, labels: labels(w) },
+          spec: {
+            scaleTargetRef: { apiVersion: 'apps/v1', kind: 'Deployment', name: w.name },
+            minReplicas: min, maxReplicas: max,
+            metrics: [{ type: 'Resource', resource: { name: 'cpu', target: { type: 'Utilization', averageUtilization: 70 } } }],
+          },
+        })
+      }
+      if (max > 1) {
+        docs.push({
+          apiVersion: 'policy/v1', kind: 'PodDisruptionBudget', metadata: { name: w.name, namespace: ns, labels: labels(w) },
+          spec: { maxUnavailable: 1, selector: { matchLabels: { app: w.name } } },
+        })
+      }
     }
     docs.push(service(ns, w))
     const host = w.public && w.port ? publicHost(doc, env, w.name, t) : undefined
     if (host) {
       docs.push({
-        apiVersion: 'networking.k8s.io/v1', kind: 'Ingress', metadata: { name: w.name, namespace: ns },
-        spec: { ingressClassName: t.ingressClass, rules: [{ host, http: { paths: [{ path: '/', pathType: 'Prefix', backend: { service: { name: w.name, port: { number: w.port } } } }] } }] },
+        apiVersion: 'networking.k8s.io/v1', kind: 'Ingress',
+        metadata: { name: w.name, namespace: ns, annotations: t.certIssuer ? { 'cert-manager.io/cluster-issuer': t.certIssuer } : undefined },
+        spec: {
+          ingressClassName: t.ingressClass,
+          tls: t.certIssuer ? [{ hosts: [host], secretName: `${w.name}-tls` }] : undefined,
+          rules: [{ host, http: { paths: [{ path: '/', pathType: 'Prefix', backend: { service: { name: w.name, port: { number: w.port } } } }] } }],
+        },
       })
     }
   }

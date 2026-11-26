@@ -89,6 +89,7 @@ export interface SystemNode {
   config: Record<string, ConfigValue>
   placement: Placement
   replicas: number
+  maxReplicas?: number
   notes?: string
   groupId?: string
 }
@@ -237,7 +238,7 @@ export interface Page {
 export type DeployTarget =
   | { kind: 'git' }
   | { kind: 'docker'; host?: string; server?: string; domain?: string; hosts?: Record<string, string> }
-  | { kind: 'kubernetes'; namespace?: string; registry?: string; domain?: string; ingressClass?: string; publicPort?: number }
+  | { kind: 'kubernetes'; namespace?: string; registry?: string; domain?: string; ingressClass?: string; certIssuer?: string; publicPort?: number }
 
 export interface Environment {
   id: string

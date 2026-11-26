@@ -51,7 +51,12 @@ function NodeInspector({ node }: { node: SystemNode }) {
       </div>
       <Section title="Identity">
         <Field label="Name"><Input value={node.name} onCommit={(v) => edit('updateNode', { id: node.id, patch: { name: v } })} /></Field>
-        {(tech.category === 'compute' || tech.category === 'network') && <Field label="Replicas"><NumberInput value={node.replicas} min={1} max={500} onCommit={(v) => edit('updateNode', { id: node.id, patch: { replicas: v } })} /></Field>}
+        {(tech.category === 'compute' || tech.category === 'network') && (
+          <>
+            <Field label="Replicas"><NumberInput value={node.replicas} min={1} max={500} onCommit={(v) => edit('updateNode', { id: node.id, patch: { replicas: v, maxReplicas: node.maxReplicas && node.maxReplicas > v ? node.maxReplicas : undefined } })} /></Field>
+            <Field label="Max replicas" hint="On Kubernetes, scales between replicas and this on CPU use"><NumberInput value={node.maxReplicas ?? node.replicas} min={node.replicas} max={500} onCommit={(v) => edit('updateNode', { id: node.id, patch: { maxReplicas: v > node.replicas ? v : undefined } })} /></Field>
+          </>
+        )}
         <p className={s.desc}>{tech.description}</p>
       </Section>
       {tech.id === 'service' && (

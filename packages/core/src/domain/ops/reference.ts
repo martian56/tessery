@@ -5,7 +5,7 @@ A string argument that is exactly "$N" is replaced by the result of operation N 
 Nodes and connections
   addNode { techId, x, y, name?, config?, id? }  -> node id. techId from design_reference catalog, e.g. service, worker, postgres, redis, web-app, api-gateway.
       A service's config takes language (TypeScript, Go, Python, Rust, Java, ...), framework (Fastify, Hono, Express, chi, gin, FastAPI, ...), apiStyle (rest, graphql, grpc, websocket) and port.
-  updateNode { id, patch: { name?, replicas?, notes? } }
+  updateNode { id, patch: { name?, replicas?, maxReplicas?, notes? } }
   setConfig { id, key, value }
   removeNodes { ids }
   connect { source, target, sourcePort?, targetPort? }  -> edge id. Direction is caller to callee: web-app -> service -> postgres.
@@ -132,7 +132,7 @@ Environments
   updateEnv { envId, patch: { name?, approval?, scale?, strategy?, target?, traceRetentionDays?, contractTests?, backups?: { integration, bucket?, every: "hourly" | "daily" | "weekly", keep } } }
       contractTests: "full" (create, change and delete a throwaway record), "read" (no writes; the default for the last
       environment) or "off". A release fails, naming the check, when a service answers differently from its design.
-      target: { kind: "docker", server?, host?, domain?, hosts?: { [node]: hostname } } | { kind: "kubernetes", namespace?, registry?, domain?, ingressClass?, publicPort? } | { kind: "git" }
+      target: { kind: "docker", server?, host?, domain?, hosts?: { [node]: hostname } } | { kind: "kubernetes", namespace?, registry?, domain?, ingressClass?, certIssuer?, publicPort? } | { kind: "git" }
   addEnv { name, provider, region }
   removeEnv { envId }
 
