@@ -41,7 +41,7 @@ function instance(c: NodeCtx, type: string, image: 'ami_arm64' | 'ami_amd64' | '
       subnet_id: raw('aws_subnet.this[0].id'),
       vpc_security_group_ids: SG,
       key_name: raw('aws_key_pair.this.key_name'),
-      user_data: c.cloudInit ? raw(`file("${c.cloudInit}")`) : undefined,
+      user_data: c.userData,
       tags: { Name: c.name },
       root_block_device: nested({ volume_size: diskGb, volume_type: 'gp3' }),
     }),
@@ -135,9 +135,18 @@ function taskDefinition(c: NodeCtx): string {
 function awsCron(schedule: string): string {
   const parts = schedule.trim().split(/\s+/)
   if (parts.length !== 5) return '0 * * * ? *'
-  const [min, hour, dom, mon, dow] = parts.map((p, i) => p.replace(/^\*\//, i < 2 ? '0/' : '1/'))
+  const [min, hour, dom, mon] = parts.slice(0, 4).map((p, i) => p.replace(/^\*\//, i < 2 ? '0/' : '1/'))
+  const dow = parts[4]
   if (dow === '*') return `${min} ${hour} ${dom} ${mon} ? *`
-  return `${min} ${hour} ? ${mon} ${dow.replace(/\d/g, (d) => String((Number(d) % 7) + 1))} *`
+  const days = dow.split(',').flatMap((item) => {
+    const [range, step] = item.split('/')
+    if (!step) return [range.replace(/\d/g, (d) => String((Number(d) % 7) + 1))]
+    const [from, to] = range === '*' ? [0, 6] : range.split('-').map(Number)
+    const out: string[] = []
+    for (let d = from; d <= (to ?? 6); d += Math.max(1, Number(step) || 1)) out.push(String((d % 7) + 1))
+    return out
+  })
+  return `${min} ${hour} ? ${mon} ${[...new Set(days)].join(',')} *`
 }
 
 const RETENTION = [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653]
@@ -296,7 +305,7 @@ export const aws: TfProvider = {
         origin: nested({
           domain_name: raw(`var.${c.id}_origin`),
           origin_id: 'origin',
-          custom_origin_config: nested({ http_port: 80, https_port: 443, origin_protocol_policy: 'https-only', origin_ssl_protocols: ['TLSv1.2'] }),
+          custom_origin_config: nested({ http_port: 80, https_port: 443, origin_protocol_policy: raw(`var.${c.id}_origin_protocol`), origin_ssl_protocols: ['TLSv1.2'] }),
         }),
         default_cache_behavior: nested({
           target_origin_id: 'origin',
@@ -308,7 +317,10 @@ export const aws: TfProvider = {
         restrictions: nested({ geo_restriction: nested({ restriction_type: 'none' }) }),
         viewer_certificate: nested({ cloudfront_default_certificate: true }),
       }),
-      variables: block('variable', [`${c.id}_origin`], { type: raw('string'), description: `Domain ${c.node.name} fetches content from, like api.example.com or a load balancer address.` }),
+      variables: [
+        block('variable', [`${c.id}_origin`], { type: raw('string'), description: `Domain ${c.node.name} fetches content from, like api.example.com or a load balancer address.` }),
+        block('variable', [`${c.id}_origin_protocol`], { type: raw('string'), default: 'https-only', description: `How ${c.node.name} talks to the origin. Use http-only for a load balancer that only listens on port 80.` }),
+      ].join('\n'),
       outputs: { [`${c.id}_domain`]: { value: `aws_cloudfront_distribution.${c.id}.domain_name`, description: `CloudFront address of ${c.node.name}` } },
     }),
     dns: (c) => (c.use('domain'), {
@@ -604,7 +616,7 @@ export const aws: TfProvider = {
             broker_name: short(c.name, 50),
             engine_type: 'RabbitMQ',
             engine_version: '3.13',
-            host_instance_type: 'mq.t3.micro',
+            host_instance_type: 'mq.m7g.medium',
             deployment_mode: 'SINGLE_INSTANCE',
             auto_minor_version_upgrade: true,
             publicly_accessible: false,

@@ -14,7 +14,7 @@ export function vpsFiles(doc: ProjectDoc, env: Environment): Record<string, stri
   const files: Record<string, string> = {}
   vms.forEach((n) => {
     const t = TECH_BY_ID[n.techId]
-    files[`infra/${env.id}/cloud-init/${n.name}.yaml`] = `#cloud-config: ${n.name} (${t.name})\npackage_update: true\npackages: [docker.io, docker-compose-v2, fail2ban, unattended-upgrades]\nruncmd:\n  - ufw default deny incoming\n  - ufw allow 22/tcp${n.config.port ? `\n  - ufw allow from 10.0.0.0/8 to any port ${n.config.port}` : ''}\n  - ufw --force enable\n  - docker run -d --restart=always --name ${n.name} ${n.config.port ? `-p ${n.config.port}:${n.config.port} ` : ''}${t.image === 'build' ? `ghcr.io/${doc.name}/${n.name}:latest` : t.image}\n`
+    files[`infra/${env.id}/cloud-init/${n.name}.yaml`] = `#cloud-config: ${n.name} (${t.name})\npackage_update: true\npackages: [docker.io, docker-compose-v2, fail2ban, unattended-upgrades]\nruncmd:\n  - ufw default deny incoming\n  - ufw allow 22/tcp${n.config.port ? `\n  - ufw allow from 10.0.0.0/8 to any port ${n.config.port}` : ''}\n  - ufw --force enable\n  - docker run -d --restart=always --name ${n.name} ${n.config.port ? `-p ${n.config.port}:${n.config.port} ` : ''}\${image}\n`
   })
   files[`infra/${env.id}/ansible/inventory.ini`] = Object.entries(vms.reduce<Record<string, SystemNode[]>>((a, n) => { const k = TECH_BY_ID[n.techId].category; (a[k] ??= []).push(n); return a }, {}))
     .map(([g, ns]) => `[${g}]\n${ns.map((n) => `${n.name} ansible_host=<${PROVIDER_BY_ID[effectivePlacement(n, env).providerId]?.name} IP>`).join('\n')}`).join('\n\n') + '\n'

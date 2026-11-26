@@ -1,10 +1,16 @@
 import { block, nested, raw, resource, type Body } from './hcl'
 import type { Generated, NodeCtx, TfProvider } from './types'
 
-const APP_REGION = 'replace(var.region, "/[0-9]+$/", "")'
 
 function appImage(c: NodeCtx): Body {
-  if (c.tech.image === 'build') return { registry_type: 'GHCR', registry: raw('trimprefix(var.image_registry, "ghcr.io/")'), repository: c.node.name, tag: raw('var.image_tag') }
+  if (c.tech.image === 'build') {
+    return {
+      registry_type: raw('startswith(var.image_registry, "registry.digitalocean.com/") ? "DOCR" : "GHCR"'),
+      registry: raw('trimprefix(trimprefix(var.image_registry, "registry.digitalocean.com/"), "ghcr.io/")'),
+      repository: c.node.name,
+      tag: raw('var.image_tag'),
+    }
+  }
   const [path, tag = 'latest'] = (c.tech.image ?? 'nginx:stable').split(':')
   const [registry, ...rest] = path.includes('/') ? path.split('/') : ['library', path]
   return { registry_type: 'DOCKER_HUB', registry, repository: rest.join('/') || path, tag }
@@ -32,7 +38,7 @@ function droplet(c: NodeCtx, size: string, image: string): Generated {
       name: c.name, size, image, region: c.region,
       vpc_uuid: raw('digitalocean_vpc.this.id'),
       ssh_keys: [raw('digitalocean_ssh_key.this.fingerprint')],
-      user_data: c.cloudInit ? raw(`file("${c.cloudInit}")`) : undefined,
+      user_data: c.userData,
       tags: [c.prefix],
     }),
     outputs: { [`${c.id}_ip`]: { value: `digitalocean_droplet.${c.id}.ipv4_address`, description: `Public IPv4 address of ${c.node.name}` } },
@@ -49,12 +55,14 @@ export const digitalocean: TfProvider = {
     block('variable', ['do_token'], { type: raw('string'), sensitive: true, description: 'DigitalOcean API token with write access.' }),
     block('variable', ['spaces_access_id'], { type: raw('string'), default: raw('null'), description: 'Spaces access key, needed for buckets.' }),
     block('variable', ['spaces_secret_key'], { type: raw('string'), default: raw('null'), sensitive: true, description: 'Spaces secret key, needed for buckets.' }),
-    block('variable', ['ssh_public_key'], { type: raw('string'), default: raw('null'), description: 'Public key allowed to log in to the Droplets as root.' }),
   ].join('\n'),
   provider: block('provider', ['digitalocean'], { token: raw('var.do_token'), spaces_access_id: raw('var.spaces_access_id'), spaces_secret_key: raw('var.spaces_secret_key') }),
   shared: {
     vpc: (c) => ({ hcl: resource('digitalocean_vpc', 'this', { name: c.prefix, region: raw('var.region') }) }),
-    ssh_key: (c) => ({ hcl: resource('digitalocean_ssh_key', 'this', { name: c.prefix, public_key: raw('var.ssh_public_key') }) }),
+    ssh_key: (c) => ({
+      hcl: resource('digitalocean_ssh_key', 'this', { name: c.prefix, public_key: raw('var.ssh_public_key') }),
+      variables: block('variable', ['ssh_public_key'], { type: raw('string'), description: 'Public key allowed to log in to the Droplets as root.' }),
+    }),
     domain: () => ({ hcl: '', variables: block('variable', ['domain'], { type: raw('string'), description: 'Domain DigitalOcean hosts the DNS for, like example.com.' }) }),
     alert_email: () => ({ hcl: '', variables: block('variable', ['alert_email'], { type: raw('string'), description: 'Address that gets monitoring alerts.' }) }),
   },
@@ -67,7 +75,7 @@ export const digitalocean: TfProvider = {
         hcl: resource('digitalocean_app', c.id, {
           spec: nested({
             name: c.name.slice(0, 32).replace(/-+$/, ''),
-            region: raw(APP_REGION),
+            region: raw(`replace(${c.region.expr}, "/[0-9]+$/", "")`),
             ...(web ? { service: nested({ ...component, http_port: c.port }) } : { worker: nested(component) }),
           }),
         }),

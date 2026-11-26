@@ -36,10 +36,21 @@ function provisioned(doc: ProjectDoc, env: Environment): Map<string, SystemNode[
   return by
 }
 
-function gap(n: SystemNode, env: Environment): string | undefined {
+const regionOf = (n: SystemNode, env: Environment) => effectivePlacement(n, env).regionId ?? env.defaultRegion
+
+/** The one region a provider's Terraform runs in: the environment's default when a node uses it, else the most used. */
+function providerRegion(pid: string, nodes: SystemNode[], env: Environment): string {
+  const counts = new Map<string, number>()
+  nodes.forEach((n) => counts.set(regionOf(n, env), (counts.get(regionOf(n, env)) ?? 0) + 1))
+  if (PROVIDER_BY_ID[pid].regions.some((r) => r.id === env.defaultRegion) && counts.has(env.defaultRegion)) return env.defaultRegion
+  return [...counts].sort((a, b) => b[1] - a[1])[0][0]
+}
+
+function gap(n: SystemNode, env: Environment, region: string): string | undefined {
   const pl = effectivePlacement(n, env)
   const p = TF_PROVIDERS[pl.providerId]
   const where = PROVIDER_BY_ID[pl.providerId]?.name ?? pl.providerId
+  if (p && regionOf(n, env) !== region) return `${n.name} is in ${regionOf(n, env)}, but this environment's ${where} Terraform runs in ${region}. Move it to ${region} or into an environment of its own`
   if (!p) return `Tessery writes Terraform for AWS, Google Cloud, Azure, Hetzner and DigitalOcean, so ${n.name} on ${where} is left out. Move it to one of them or create it by hand`
   if (pl.mode === 'self-hosted') return p.vm ? undefined : `${where} servers can't be created with Terraform`
   const t = TECH_BY_ID[n.techId]
@@ -51,9 +62,12 @@ function gap(n: SystemNode, env: Environment): string | undefined {
 
 export function terraformProblems(doc: ProjectDoc, env: Environment): { nodeId: string; message: string }[] {
   if ((env.target?.kind ?? 'git') !== 'git') return []
-  return [...provisioned(doc, env).values()].flat().flatMap((n) => {
-    const message = gap(n, env)
-    return message ? [{ nodeId: n.id, message }] : []
+  return [...provisioned(doc, env)].flatMap(([pid, nodes]) => {
+    const region = providerRegion(pid, nodes, env)
+    return nodes.flatMap((n) => {
+      const message = gap(n, env, region)
+      return message ? [{ nodeId: n.id, message }] : []
+    })
   })
 }
 
@@ -64,10 +78,8 @@ export function terraform(doc: ProjectDoc, env: Environment): Record<string, str
     const p = TF_PROVIDERS[pid]
     if (!p) continue
     const provider = PROVIDER_BY_ID[pid]
-    const regionOf = (n: SystemNode) => effectivePlacement(n, env).regionId ?? env.defaultRegion
-    const counts = new Map<string, number>()
-    nodes.forEach((n) => counts.set(regionOf(n), (counts.get(regionOf(n)) ?? 0) + 1))
-    const region = provider.regions.some((r) => r.id === env.defaultRegion) && counts.has(env.defaultRegion) ? env.defaultRegion : [...counts].sort((a, b) => b[1] - a[1])[0][0]
+    const region = providerRegion(pid, nodes, env)
+    const ids = new Set<string>()
     const shared = new Set<string>()
     const outputs: Record<string, Output> = {}
     let extraVars = ''
@@ -76,23 +88,25 @@ export function terraform(doc: ProjectDoc, env: Environment): Record<string, str
     const parts: Generated[] = []
     const base: SharedCtx = { doc, env, prefix }
     for (const n of nodes) {
-      if (gap(n, env)) continue
+      if (gap(n, env, region)) continue
       const t = TECH_BY_ID[n.techId]
       const pl = effectivePlacement(n, env)
-      const id = tfName(n.name)
-      const r = regionOf(n)
+      let id = tfName(n.name)
+      for (let i = 2; ids.has(id); i++) id = `${tfName(n.name)}_${i}`
+      ids.add(id)
+      const image = t.image === 'build' ? `"\${var.image_registry}/${n.name}:\${var.image_tag}"` : JSON.stringify(t.image ?? 'nginx:stable')
       const ctx: NodeCtx = {
         ...base, node: n, tech: t, id,
         name: cloudName(`${prefix}-${n.name}`),
-        region: r === region ? raw('var.region') : raw(JSON.stringify(r)),
+        region: raw('var.region'),
         product: checkPlacement(n, env).product,
-        plan: n.placement.planId ?? fitPlan(provider, n, t)?.id ?? provider.plans[0]?.id ?? 'small',
+        plan: pl.planId ?? fitPlan(provider, n, t)?.id ?? provider.plans[0]?.id ?? 'small',
         port: typeof n.config.port === 'number' ? n.config.port : undefined,
-        image: t.image === 'build' ? raw(`"\${var.image_registry}/${n.name}:\${var.image_tag}"`) : raw(JSON.stringify(t.image ?? 'nginx:stable')),
+        image: raw(image),
         replicas: t.category === 'compute' || t.category === 'network' ? Math.max(1, Math.round(n.replicas * env.scale)) : 1,
         version: n.config.version === undefined ? undefined : String(n.config.version),
         storageGb: Math.max(1, Number(n.config.storageGb ?? 20)),
-        cloudInit: hasCloudInit(n, env) ? `\${path.module}/../cloud-init/${n.name}.yaml` : undefined,
+        userData: hasCloudInit(n, env) ? raw(`templatefile("\${path.module}/../cloud-init/${n.name}.yaml", { image = ${image} })`) : undefined,
         use: (key) => shared.add(key),
       }
       const how = pl.mode === 'self-hosted' ? p.vm! : (p.managed[t.id] ?? p.managed[t.capability!]) as (c: NodeCtx) => Generated

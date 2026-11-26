@@ -130,7 +130,7 @@ function sql(c: NodeCtx, version: string): Generated {
 function instance(c: NodeCtx, machineType: string, diskGb: number, extra: Body = {}): Generated {
   network(c)
   c.use('ssh_key')
-  const userData = c.cloudInit ? `, { user-data = file("${c.cloudInit}") }` : ''
+  const userData = c.userData ? `, { user-data = ${c.userData.expr} }` : ''
   return {
     hcl: resource('google_compute_instance', c.id, {
       name: gname(c.name),
@@ -395,6 +395,7 @@ export const gcp: TfProvider = {
     cdn: (c) => ({
       hcl: [
         resource('google_storage_bucket', c.id, { name: `${c.name}-origin`, location: c.region, uniform_bucket_level_access: true }),
+        resource('google_storage_bucket_iam_member', `${c.id}_public`, { bucket: raw(`google_storage_bucket.${c.id}.name`), role: 'roles/storage.objectViewer', member: 'allUsers' }),
         resource('google_compute_backend_bucket', c.id, {
           name: gname(c.name), bucket_name: raw(`google_storage_bucket.${c.id}.name`), enable_cdn: true,
           cdn_policy: nested({ cache_mode: 'CACHE_ALL_STATIC', default_ttl: parseInt(seconds(c.node.config.ttl, 3600)) }),

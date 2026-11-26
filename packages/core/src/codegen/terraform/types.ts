@@ -20,7 +20,8 @@ export interface NodeCtx extends SharedCtx {
   replicas: number
   version?: string
   storageGb: number
-  cloudInit?: string
+  /** The node's cloud-init, with its image filled in, for self-hosted nodes that run a container. */
+  userData?: Raw
   use: (key: string) => void
 }
 

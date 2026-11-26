@@ -12,7 +12,7 @@ const server =(c: NodeCtx, serverType: string) => ({
     image: 'ubuntu-24.04',
     location: c.region,
     ssh_keys: [raw('hcloud_ssh_key.this.id')],
-    user_data: c.cloudInit ? raw(`file("${c.cloudInit}")`) : undefined,
+    user_data: c.userData,
     labels: { project: c.prefix },
     network: nested({ network_id: raw('hcloud_network.this.id') }),
     depends_on: [raw('hcloud_network_subnet.this')],
@@ -28,7 +28,6 @@ export const hetzner: TfProvider = {
   version: '~> 1.70',
   variables: [
     block('variable', ['hcloud_token'], { type: raw('string'), sensitive: true, description: 'API token of the Hetzner Cloud project, with read and write access.' }),
-    block('variable', ['ssh_public_key'], { type: raw('string'), description: 'Public key allowed to log in to the servers as root.' }),
   ].join('\n'),
   provider: block('provider', ['hcloud'], { token: raw('var.hcloud_token') }),
   shared: {
@@ -38,7 +37,10 @@ export const hetzner: TfProvider = {
         resource('hcloud_network_subnet', 'this', { network_id: raw('hcloud_network.this.id'), type: 'cloud', network_zone: raw(NETWORK_ZONE), ip_range: '10.0.1.0/24' }),
       ].join('\n'),
     }),
-    ssh_key: (c) => ({ hcl: resource('hcloud_ssh_key', 'this', { name: c.prefix, public_key: raw('var.ssh_public_key') }) }),
+    ssh_key: (c) => ({
+      hcl: resource('hcloud_ssh_key', 'this', { name: c.prefix, public_key: raw('var.ssh_public_key') }),
+      variables: block('variable', ['ssh_public_key'], { type: raw('string'), description: 'Public key allowed to log in to the servers as root.' }),
+    }),
     s3: () => ({
       hcl: block('provider', ['aws'], {
         region: raw('var.region'),

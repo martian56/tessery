@@ -3,9 +3,7 @@ import type { Generated, NodeCtx, Output, TfProvider } from './types'
 
 const GROUP = raw('azurerm_resource_group.this.name')
 
-const SUFFIX = 'substr(sha1(var.subscription_id), 0, 6)'
-
-const compact = (c: NodeCtx, max: number) => raw(`"${c.name.replace(/-/g, '').slice(0, max - 6)}\${${SUFFIX}}"`)
+const compact = (c: NodeCtx, max: number) => raw(`"${c.name.replace(/-/g, '').slice(0, max - 6)}\${substr(sha1("\${var.subscription_id}/${c.name}"), 0, 6)}"`)
 const capped = (c: NodeCtx, max: number) => c.name.slice(0, max).replace(/-+$/, '')
 
 function placed(c: NodeCtx): Body {
@@ -30,7 +28,7 @@ function vm(c: NodeCtx, size: string): Generated {
         name: c.name, ...at, size,
         admin_username: 'azureuser',
         network_interface_ids: [raw(`azurerm_network_interface.${c.id}.id`)],
-        custom_data: c.cloudInit ? raw(`filebase64("${c.cloudInit}")`) : undefined,
+        custom_data: c.userData && raw(`base64encode(${c.userData.expr})`),
         admin_ssh_key: nested({ username: 'azureuser', public_key: raw('var.ssh_public_key') }),
         os_disk: nested({ caching: 'ReadWrite', storage_account_type: 'StandardSSD_LRS' }),
         source_image_reference: nested({ publisher: 'Canonical', offer: 'ubuntu-24_04-lts', sku: 'server', version: 'latest' }),
