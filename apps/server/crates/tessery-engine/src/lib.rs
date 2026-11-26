@@ -108,7 +108,9 @@ impl Engine {
             *guard = Some(self.spawn().await?);
         }
         let id = self.inner.ids.fetch_add(1, Ordering::Relaxed);
-        let line = serde_json::to_string(&json!({ "id": id, "method": method, "params": params })).map_err(|e| EngineError::Protocol(e.to_string()))? + "\n";
+        let line = serde_json::to_string(&json!({ "id": id, "method": method, "params": params }))
+            .map_err(|e| EngineError::Protocol(e.to_string()))?
+            + "\n";
         let proc = guard.as_mut().expect("process was just spawned");
         let timeout = self.inner.config.timeout;
         let exchange = async {
@@ -127,7 +129,11 @@ impl Engine {
         };
         let reply = match reply {
             Ok(r) if r.id == Some(id) => r,
-            Ok(_) => return Err(self.discard(&mut guard, EngineError::Protocol("reply id did not match the request".into()))),
+            Ok(_) => {
+                return Err(
+                    self.discard(&mut guard, EngineError::Protocol("reply id did not match the request".into()))
+                );
+            }
             Err(e) => return Err(self.discard(&mut guard, e)),
         };
         match (reply.result, reply.error) {
@@ -205,12 +211,16 @@ mod tests {
     use super::*;
 
     fn engine() -> Option<Engine> {
-        let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../packages/core/dist/tessery-engine.mjs");
+        let script =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../packages/core/dist/tessery-engine.mjs");
         if !script.is_file() {
             eprintln!("skipping: build the engine with `npm run build:engine` in packages/core");
             return None;
         }
-        Some(Engine::new(EngineConfig { node: "node".into(), script, processes: 2, timeout: Duration::from_secs(20) }).unwrap())
+        Some(
+            Engine::new(EngineConfig { node: "node".into(), script, processes: 2, timeout: Duration::from_secs(20) })
+                .unwrap(),
+        )
     }
 
     #[tokio::test]

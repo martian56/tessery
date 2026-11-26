@@ -8,7 +8,8 @@ pub fn image() -> String {
     format!("tessery-runner:{}", hex::encode(&hash[..6]))
 }
 
-pub const CONNECTION_FILES: &[(&str, &str)] = &[("KUBECONFIG", "kubeconfig"), ("SSH_PRIVATE_KEY", "ssh_key"), ("SSH_KNOWN_HOSTS", "known_hosts")];
+pub const CONNECTION_FILES: &[(&str, &str)] =
+    &[("KUBECONFIG", "kubeconfig"), ("SSH_PRIVATE_KEY", "ssh_key"), ("SSH_KNOWN_HOSTS", "known_hosts")];
 
 pub fn is_connection_secret(name: &str) -> bool {
     CONNECTION_FILES.iter().any(|(n, _)| *n == name)
@@ -35,12 +36,19 @@ pub fn required_secrets(plan: &serde_json::Value) -> Vec<RequiredSecret> {
         .as_array()
         .into_iter()
         .flatten()
-        .filter_map(|s| Some(RequiredSecret { name: s["name"].as_str()?.to_owned(), generate: s["generate"].as_bool().unwrap_or(false) }))
+        .filter_map(|s| {
+            Some(RequiredSecret {
+                name: s["name"].as_str()?.to_owned(),
+                generate: s["generate"].as_bool().unwrap_or(false),
+            })
+        })
         .collect();
     let target = &plan["target"];
     match target["kind"].as_str() {
         Some("kubernetes") => out.push(RequiredSecret { name: "KUBECONFIG".into(), generate: false }),
-        Some("docker") if target["server"].is_null() && target["host"].as_str().is_some_and(|h| h.starts_with("ssh://")) => {
+        Some("docker")
+            if target["server"].is_null() && target["host"].as_str().is_some_and(|h| h.starts_with("ssh://")) =>
+        {
             out.push(RequiredSecret { name: "SSH_PRIVATE_KEY".into(), generate: false })
         }
         _ => {}
@@ -91,9 +99,14 @@ pub fn explain_ssh(stderr: &str) -> String {
         "The server refused the key. Add the public key to ~/.ssh/authorized_keys of that user."
     } else if e.contains("Host key verification failed") || e.contains("REMOTE HOST IDENTIFICATION HAS CHANGED") {
         "The server's host key changed since Tessery pinned it. If you reinstalled the server, forget the host key and check again."
-    } else if e.contains("Connection refused") || e.contains("timed out") || e.contains("No route to host") || e.contains("Could not resolve") {
+    } else if e.contains("Connection refused")
+        || e.contains("timed out")
+        || e.contains("No route to host")
+        || e.contains("Could not resolve")
+    {
         "Tessery could not reach the server. Check the address, the port and the firewall."
-    } else if e.contains("permission denied while trying to connect to the Docker daemon") || e.contains("docker.sock") {
+    } else if e.contains("permission denied while trying to connect to the Docker daemon") || e.contains("docker.sock")
+    {
         "Connected, but this user may not run Docker. Add it to the docker group: sudo usermod -aG docker <user>."
     } else if e.contains("command not found") || e.contains("docker: not found") {
         "Connected, but Docker is not installed on the server. Install it with: curl -fsSL https://get.docker.com | sh"
@@ -128,9 +141,14 @@ mod tests {
             "secrets": [{ "name": "DB_PASSWORD", "generate": true }, { "name": "PAYMENTS_URL", "generate": false }]
         });
         let required = required_secrets(&plan);
-        assert_eq!(required.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(), ["DB_PASSWORD", "PAYMENTS_URL", "SSH_PRIVATE_KEY"]);
+        assert_eq!(
+            required.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(),
+            ["DB_PASSWORD", "PAYMENTS_URL", "SSH_PRIVATE_KEY"]
+        );
         assert_eq!(missing_secrets(&required, &["PAYMENTS_URL".into()]), ["SSH_PRIVATE_KEY"]);
-        let on_server = required_secrets(&json!({ "target": { "kind": "docker", "host": "ssh://deploy@203.0.113.7", "server": "01a1d5ca-a628-79bc-adf1-a98e48cb28f3" } }));
+        let on_server = required_secrets(
+            &json!({ "target": { "kind": "docker", "host": "ssh://deploy@203.0.113.7", "server": "01a1d5ca-a628-79bc-adf1-a98e48cb28f3" } }),
+        );
         assert!(on_server.is_empty(), "a saved server brings its own key");
         let k8s = required_secrets(&json!({ "target": { "kind": "kubernetes" } }));
         assert_eq!(missing_secrets(&k8s, &[]), ["KUBECONFIG"]);

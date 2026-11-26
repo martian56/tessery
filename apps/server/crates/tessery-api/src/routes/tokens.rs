@@ -4,13 +4,13 @@ use crate::error::{ApiError, ApiResult};
 use crate::rbac;
 use crate::routes::dto::{OK, Ok};
 use crate::state::AppState;
-use tessery_core::Permission;
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tessery_core::Permission;
 use time::{Duration, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -35,7 +35,16 @@ pub struct TokenDto {
 
 impl From<tessery_db::tokens::Token> for TokenDto {
     fn from(t: tessery_db::tokens::Token) -> Self {
-        Self { id: t.id, name: t.name, prefix: t.prefix, permissions: t.permissions, project_id: t.project_id, expires_at: t.expires_at, last_used_at: t.last_used_at, created_at: t.created_at }
+        Self {
+            id: t.id,
+            name: t.name,
+            prefix: t.prefix,
+            permissions: t.permissions,
+            project_id: t.project_id,
+            expires_at: t.expires_at,
+            last_used_at: t.last_used_at,
+            created_at: t.created_at,
+        }
     }
 }
 
@@ -72,7 +81,11 @@ pub async fn list(State(state): State<AppState>, p: Principal) -> ApiResult<Json
 }
 
 #[utoipa::path(post, path = "/api/auth/tokens", tag = "auth", request_body = CreateToken, responses((status = 201, body = CreatedToken)))]
-pub async fn create(State(state): State<AppState>, p: Principal, Json(req): Json<CreateToken>) -> ApiResult<(StatusCode, Json<CreatedToken>)> {
+pub async fn create(
+    State(state): State<AppState>,
+    p: Principal,
+    Json(req): Json<CreateToken>,
+) -> ApiResult<(StatusCode, Json<CreatedToken>)> {
     sessions_only(&p)?;
     let name = req.name.trim();
     if name.is_empty() || name.len() > 80 {
@@ -80,10 +93,13 @@ pub async fn create(State(state): State<AppState>, p: Principal, Json(req): Json
     }
     let permissions = match &req.permissions {
         None => None,
-        Some(ps) if ps.is_empty() => return Err(ApiError::invalid("permissions", "pick at least one permission, or omit the list")),
+        Some(ps) if ps.is_empty() => {
+            return Err(ApiError::invalid("permissions", "pick at least one permission, or omit the list"));
+        }
         Some(ps) => {
             for k in ps {
-                k.parse::<Permission>().map_err(|_| ApiError::invalid("permissions", format!("unknown permission `{k}`")))?;
+                k.parse::<Permission>()
+                    .map_err(|_| ApiError::invalid("permissions", format!("unknown permission `{k}`")))?;
             }
             Some(ps.clone())
         }
@@ -105,11 +121,19 @@ pub async fn create(State(state): State<AppState>, p: Principal, Json(req): Json
             hash: &token_hash(&secret),
             permissions: permissions.as_deref(),
             project_id: req.project_id,
-            expires_at: req.expires_in_days.map(|d| OffsetDateTime::now_utc() + Duration::days(i64::from(d.clamp(1, 3650)))),
+            expires_at: req
+                .expires_in_days
+                .map(|d| OffsetDateTime::now_utc() + Duration::days(i64::from(d.clamp(1, 3650)))),
         },
     )
     .await?;
-    audit::record(&state.db, &p, Entry::new(None, "token.create", "token", row.id).details(json!({ "name": name, "projectId": req.project_id, "permissions": permissions }))).await?;
+    audit::record(
+        &state.db,
+        &p,
+        Entry::new(None, "token.create", "token", row.id)
+            .details(json!({ "name": name, "projectId": req.project_id, "permissions": permissions })),
+    )
+    .await?;
     Ok((StatusCode::CREATED, Json(CreatedToken { token: row.into(), secret })))
 }
 

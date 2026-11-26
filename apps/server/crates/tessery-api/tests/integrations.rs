@@ -43,16 +43,34 @@ async fn cloud_accounts_are_checked_before_they_are_saved() {
     let providers: Value = admin.json("/api/integrations/providers").await;
     assert!(providers.as_array().unwrap().iter().any(|p| p["id"] == "aws"));
 
-    let missing = admin.post(&format!("/api/orgs/{org}/integrations"), json!({ "provider": "digitalocean", "name": "main", "fields": {} })).await;
+    let missing = admin
+        .post(
+            &format!("/api/orgs/{org}/integrations"),
+            json!({ "provider": "digitalocean", "name": "main", "fields": {} }),
+        )
+        .await;
     assert_eq!(missing.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-    let wrong = admin.post(&format!("/api/orgs/{org}/integrations"), json!({ "provider": "digitalocean", "name": "main", "fields": { "token": "dop_v1_wrong" } })).await;
+    let wrong = admin
+        .post(
+            &format!("/api/orgs/{org}/integrations"),
+            json!({ "provider": "digitalocean", "name": "main", "fields": { "token": "dop_v1_wrong" } }),
+        )
+        .await;
     assert_eq!(wrong.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let body: Value = wrong.json().await.unwrap();
     assert!(body.to_string().contains("rejected the credentials"), "{body}");
-    assert!(admin.json(&format!("/api/orgs/{org}/integrations")).await.as_array().unwrap().is_empty(), "nothing is saved");
+    assert!(
+        admin.json(&format!("/api/orgs/{org}/integrations")).await.as_array().unwrap().is_empty(),
+        "nothing is saved"
+    );
 
-    let ok = admin.post(&format!("/api/orgs/{org}/integrations"), json!({ "provider": "digitalocean", "name": "main", "fields": { "token": "dop_v1_good_token_123" } })).await;
+    let ok = admin
+        .post(
+            &format!("/api/orgs/{org}/integrations"),
+            json!({ "provider": "digitalocean", "name": "main", "fields": { "token": "dop_v1_good_token_123" } }),
+        )
+        .await;
     assert_eq!(ok.status(), StatusCode::CREATED);
     let saved: Value = ok.json().await.unwrap();
     assert_eq!(saved["lastCheck"]["account"], "ops@example.com (Shop)");
@@ -63,20 +81,31 @@ async fn cloud_accounts_are_checked_before_they_are_saved() {
     assert_eq!(dev.json(&format!("/api/orgs/{org}/integrations")).await.as_array().unwrap().len(), 1);
     let id = saved["id"].as_str().unwrap();
     assert_eq!(dev.delete(&format!("/api/orgs/{org}/integrations/{id}")).await.status(), StatusCode::FORBIDDEN);
-    assert_eq!(admin.post(&format!("/api/orgs/{org}/integrations/{id}/check"), json!({})).await.status(), StatusCode::OK);
+    assert_eq!(
+        admin.post(&format!("/api/orgs/{org}/integrations/{id}/check"), json!({})).await.status(),
+        StatusCode::OK
+    );
 
     let catalog: Value = admin.json(&format!("/api/orgs/{org}/integrations/{id}/catalog")).await;
     assert_eq!(catalog["sizes"][0]["id"], "s-1vcpu-1gb");
     assert_eq!(catalog["sizes"][0]["monthly"], 6.0);
     assert_eq!(catalog["sizes"][0]["currency"], "USD");
-    let created = admin.post(&format!("/api/orgs/{org}/servers/provision"), json!({ "integrationId": id, "name": "do-1", "region": "fra1", "size": "s-1vcpu-1gb" })).await;
+    let created = admin
+        .post(
+            &format!("/api/orgs/{org}/servers/provision"),
+            json!({ "integrationId": id, "name": "do-1", "region": "fra1", "size": "s-1vcpu-1gb" }),
+        )
+        .await;
     assert_eq!(created.status(), StatusCode::CREATED);
     let server: Value = created.json().await.unwrap();
     assert_eq!(server["status"], "creating");
     assert_eq!(server["managed"], true);
     assert_eq!(server["provider"], "digitalocean");
     let sid = server["id"].as_str().unwrap();
-    assert_eq!(admin.delete(&format!("/api/orgs/{org}/servers/{sid}?deleteMachine=true")).await.status(), StatusCode::OK);
+    assert_eq!(
+        admin.delete(&format!("/api/orgs/{org}/servers/{sid}?deleteMachine=true")).await.status(),
+        StatusCode::OK
+    );
     assert!(admin.json(&format!("/api/orgs/{org}/servers")).await.as_array().unwrap().is_empty());
     assert_eq!(admin.delete(&format!("/api/orgs/{org}/integrations/{id}")).await.status(), StatusCode::OK);
 }

@@ -1,9 +1,9 @@
 use anyhow::Result;
+use serde_json::json;
 use tessery_db::PgPool;
 use tessery_db::audit::{Event, Filter, NewEvent};
 use tessery_db::types::AuditResult;
 use tessery_mq::Job;
-use serde_json::json;
 use uuid::Uuid;
 
 const EXPORT_PAGE: i64 = 1000;
@@ -25,12 +25,26 @@ pub async fn run(ctx: &Ctx, job: Job) -> Result<()> {
         Job::ProvisionServer { server_id } => crate::provision::provision(ctx, server_id).await,
         Job::Backup { backup_id } => crate::backups::backup(ctx, backup_id).await,
         Job::RestoreBackup { backup_id } => crate::backups::restore(ctx, backup_id).await,
-        Job::Notify { project_id, env, event, title, detail, release_id } => crate::notify::send(ctx, project_id, &env, release_id, &event, &title, &detail).await,
+        Job::Notify { project_id, env, event, title, detail, release_id } => {
+            crate::notify::send(ctx, project_id, &env, release_id, &event, &title, &detail).await
+        }
         Job::Teardown { project_id, env, plan, kubeconfig, mut connection, server, org_id, destroy } => {
             if let Some(k) = kubeconfig {
                 connection.push(("KUBECONFIG".into(), k));
             }
-            let r = crate::deploy::teardown(ctx, crate::deploy::TeardownRequest { project: project_id, env: &env, plan: &plan, connection: &connection, saved: server.as_ref(), org: org_id, destroy }).await;
+            let r = crate::deploy::teardown(
+                ctx,
+                crate::deploy::TeardownRequest {
+                    project: project_id,
+                    env: &env,
+                    plan: &plan,
+                    connection: &connection,
+                    saved: server.as_ref(),
+                    org: org_id,
+                    destroy,
+                },
+            )
+            .await;
             match &r {
                 Ok(()) => tracing::info!(%project_id, env, destroy, "environment torn down"),
                 Err(e) => tracing::warn!(%project_id, env, error = %e, "teardown failed"),
@@ -76,7 +90,9 @@ async fn push_remote(ctx: &Ctx, project: Uuid) -> Result<()> {
         let token = match (&remote.token_cipher, &ctx.secret_key) {
             (None, _) => None,
             (Some(c), Some(key)) => Some(String::from_utf8(key.decrypt(c)?)?),
-            (Some(_), None) => anyhow::bail!("TESSERY_SECRET_KEY is not set on the worker, so the stored token cannot be read"),
+            (Some(_), None) => {
+                anyhow::bail!("TESSERY_SECRET_KEY is not set on the worker, so the stored token cannot be read")
+            }
         };
         let username = Some(remote.username.clone()).filter(|u| !u.is_empty());
         repo.push(&tessery_git::Remote { url: remote.url.clone(), username, token }).await?;
@@ -97,13 +113,8 @@ async fn audit_export(db: &PgPool, id: Uuid) -> Result<()> {
         tracing::info!(export_id = %id, "export already claimed or finished, skipping");
         return Ok(());
     };
-    match build_export(
-        db,
-        export.org_id,
-        &export.format,
-        serde_json::from_value(export.filters).unwrap_or_default(),
-    )
-    .await
+    match build_export(db, export.org_id, &export.format, serde_json::from_value(export.filters).unwrap_or_default())
+        .await
     {
         Ok((rows, content)) => tessery_db::audit::finish_export(db, id, rows as i32, &content).await?,
         Err(e) => {
@@ -114,12 +125,7 @@ async fn audit_export(db: &PgPool, id: Uuid) -> Result<()> {
     Ok(())
 }
 
-async fn build_export(
-    db: &PgPool,
-    org: Uuid,
-    format: &str,
-    filter: Filter,
-) -> Result<(usize, String)> {
+async fn build_export(db: &PgPool, org: Uuid, format: &str, filter: Filter) -> Result<(usize, String)> {
     let mut events: Vec<Event> = Vec::new();
     let mut before = None;
     loop {
@@ -140,24 +146,15 @@ async fn build_export(
 }
 
 fn csv_field(s: &str) -> String {
-    if s.contains([',', '"', '\n', '\r']) {
-        format!("\"{}\"", s.replace('"', "\"\""))
-    } else {
-        s.to_owned()
-    }
+    if s.contains([',', '"', '\n', '\r']) { format!("\"{}\"", s.replace('"', "\"\"")) } else { s.to_owned() }
 }
 
 fn to_csv(events: &[Event]) -> String {
-    let mut out =
-        String::from("id,at,actor_email,action,resource_type,resource_id,result,ip,details\n");
+    let mut out = String::from("id,at,actor_email,action,resource_type,resource_id,result,ip,details\n");
     for e in events {
-        let at =
-            e.at.format(&time::format_description::well_known::Rfc3339)
-                .unwrap_or_default();
-        let result = serde_json::to_value(e.result)
-            .ok()
-            .and_then(|v| v.as_str().map(str::to_owned))
-            .unwrap_or_default();
+        let at = e.at.format(&time::format_description::well_known::Rfc3339).unwrap_or_default();
+        let result =
+            serde_json::to_value(e.result).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default();
         let row = [
             e.id.to_string(),
             at,
@@ -169,12 +166,7 @@ fn to_csv(events: &[Event]) -> String {
             e.ip.clone().unwrap_or_default(),
             e.details.to_string(),
         ];
-        out.push_str(
-            &row.iter()
-                .map(|f| csv_field(f))
-                .collect::<Vec<_>>()
-                .join(","),
-        );
+        out.push_str(&row.iter().map(|f| csv_field(f)).collect::<Vec<_>>().join(","));
         out.push('\n');
     }
     out

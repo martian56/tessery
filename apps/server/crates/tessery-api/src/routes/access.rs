@@ -4,14 +4,14 @@ use crate::error::{ApiError, ApiResult};
 use crate::rbac::{self, org_target, role_permissions};
 use crate::routes::dto::{OK, Ok, clean_name, slug_or_from};
 use crate::state::AppState;
-use tessery_core::{OrgId, Permission as P, PermissionSet, Target, TeamId};
-use tessery_db::bindings::NewBinding;
-use tessery_db::types::{ScopeKind, SubjectKind};
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tessery_core::{OrgId, Permission as P, PermissionSet, Target, TeamId};
+use tessery_db::bindings::NewBinding;
+use tessery_db::types::{ScopeKind, SubjectKind};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -28,11 +28,7 @@ pub async fn catalog(_p: Principal) -> Json<Vec<PermissionInfo>> {
     Json(
         P::ALL
             .iter()
-            .map(|p| PermissionInfo {
-                key: p.as_str(),
-                group: p.group(),
-                description: p.description(),
-            })
+            .map(|p| PermissionInfo { key: p.as_str(), group: p.group(), description: p.description() })
             .collect(),
     )
 }
@@ -69,13 +65,7 @@ pub async fn list_roles(
     Path(org): Path<Uuid>,
 ) -> ApiResult<Json<Vec<RoleDto>>> {
     rbac::require(&state, &p, &org_target(org), P::RoleRead).await?;
-    Ok(Json(
-        tessery_db::roles::list_for_org(&state.db, org)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect(),
-    ))
+    Ok(Json(tessery_db::roles::list_for_org(&state.db, org).await?.into_iter().map(Into::into).collect()))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -90,17 +80,10 @@ pub struct RoleInput {
 fn parse_permissions(keys: &[String]) -> ApiResult<PermissionSet> {
     let mut set = PermissionSet::empty();
     for k in keys {
-        set.insert(
-            k.parse().map_err(|_| {
-                ApiError::invalid("permissions", format!("unknown permission `{k}`"))
-            })?,
-        );
+        set.insert(k.parse().map_err(|_| ApiError::invalid("permissions", format!("unknown permission `{k}`")))?);
     }
     if set.is_empty() {
-        return Err(ApiError::invalid(
-            "permissions",
-            "select at least one permission",
-        ));
+        return Err(ApiError::invalid("permissions", "select at least one permission"));
     }
     Ok(set)
 }
@@ -122,15 +105,8 @@ pub async fn create_role(
     let perms = parse_permissions(&req.permissions)?;
     rbac::ensure_can_grant(&state, &p, &target, &perms).await?;
     let mut tx = state.db.begin().await.map_err(tessery_db::DbError::from)?;
-    let r = tessery_db::roles::create_custom(
-        &mut *tx,
-        org,
-        &key,
-        &name,
-        req.description.trim(),
-        &perms.to_strings(),
-    )
-    .await?;
+    let r = tessery_db::roles::create_custom(&mut *tx, org, &key, &name, req.description.trim(), &perms.to_strings())
+        .await?;
     audit::record(
         &mut *tx,
         &p,
@@ -152,27 +128,15 @@ pub async fn update_role(
 ) -> ApiResult<Json<RoleDto>> {
     let target = org_target(org);
     let d = rbac::require(&state, &p, &target, P::RoleManage).await?;
-    if tessery_db::roles::get(&state.db, org, role)
-        .await?
-        .is_builtin()
-    {
-        return Err(ApiError::ForbiddenMsg(
-            "built-in roles cannot be changed".into(),
-        ));
+    if tessery_db::roles::get(&state.db, org, role).await?.is_builtin() {
+        return Err(ApiError::ForbiddenMsg("built-in roles cannot be changed".into()));
     }
     let name = clean_name("name", &req.name, 80)?;
     let perms = parse_permissions(&req.permissions)?;
     rbac::ensure_can_grant(&state, &p, &target, &perms).await?;
     let mut tx = state.db.begin().await.map_err(tessery_db::DbError::from)?;
-    let r = tessery_db::roles::update_custom(
-        &mut *tx,
-        org,
-        role,
-        &name,
-        req.description.trim(),
-        &perms.to_strings(),
-    )
-    .await?;
+    let r = tessery_db::roles::update_custom(&mut *tx, org, role, &name, req.description.trim(), &perms.to_strings())
+        .await?;
     audit::record(
         &mut *tx,
         &p,
@@ -192,22 +156,12 @@ pub async fn delete_role(
     Path((org, role)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<Ok>> {
     let d = rbac::require(&state, &p, &org_target(org), P::RoleManage).await?;
-    if tessery_db::roles::get(&state.db, org, role)
-        .await?
-        .is_builtin()
-    {
-        return Err(ApiError::ForbiddenMsg(
-            "built-in roles cannot be deleted".into(),
-        ));
+    if tessery_db::roles::get(&state.db, org, role).await?.is_builtin() {
+        return Err(ApiError::ForbiddenMsg("built-in roles cannot be deleted".into()));
     }
     let mut tx = state.db.begin().await.map_err(tessery_db::DbError::from)?;
     tessery_db::roles::delete_custom(&mut *tx, org, role).await?;
-    audit::record(
-        &mut *tx,
-        &p,
-        Entry::new(Some(org), "role.delete", "role", role).decision(d),
-    )
-    .await?;
+    audit::record(&mut *tx, &p, Entry::new(Some(org), "role.delete", "role", role).decision(d)).await?;
     tx.commit().await.map_err(tessery_db::DbError::from)?;
     Ok(Json(OK))
 }
@@ -251,16 +205,9 @@ impl From<tessery_db::bindings::Binding> for BindingDto {
             role_id: b.role_id,
             role_key: b.role_key,
             role_name: b.role_name,
-            subject: SubjectRef {
-                kind: b.subject_kind,
-                id: b.subject_id,
-            },
+            subject: SubjectRef { kind: b.subject_kind, id: b.subject_id },
             subject_name: b.subject_name,
-            scope: ScopeRef {
-                kind: b.scope_kind,
-                id: b.scope_id,
-                env: b.env_key,
-            },
+            scope: ScopeRef { kind: b.scope_kind, id: b.scope_id, env: b.env_key },
             expires_at: b.expires_at,
             created_at: b.created_at,
         }
@@ -274,13 +221,7 @@ pub async fn list_bindings(
     Path(org): Path<Uuid>,
 ) -> ApiResult<Json<Vec<BindingDto>>> {
     rbac::require(&state, &p, &org_target(org), P::RoleRead).await?;
-    Ok(Json(
-        tessery_db::bindings::list(&state.db, org)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect(),
-    ))
+    Ok(Json(tessery_db::bindings::list(&state.db, org).await?.into_iter().map(Into::into).collect()))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -302,31 +243,20 @@ async fn scope_target(state: &AppState, org: Uuid, scope: &ScopeRef) -> ApiResul
             tessery_db::teams::get(&state.db, org, team)
                 .await
                 .map_err(|_| ApiError::invalid("scope", "team not found in this organization"))?;
-            Ok(Target::Team {
-                org: o,
-                team: TeamId(team),
-            })
+            Ok(Target::Team { org: o, team: TeamId(team) })
         }
         (ScopeKind::Project | ScopeKind::Environment, Some(project), env) => {
-            let t = rbac::project_target(state, project).await.map_err(|_| {
-                ApiError::invalid("scope", "project not found in this organization")
-            })?;
+            let t = rbac::project_target(state, project)
+                .await
+                .map_err(|_| ApiError::invalid("scope", "project not found in this organization"))?;
             if t.org() != o {
-                return Err(ApiError::invalid(
-                    "scope",
-                    "project not found in this organization",
-                ));
+                return Err(ApiError::invalid("scope", "project not found in this organization"));
             }
             match (scope.kind, t, env) {
                 (ScopeKind::Environment, Target::Project { org, team, project }, Some(env))
                     if !env.trim().is_empty() && env.len() <= 64 =>
                 {
-                    Ok(Target::Environment {
-                        org,
-                        team,
-                        project,
-                        env: env.trim().to_owned(),
-                    })
+                    Ok(Target::Environment { org, team, project, env: env.trim().to_owned() })
                 }
                 (ScopeKind::Project, t, None) => Ok(t),
                 _ => Err(ApiError::invalid(
@@ -348,28 +278,17 @@ pub async fn create_binding(
 ) -> ApiResult<(StatusCode, Json<BindingDto>)> {
     let target = scope_target(&state, org, &req.scope).await?;
     let d = rbac::require(&state, &p, &target, P::RoleManage).await?;
-    if req
-        .expires_at
-        .is_some_and(|e| e <= OffsetDateTime::now_utc())
-    {
+    if req.expires_at.is_some_and(|e| e <= OffsetDateTime::now_utc()) {
         return Err(ApiError::invalid("expiresAt", "must be in the future"));
     }
     let role = tessery_db::roles::get(&state.db, org, req.role_id)
         .await
         .map_err(|_| ApiError::invalid("roleId", "unknown role"))?;
-    rbac::ensure_can_grant(
-        &state,
-        &p,
-        &target,
-        &role_permissions(role.is_builtin(), &role.key, &role.permissions),
-    )
-    .await?;
+    rbac::ensure_can_grant(&state, &p, &target, &role_permissions(role.is_builtin(), &role.key, &role.permissions))
+        .await?;
     match req.subject.kind {
         SubjectKind::User if !tessery_db::orgs::is_member(&state.db, org, req.subject.id).await? => {
-            return Err(ApiError::invalid(
-                "subject",
-                "user is not a member of this organization",
-            ));
+            return Err(ApiError::invalid("subject", "user is not a member of this organization"));
         }
         SubjectKind::Team => {
             tessery_db::teams::get(&state.db, org, req.subject.id)
@@ -407,11 +326,8 @@ pub async fn create_binding(
     )
     .await?;
     tx.commit().await.map_err(tessery_db::DbError::from)?;
-    let b = tessery_db::bindings::list(&state.db, org)
-        .await?
-        .into_iter()
-        .find(|b| b.id == id)
-        .ok_or(ApiError::NotFound)?;
+    let b =
+        tessery_db::bindings::list(&state.db, org).await?.into_iter().find(|b| b.id == id).ok_or(ApiError::NotFound)?;
     Ok((StatusCode::CREATED, Json(b.into())))
 }
 
@@ -426,23 +342,13 @@ pub async fn delete_binding(
         .into_iter()
         .find(|b| b.id == binding)
         .ok_or(ApiError::NotFound)?;
-    let target = scope_target(
-        &state,
-        org,
-        &ScopeRef {
-            kind: b.scope_kind,
-            id: b.scope_id,
-            env: b.env_key.clone(),
-        },
-    )
-    .await?;
+    let target =
+        scope_target(&state, org, &ScopeRef { kind: b.scope_kind, id: b.scope_id, env: b.env_key.clone() }).await?;
     let d = rbac::require(&state, &p, &target, P::RoleManage).await?;
     let mut tx = state.db.begin().await.map_err(tessery_db::DbError::from)?;
     tessery_db::bindings::delete(&mut *tx, org, binding).await?;
     if tessery_db::bindings::count_org_owners(&mut *tx, org).await? == 0 {
-        return Err(ApiError::Conflict(
-            "an organization must keep at least one owner".into(),
-        ));
+        return Err(ApiError::Conflict("an organization must keep at least one owner".into()));
     }
     audit::record(
         &mut *tx,

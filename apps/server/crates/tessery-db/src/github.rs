@@ -14,8 +14,20 @@ pub async fn app(ex: impl PgExecutor<'_>) -> DbResult<AppRow> {
         .await?)
 }
 
-pub async fn set_app(ex: impl PgExecutor<'_>, app: Option<&serde_json::Value>, key: Option<&[u8]>, webhook_secret: Option<&[u8]>) -> DbResult<()> {
-    sqlx::query!("UPDATE instance_settings SET github_app = $1, github_app_key = $2, github_webhook_secret = $3", app, key, webhook_secret).execute(ex).await?;
+pub async fn set_app(
+    ex: impl PgExecutor<'_>,
+    app: Option<&serde_json::Value>,
+    key: Option<&[u8]>,
+    webhook_secret: Option<&[u8]>,
+) -> DbResult<()> {
+    sqlx::query!(
+        "UPDATE instance_settings SET github_app = $1, github_app_key = $2, github_webhook_secret = $3",
+        app,
+        key,
+        webhook_secret
+    )
+    .execute(ex)
+    .await?;
     Ok(())
 }
 
@@ -75,6 +87,12 @@ pub async fn projects_for_repo(ex: impl PgExecutor<'_>, repo: &str) -> DbResult<
 }
 
 pub async fn record_import(ex: impl PgExecutor<'_>, project: Uuid, error: Option<&str>) -> DbResult<()> {
-    sqlx::query!("UPDATE project_remotes SET last_import_at = now(), last_import_error = $2 WHERE project_id = $1", project, error).execute(ex).await?;
+    sqlx::query!(
+        "UPDATE project_remotes SET last_import_at = now(), last_import_error = $2 WHERE project_id = $1",
+        project,
+        error
+    )
+    .execute(ex)
+    .await?;
     Ok(())
 }

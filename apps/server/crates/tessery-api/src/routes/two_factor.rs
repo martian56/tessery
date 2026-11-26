@@ -21,7 +21,11 @@ use uuid::Uuid;
 const TICKET_TTL: u64 = 300;
 
 fn key(state: &AppState) -> ApiResult<&tessery_core::SecretKey> {
-    state.config.secret_key.as_ref().ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY to use two-factor sign-in".into()))
+    state
+        .config
+        .secret_key
+        .as_ref()
+        .ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY to use two-factor sign-in".into()))
 }
 
 fn secret_of(state: &AppState, cipher: &[u8]) -> ApiResult<Vec<u8>> {
@@ -33,7 +37,10 @@ pub async fn new_ticket(state: &AppState, user: Uuid) -> ApiResult<String> {
     rand::rng().fill_bytes(&mut b);
     let ticket = hex::encode(b);
     let mut redis = state.redis.clone();
-    let _: () = redis.set_ex(format!("tessery:2fa:{ticket}"), user.to_string(), TICKET_TTL).await.map_err(|e| ApiError::Internal(e.into()))?;
+    let _: () = redis
+        .set_ex(format!("tessery:2fa:{ticket}"), user.to_string(), TICKET_TTL)
+        .await
+        .map_err(|e| ApiError::Internal(e.into()))?;
     Ok(ticket)
 }
 
@@ -53,15 +60,24 @@ pub struct SecondStep {
 
 /// Finishes a sign-in for an account with two-factor on.
 #[utoipa::path(post, path = "/api/auth/login/two-factor", tag = "auth", request_body = SecondStep, responses((status = 200, body = UserDto), (status = 422), (status = 429)))]
-pub async fn login_second_step(State(state): State<AppState>, meta: RequestMeta, jar: CookieJar, Json(req): Json<SecondStep>) -> ApiResult<(CookieJar, Json<UserDto>)> {
+pub async fn login_second_step(
+    State(state): State<AppState>,
+    meta: RequestMeta,
+    jar: CookieJar,
+    Json(req): Json<SecondStep>,
+) -> ApiResult<(CookieJar, Json<UserDto>)> {
     let mut redis = state.redis.clone();
     let ticket_key = format!("tessery:2fa:{}", req.ticket.trim());
     let ip_key = format!("2fa:ip:{}", meta.ip.as_deref().unwrap_or("unknown"));
-    if !rate_limit::allow(&mut redis, &ip_key, 30, 900).await? || !rate_limit::allow(&mut redis, &format!("2fa:ticket:{}", req.ticket.trim()), 5, TICKET_TTL).await? {
+    if !rate_limit::allow(&mut redis, &ip_key, 30, 900).await?
+        || !rate_limit::allow(&mut redis, &format!("2fa:ticket:{}", req.ticket.trim()), 5, TICKET_TTL).await?
+    {
         return Err(ApiError::RateLimited);
     }
     let user: Option<String> = redis.get(&ticket_key).await.map_err(|e| ApiError::Internal(e.into()))?;
-    let user_id = user.and_then(|u| u.parse::<Uuid>().ok()).ok_or_else(|| ApiError::invalid("ticket", "the sign-in expired; enter your password again"))?;
+    let user_id = user
+        .and_then(|u| u.parse::<Uuid>().ok())
+        .ok_or_else(|| ApiError::invalid("ticket", "the sign-in expired; enter your password again"))?;
     let user = tessery_db::users::get(&state.db, user_id).await?;
     if user.disabled_at.is_some() {
         return Err(ApiError::InvalidCredentials);
@@ -105,7 +121,10 @@ pub struct TwoFactorStatus {
 #[utoipa::path(get, path = "/api/auth/two-factor", tag = "auth", responses((status = 200, body = TwoFactorStatus)))]
 pub async fn status(State(state): State<AppState>, p: Principal) -> ApiResult<Json<TwoFactorStatus>> {
     let s = db::state(&state.db, p.user.id).await?;
-    Ok(Json(TwoFactorStatus { enabled: s.enabled, recovery_codes_left: if s.enabled { db::codes_left(&state.db, p.user.id).await? } else { 0 } }))
+    Ok(Json(TwoFactorStatus {
+        enabled: s.enabled,
+        recovery_codes_left: if s.enabled { db::codes_left(&state.db, p.user.id).await? } else { 0 },
+    }))
 }
 
 #[derive(Serialize, ToSchema)]
@@ -146,7 +165,11 @@ pub struct RecoveryCodes {
 }
 
 #[utoipa::path(post, path = "/api/auth/two-factor/enable", tag = "auth", request_body = CodeInput, responses((status = 200, body = RecoveryCodes), (status = 422)))]
-pub async fn enable(State(state): State<AppState>, p: Principal, Json(req): Json<CodeInput>) -> ApiResult<Json<RecoveryCodes>> {
+pub async fn enable(
+    State(state): State<AppState>,
+    p: Principal,
+    Json(req): Json<CodeInput>,
+) -> ApiResult<Json<RecoveryCodes>> {
     if p.scope.is_some() {
         return Err(ApiError::ForbiddenMsg("API tokens cannot change two-factor settings".into()));
     }
@@ -154,8 +177,10 @@ pub async fn enable(State(state): State<AppState>, p: Principal, Json(req): Json
     if s.enabled {
         return Err(ApiError::Conflict("two-factor is already on".into()));
     }
-    let secret = secret_of(&state, s.secret.as_deref().ok_or_else(|| ApiError::Conflict("start the setup first".into()))?)?;
-    let step = totp::check(&secret, &req.code, totp::now_step()).ok_or_else(|| ApiError::invalid("code", "that code is not right; check the time on your phone"))?;
+    let secret =
+        secret_of(&state, s.secret.as_deref().ok_or_else(|| ApiError::Conflict("start the setup first".into()))?)?;
+    let step = totp::check(&secret, &req.code, totp::now_step())
+        .ok_or_else(|| ApiError::invalid("code", "that code is not right; check the time on your phone"))?;
     let codes = totp::recovery_codes();
     let hashes: Vec<Vec<u8>> = codes.iter().map(|c| totp::hash_recovery(c)).collect();
     let mut tx = state.db.begin().await.map_err(tessery_db::DbError::from)?;
@@ -171,7 +196,11 @@ pub struct PasswordInput {
 }
 
 #[utoipa::path(post, path = "/api/auth/two-factor/disable", tag = "auth", request_body = PasswordInput, responses((status = 200, body = Ok), (status = 403)))]
-pub async fn disable(State(state): State<AppState>, p: Principal, Json(req): Json<PasswordInput>) -> ApiResult<Json<Ok>> {
+pub async fn disable(
+    State(state): State<AppState>,
+    p: Principal,
+    Json(req): Json<PasswordInput>,
+) -> ApiResult<Json<Ok>> {
     if p.scope.is_some() {
         return Err(ApiError::ForbiddenMsg("API tokens cannot change two-factor settings".into()));
     }
@@ -186,13 +215,21 @@ pub async fn disable(State(state): State<AppState>, p: Principal, Json(req): Jso
 }
 
 #[utoipa::path(post, path = "/api/auth/two-factor/recovery-codes", tag = "auth", request_body = CodeInput, responses((status = 200, body = RecoveryCodes), (status = 422)))]
-pub async fn new_codes(State(state): State<AppState>, p: Principal, Json(req): Json<CodeInput>) -> ApiResult<Json<RecoveryCodes>> {
+pub async fn new_codes(
+    State(state): State<AppState>,
+    p: Principal,
+    Json(req): Json<CodeInput>,
+) -> ApiResult<Json<RecoveryCodes>> {
     if p.scope.is_some() {
         return Err(ApiError::ForbiddenMsg("API tokens cannot change two-factor settings".into()));
     }
     let s = db::state(&state.db, p.user.id).await?;
-    let secret = secret_of(&state, s.secret.as_deref().filter(|_| s.enabled).ok_or_else(|| ApiError::Conflict("two-factor is off".into()))?)?;
-    let step = totp::check(&secret, &req.code, totp::now_step()).ok_or_else(|| ApiError::invalid("code", "that code is not right"))?;
+    let secret = secret_of(
+        &state,
+        s.secret.as_deref().filter(|_| s.enabled).ok_or_else(|| ApiError::Conflict("two-factor is off".into()))?,
+    )?;
+    let step = totp::check(&secret, &req.code, totp::now_step())
+        .ok_or_else(|| ApiError::invalid("code", "that code is not right"))?;
     if !db::use_step(&state.db, p.user.id, step as i64).await? {
         return Err(ApiError::invalid("code", "that code was already used; wait for the next one"));
     }
@@ -215,25 +252,50 @@ pub struct OrgSecurity {
 }
 
 #[utoipa::path(get, path = "/api/orgs/{org}/security", tag = "orgs", params(("org" = Uuid, Path)), responses((status = 200, body = OrgSecurity)))]
-pub async fn org_security(State(state): State<AppState>, p: Principal, Path(org): Path<Uuid>) -> ApiResult<Json<OrgSecurity>> {
+pub async fn org_security(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(org): Path<Uuid>,
+) -> ApiResult<Json<OrgSecurity>> {
     rbac::require(&state, &p, &org_target(org), P::MemberRead).await?;
-    Ok(Json(OrgSecurity { require_two_factor: db::org_requires(&state.db, org).await?, members_without: db::members_without(&state.db, org).await? }))
+    Ok(Json(OrgSecurity {
+        require_two_factor: db::org_requires(&state.db, org).await?,
+        members_without: db::members_without(&state.db, org).await?,
+    }))
 }
 
 #[utoipa::path(put, path = "/api/orgs/{org}/security", tag = "orgs", params(("org" = Uuid, Path)), request_body = OrgSecurity, responses((status = 200, body = OrgSecurity), (status = 409)))]
-pub async fn put_org_security(State(state): State<AppState>, p: Principal, Path(org): Path<Uuid>, Json(req): Json<OrgSecurity>) -> ApiResult<Json<OrgSecurity>> {
+pub async fn put_org_security(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(org): Path<Uuid>,
+    Json(req): Json<OrgSecurity>,
+) -> ApiResult<Json<OrgSecurity>> {
     let d = rbac::require(&state, &p, &org_target(org), P::OrgManage).await?;
     if req.require_two_factor && p.user.two_factor_enabled_at.is_none() {
-        return Err(ApiError::Conflict("turn on two-factor for your own account first, so you are not locked out".into()));
+        return Err(ApiError::Conflict(
+            "turn on two-factor for your own account first, so you are not locked out".into(),
+        ));
     }
     db::set_org_requires(&state.db, org, req.require_two_factor).await?;
-    audit::record(&state.db, &p, Entry::new(Some(org), "org.security_update", "org", org).decision(d).details(json!({ "requireTwoFactor": req.require_two_factor }))).await?;
+    audit::record(
+        &state.db,
+        &p,
+        Entry::new(Some(org), "org.security_update", "org", org)
+            .decision(d)
+            .details(json!({ "requireTwoFactor": req.require_two_factor })),
+    )
+    .await?;
     org_security(State(state), p, Path(org)).await
 }
 
 /// Turns off a member's second factor so they can set it up again, for example after losing their phone.
 #[utoipa::path(delete, path = "/api/orgs/{org}/members/{user}/two-factor", tag = "members", params(("org" = Uuid, Path), ("user" = Uuid, Path)), responses((status = 200, body = Ok), (status = 404)))]
-pub async fn reset_member(State(state): State<AppState>, p: Principal, Path((org, user)): Path<(Uuid, Uuid)>) -> ApiResult<Json<Ok>> {
+pub async fn reset_member(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((org, user)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<Ok>> {
     let d = rbac::require(&state, &p, &org_target(org), P::OrgManage).await?;
     if !db::is_member(&state.db, org, user).await? {
         return Err(ApiError::NotFound);
@@ -244,7 +306,14 @@ pub async fn reset_member(State(state): State<AppState>, p: Principal, Path((org
     }
     let mut tx = state.db.begin().await.map_err(tessery_db::DbError::from)?;
     db::disable(&mut tx, user).await?;
-    audit::record(&mut *tx, &p, Entry::new(Some(org), "member.two_factor_reset", "user", user).decision(d).details(json!({ "email": target.email }))).await?;
+    audit::record(
+        &mut *tx,
+        &p,
+        Entry::new(Some(org), "member.two_factor_reset", "user", user)
+            .decision(d)
+            .details(json!({ "email": target.email })),
+    )
+    .await?;
     tx.commit().await.map_err(tessery_db::DbError::from)?;
     let mut redis = state.redis.clone();
     crate::auth::session::destroy_all(&mut redis, user, None).await?;

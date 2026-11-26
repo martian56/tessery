@@ -21,14 +21,28 @@ pub async fn run(state: AppState) {
     loop {
         tick.tick().await;
         let mut redis = state.redis.clone();
-        let mine: Option<String> = redis::cmd("SET").arg(LEASE).arg(&me).arg("NX").arg("EX").arg(LEASE_SECONDS).query_async(&mut redis).await.unwrap_or(None);
+        let mine: Option<String> = redis::cmd("SET")
+            .arg(LEASE)
+            .arg(&me)
+            .arg("NX")
+            .arg("EX")
+            .arg(LEASE_SECONDS)
+            .query_async(&mut redis)
+            .await
+            .unwrap_or(None);
         if mine.is_none() {
             continue;
         }
         if tokio::time::timeout(ROUND_LIMIT, round(&state, rounds)).await.is_err() {
             tracing::warn!("a metrics round took longer than 90 seconds and was cut short");
         }
-        let release: Result<i32, _> = redis::Script::new("if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end").key(LEASE).arg(&me).invoke_async(&mut redis).await;
+        let release: Result<i32, _> = redis::Script::new(
+            "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end",
+        )
+        .key(LEASE)
+        .arg(&me)
+        .invoke_async(&mut redis)
+        .await;
         if let Err(e) = release {
             tracing::warn!(error = %e, "could not release the metrics lease; it expires on its own");
         }
@@ -58,7 +72,11 @@ async fn round(state: &AppState, rounds: u64) {
 }
 
 async fn sample(state: &AppState, project: Uuid, env: &str) {
-    let Ok(Ok(status)) = tokio::time::timeout(Duration::from_secs(25), collect(state, project, env, &HashMap::new())).await else { return };
+    let Ok(Ok(status)) =
+        tokio::time::timeout(Duration::from_secs(25), collect(state, project, env, &HashMap::new())).await
+    else {
+        return;
+    };
     let at = OffsetDateTime::now_utc().replace_millisecond(0).unwrap_or_else(|_| OffsetDateTime::now_utc());
     let samples: Vec<Sample> = status
         .nodes
@@ -94,7 +112,8 @@ pub async fn evaluate(state: &AppState, project: Uuid, env: &str, now: OffsetDat
         let breaches = breaching(&r, &samples, now);
         let known = measured(&r, &samples, now);
         let started: Vec<(&String, &f64)> = breaches.iter().filter(|(n, _)| !r.firing_nodes.contains(n)).collect();
-        let cleared: Vec<&String> = r.firing_nodes.iter().filter(|n| !breaches.contains_key(*n) && known.contains(*n)).collect();
+        let cleared: Vec<&String> =
+            r.firing_nodes.iter().filter(|n| !breaches.contains_key(*n) && known.contains(*n)).collect();
         if started.is_empty() && cleared.is_empty() {
             continue;
         }
@@ -103,12 +122,26 @@ pub async fn evaluate(state: &AppState, project: Uuid, env: &str, now: OffsetDat
             sent &= notify(state, project, env, "alert.firing", describe(&r, node), now_text(&r, **value)).await;
         }
         for node in &cleared {
-            sent &= notify(state, project, env, "alert.resolved", format!("Cleared: {}", describe(&r, node)), String::new()).await;
+            sent &= notify(
+                state,
+                project,
+                env,
+                "alert.resolved",
+                format!("Cleared: {}", describe(&r, node)),
+                String::new(),
+            )
+            .await;
         }
         if !sent {
             continue;
         }
-        let still: Vec<String> = r.firing_nodes.iter().filter(|n| !cleared.contains(n)).cloned().chain(started.iter().map(|(n, _)| (*n).clone())).collect();
+        let still: Vec<String> = r
+            .firing_nodes
+            .iter()
+            .filter(|n| !cleared.contains(n))
+            .cloned()
+            .chain(started.iter().map(|(n, _)| (*n).clone()))
+            .collect();
         db::set_firing(&state.db, r.id, &still, !started.is_empty()).await?;
     }
     Ok(())
@@ -117,7 +150,14 @@ pub async fn evaluate(state: &AppState, project: Uuid, env: &str, now: OffsetDat
 /// Queues one alert notification. The firing state is only saved once every notification of a change is queued,
 /// so a queue outage repeats the change on the next round instead of losing it.
 async fn notify(state: &AppState, project: Uuid, env: &str, event: &str, title: String, detail: String) -> bool {
-    let job = Job::Notify { project_id: project, env: env.to_owned(), event: event.to_owned(), title, detail, release_id: None };
+    let job = Job::Notify {
+        project_id: project,
+        env: env.to_owned(),
+        event: event.to_owned(),
+        title,
+        detail,
+        release_id: None,
+    };
     match state.mq.publish(job).await {
         Ok(_) => true,
         Err(e) => {
@@ -148,7 +188,9 @@ fn now_text(r: &Rule, value: f64) -> String {
 pub fn measured(r: &Rule, samples: &[Sample], now: OffsetDateTime) -> BTreeSet<String> {
     let from = now - time::Duration::minutes(r.minutes.into());
     let mut by_node: BTreeMap<&str, Vec<&Sample>> = BTreeMap::new();
-    for s in samples.iter().filter(|s| s.at >= from - BOUNDARY && s.at <= now && (r.node.is_empty() || s.node == r.node)) {
+    for s in
+        samples.iter().filter(|s| s.at >= from - BOUNDARY && s.at <= now && (r.node.is_empty() || s.node == r.node))
+    {
         by_node.entry(&s.node).or_default().push(s);
     }
     by_node
@@ -160,7 +202,9 @@ pub fn measured(r: &Rule, samples: &[Sample], now: OffsetDateTime) -> BTreeSet<S
                 covers(&ticks, from, now)
                     && match r.metric.as_str() {
                         "cpu" => rows.iter().all(|s| s.cpu_percent.is_some() || s.state != "running"),
-                        "memory" => rows.iter().all(|s| s.state != "running" || (s.memory_bytes.is_some() && s.memory_limit_bytes.is_some())),
+                        "memory" => rows.iter().all(|s| {
+                            s.state != "running" || (s.memory_bytes.is_some() && s.memory_limit_bytes.is_some())
+                        }),
                         _ => true,
                     }
             }
@@ -183,7 +227,9 @@ fn covers(ticks: &BTreeSet<OffsetDateTime>, from: OffsetDateTime, now: OffsetDat
 pub fn breaching(r: &Rule, samples: &[Sample], now: OffsetDateTime) -> BTreeMap<String, f64> {
     let from = now - time::Duration::minutes(r.minutes.into());
     let mut by_node: BTreeMap<&str, Vec<&Sample>> = BTreeMap::new();
-    for s in samples.iter().filter(|s| s.at >= from - BOUNDARY && s.at <= now && (r.node.is_empty() || s.node == r.node)) {
+    for s in
+        samples.iter().filter(|s| s.at >= from - BOUNDARY && s.at <= now && (r.node.is_empty() || s.node == r.node))
+    {
         by_node.entry(&s.node).or_default().push(s);
     }
     let mut out = BTreeMap::new();
@@ -240,11 +286,32 @@ mod tests {
 
     fn rule(metric: &str, threshold: f64, minutes: i32) -> Rule {
         let now = OffsetDateTime::now_utc();
-        Rule { id: Uuid::nil(), project_id: Uuid::nil(), env_key: "prod".into(), node: String::new(), metric: metric.into(), threshold, minutes, firing_nodes: vec![], fired_at: None, created_at: now }
+        Rule {
+            id: Uuid::nil(),
+            project_id: Uuid::nil(),
+            env_key: "prod".into(),
+            node: String::new(),
+            metric: metric.into(),
+            threshold,
+            minutes,
+            firing_nodes: vec![],
+            fired_at: None,
+            created_at: now,
+        }
     }
 
     fn at(now: OffsetDateTime, secs_ago: i64, node: &str, cpu: f64, mem: i64, restarts: i64, state: &str) -> Sample {
-        Sample { node: node.into(), instance: format!("{node}-1"), at: now - time::Duration::seconds(secs_ago), state: state.into(), healthy: None, cpu_percent: Some(cpu), memory_bytes: Some(mem), memory_limit_bytes: Some(100), restarts: Some(restarts) }
+        Sample {
+            node: node.into(),
+            instance: format!("{node}-1"),
+            at: now - time::Duration::seconds(secs_ago),
+            state: state.into(),
+            healthy: None,
+            cpu_percent: Some(cpu),
+            memory_bytes: Some(mem),
+            memory_limit_bytes: Some(100),
+            restarts: Some(restarts),
+        }
     }
 
     #[test]
@@ -258,9 +325,15 @@ mod tests {
         let short: Vec<Sample> = (0..3).map(|i| at(now, i * 30, "web", 1.0, 95, 0, "running")).collect();
         assert!(breaching(&rule("memory", 90.0, 5), &short, now).is_empty(), "two minutes of data cannot prove five");
         let ends: Vec<Sample> = [0, 270].iter().map(|s| at(now, *s, "web", 1.0, 95, 0, "running")).collect();
-        assert!(breaching(&rule("memory", 90.0, 5), &ends, now).is_empty(), "two samples far apart do not prove the minutes between them");
+        assert!(
+            breaching(&rule("memory", 90.0, 5), &ends, now).is_empty(),
+            "two samples far apart do not prove the minutes between them"
+        );
         let one_minute: Vec<Sample> = [0, 30].iter().map(|s| at(now, *s, "web", 1.0, 95, 0, "running")).collect();
-        assert!(breaching(&rule("memory", 90.0, 1), &one_minute, now).is_empty(), "half a minute does not prove a minute");
+        assert!(
+            breaching(&rule("memory", 90.0, 1), &one_minute, now).is_empty(),
+            "half a minute does not prove a minute"
+        );
     }
 
     #[test]

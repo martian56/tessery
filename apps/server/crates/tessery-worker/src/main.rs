@@ -8,30 +8,29 @@ mod provision;
 mod updates;
 
 use anyhow::Context;
-use tessery_mq::Mq;
 use std::time::Duration;
+use tessery_mq::Mq;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,sqlx=warn")),
-        )
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,sqlx=warn")))
         .init();
     let db_url = std::env::var("TESSERY_DATABASE_URL").context("TESSERY_DATABASE_URL is required")?;
     let amqp_url = std::env::var("TESSERY_AMQP_URL").context("TESSERY_AMQP_URL is required")?;
-    let db = tessery_db::connect(&db_url, 5)
-        .await
-        .context("connecting to Postgres")?;
+    let db = tessery_db::connect(&db_url, 5).await.context("connecting to Postgres")?;
     tessery_db::migrate(&db).await.context("running migrations")?;
-    let mq = Mq::connect(&amqp_url, "tessery-worker")
-        .await
-        .context("connecting to RabbitMQ")?;
+    let mq = Mq::connect(&amqp_url, "tessery-worker").await.context("connecting to RabbitMQ")?;
     let secret_key = tessery_core::SecretKey::from_env()?;
     let data_dir = std::env::var("TESSERY_DATA_DIR").unwrap_or_else(|_| "./data".to_owned());
-    let ctx = std::sync::Arc::new(jobs::Ctx { db: db.clone(), repos: tessery_git::Repos::new(data_dir), secret_key, runner: deploy::RunnerConfig::from_env() });
+    let ctx = std::sync::Arc::new(jobs::Ctx {
+        db: db.clone(),
+        repos: tessery_git::Repos::new(data_dir),
+        secret_key,
+        runner: deploy::RunnerConfig::from_env(),
+    });
     for id in tessery_db::delivery::fail_interrupted(&db).await? {
         tracing::warn!(release_id = %id, "marked a deploy interrupted by the last shutdown as failed");
     }

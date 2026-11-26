@@ -31,7 +31,10 @@ impl SecretKey {
     pub fn parse(s: &str) -> Result<Self, SecretError> {
         let s = s.trim();
         let bytes = if s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit()) {
-            (0..32).map(|i| u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)).collect::<Result<Vec<_>, _>>().map_err(|_| SecretError::BadKey)?
+            (0..32)
+                .map(|i| u8::from_str_radix(&s[i * 2..i * 2 + 2], 16))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| SecretError::BadKey)?
         } else {
             base64::engine::general_purpose::STANDARD.decode(s).map_err(|_| SecretError::BadKey)?
         };
@@ -62,7 +65,11 @@ impl SecretKey {
     pub fn encrypt(&self, plain: &[u8]) -> Vec<u8> {
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
         let mut out = nonce.to_vec();
-        out.extend(Aes256Gcm::new(&self.current).encrypt(&nonce, plain).expect("AES-GCM encryption does not fail for in-memory buffers"));
+        out.extend(
+            Aes256Gcm::new(&self.current)
+                .encrypt(&nonce, plain)
+                .expect("AES-GCM encryption does not fail for in-memory buffers"),
+        );
         out
     }
 

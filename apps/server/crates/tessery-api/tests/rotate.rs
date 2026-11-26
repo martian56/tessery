@@ -23,14 +23,21 @@ async fn rotation_moves_every_value_to_the_new_key() {
     let (admin, org) = app.setup().await;
     let mut d = doc("shop");
     d["environments"] = json!([{ "id": "prod", "name": "Production" }]);
-    let project: Value = admin.post(&format!("/api/orgs/{org}/projects"), json!({ "doc": d })).await.json().await.unwrap();
+    let project: Value =
+        admin.post(&format!("/api/orgs/{org}/projects"), json!({ "doc": d })).await.json().await.unwrap();
     let pid = project["id"].as_str().unwrap();
-    let put = admin.put(&format!("/api/projects/{pid}/environments/prod/secrets/DB_PASSWORD"), json!({ "value": "hunter22-hunter22" })).await;
+    let put = admin
+        .put(
+            &format!("/api/projects/{pid}/environments/prod/secrets/DB_PASSWORD"),
+            json!({ "value": "hunter22-hunter22" }),
+        )
+        .await;
     assert_eq!(put.status(), StatusCode::OK, "{}", put.text().await.unwrap_or_default());
     let ch = admin.post(&format!("/api/projects/{pid}/notifications"), json!({ "name": "ops", "kind": "webhook", "target": "https://hooks.example/abc", "events": ["release.failed"] })).await;
     assert_eq!(ch.status(), StatusCode::CREATED);
 
-    let url = std::env::var("TESSERY_TEST_DATABASE_URL").unwrap_or_else(|_| "postgres://tessery:tessery@127.0.0.1:15432/tessery".into());
+    let url = std::env::var("TESSERY_TEST_DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://tessery:tessery@127.0.0.1:15432/tessery".into());
     let url = format!("{}/{}", url.rsplit_once('/').unwrap().0, app.db_name);
     let db = PgPool::connect(&url).await.unwrap();
 

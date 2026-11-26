@@ -1,4 +1,7 @@
-use crate::routes::{access, admin, assets, audit_log, auth, backups, delivery, dto, email, github, metrics, notifications, two_factor, integrations, orgs, projects, runtime, servers, sso, system, teams, telemetry, tokens};
+use crate::routes::{
+    access, admin, assets, audit_log, auth, backups, delivery, dto, email, github, integrations, metrics,
+    notifications, orgs, projects, runtime, servers, sso, system, teams, telemetry, tokens, two_factor,
+};
 use axum::Json;
 use utoipa::OpenApi;
 

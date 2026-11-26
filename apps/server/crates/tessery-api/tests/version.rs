@@ -3,7 +3,6 @@ mod common;
 use axum::http::StatusCode;
 use serde_json::{Value, json};
 
-
 async fn releases(tag: &'static str) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}/releases/latest", listener.local_addr().unwrap());
@@ -63,4 +62,3 @@ async fn requires_a_signed_in_user() {
     app.setup().await;
     assert_eq!(app.session().get("/api/system/version").await.status(), StatusCode::UNAUTHORIZED);
 }
-

@@ -147,11 +147,7 @@ pub async fn get_export(ex: impl PgExecutor<'_>, org_id: Uuid, id: Uuid) -> DbRe
     .or_not_found()
 }
 
-pub async fn export_content(
-    ex: impl PgExecutor<'_>,
-    org_id: Uuid,
-    id: Uuid,
-) -> DbResult<Option<String>> {
+pub async fn export_content(ex: impl PgExecutor<'_>, org_id: Uuid, id: Uuid) -> DbResult<Option<String>> {
     sqlx::query_scalar!(
         "SELECT content FROM audit_exports WHERE org_id = $1 AND id = $2 AND status = 'done'",
         org_id,
@@ -173,15 +169,15 @@ pub async fn claim_export(ex: impl PgExecutor<'_>, id: Uuid) -> DbResult<Option<
     .await?)
 }
 
-pub async fn finish_export(
-    ex: impl PgExecutor<'_>,
-    id: Uuid,
-    rows: i32,
-    content: &str,
-) -> DbResult<()> {
-    sqlx::query!("UPDATE audit_exports SET status = 'done', row_count = $2, content = $3, finished_at = now() WHERE id = $1", id, rows, content)
-        .execute(ex)
-        .await?;
+pub async fn finish_export(ex: impl PgExecutor<'_>, id: Uuid, rows: i32, content: &str) -> DbResult<()> {
+    sqlx::query!(
+        "UPDATE audit_exports SET status = 'done', row_count = $2, content = $3, finished_at = now() WHERE id = $1",
+        id,
+        rows,
+        content
+    )
+    .execute(ex)
+    .await?;
     Ok(())
 }
 

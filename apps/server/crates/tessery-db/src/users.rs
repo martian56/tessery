@@ -56,54 +56,28 @@ pub async fn list_all(ex: impl PgExecutor<'_>) -> DbResult<Vec<User>> {
 }
 
 pub async fn count(ex: impl PgExecutor<'_>) -> DbResult<i64> {
-    Ok(sqlx::query_scalar!(r#"SELECT count(*) AS "n!" FROM users"#)
+    Ok(sqlx::query_scalar!(r#"SELECT count(*) AS "n!" FROM users"#).fetch_one(ex).await?)
+}
+
+pub async fn count_instance_admins(ex: impl PgExecutor<'_>) -> DbResult<i64> {
+    Ok(sqlx::query_scalar!(r#"SELECT count(*) AS "n!" FROM users WHERE is_instance_admin AND disabled_at IS NULL"#)
         .fetch_one(ex)
         .await?)
 }
 
-pub async fn count_instance_admins(ex: impl PgExecutor<'_>) -> DbResult<i64> {
-    Ok(sqlx::query_scalar!(
-        r#"SELECT count(*) AS "n!" FROM users WHERE is_instance_admin AND disabled_at IS NULL"#
-    )
-    .fetch_one(ex)
-    .await?)
-}
-
 pub async fn update_profile(ex: impl PgExecutor<'_>, id: Uuid, name: &str) -> DbResult<()> {
-    let r = sqlx::query!("UPDATE users SET name = $2 WHERE id = $1", id, name)
-        .execute(ex)
-        .await?;
-    if r.rows_affected() == 0 {
-        Err(crate::DbError::NotFound)
-    } else {
-        Ok(())
-    }
+    let r = sqlx::query!("UPDATE users SET name = $2 WHERE id = $1", id, name).execute(ex).await?;
+    if r.rows_affected() == 0 { Err(crate::DbError::NotFound) } else { Ok(()) }
 }
 
 pub async fn set_password(ex: impl PgExecutor<'_>, id: Uuid, password_hash: &str) -> DbResult<()> {
-    sqlx::query!(
-        "UPDATE users SET password_hash = $2 WHERE id = $1",
-        id,
-        password_hash
-    )
-    .execute(ex)
-    .await?;
+    sqlx::query!("UPDATE users SET password_hash = $2 WHERE id = $1", id, password_hash).execute(ex).await?;
     Ok(())
 }
 
 pub async fn set_instance_admin(ex: impl PgExecutor<'_>, id: Uuid, value: bool) -> DbResult<()> {
-    let r = sqlx::query!(
-        "UPDATE users SET is_instance_admin = $2 WHERE id = $1",
-        id,
-        value
-    )
-    .execute(ex)
-    .await?;
-    if r.rows_affected() == 0 {
-        Err(crate::DbError::NotFound)
-    } else {
-        Ok(())
-    }
+    let r = sqlx::query!("UPDATE users SET is_instance_admin = $2 WHERE id = $1", id, value).execute(ex).await?;
+    if r.rows_affected() == 0 { Err(crate::DbError::NotFound) } else { Ok(()) }
 }
 
 pub async fn set_disabled(ex: impl PgExecutor<'_>, id: Uuid, disabled: bool) -> DbResult<()> {
@@ -114,16 +88,10 @@ pub async fn set_disabled(ex: impl PgExecutor<'_>, id: Uuid, disabled: bool) -> 
     )
     .execute(ex)
     .await?;
-    if r.rows_affected() == 0 {
-        Err(crate::DbError::NotFound)
-    } else {
-        Ok(())
-    }
+    if r.rows_affected() == 0 { Err(crate::DbError::NotFound) } else { Ok(()) }
 }
 
 pub async fn touch_login(ex: impl PgExecutor<'_>, id: Uuid) -> DbResult<()> {
-    sqlx::query!("UPDATE users SET last_login_at = now() WHERE id = $1", id)
-        .execute(ex)
-        .await?;
+    sqlx::query!("UPDATE users SET last_login_at = now() WHERE id = $1", id).execute(ex).await?;
     Ok(())
 }

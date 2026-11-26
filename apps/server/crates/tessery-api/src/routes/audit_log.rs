@@ -3,16 +3,16 @@ use crate::auth::Principal;
 use crate::error::{ApiError, ApiResult};
 use crate::rbac::{self, org_target};
 use crate::state::AppState;
-use tessery_core::Permission as P;
-use tessery_db::audit::{Event, Filter};
-use tessery_db::types::{AuditResult, ExportStatus};
-use tessery_mq::Job;
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tessery_core::Permission as P;
+use tessery_db::audit::{Event, Filter};
+use tessery_db::types::{AuditResult, ExportStatus};
+use tessery_mq::Job;
 use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
@@ -105,15 +105,8 @@ pub async fn list(
     rbac::require(&state, &p, &org_target(org), P::AuditRead).await?;
     let limit = q.limit.unwrap_or(100).clamp(1, 500);
     let events = tessery_db::audit::list(&state.db, org, &filter_from(&q)?, q.before, limit).await?;
-    let next_cursor = if events.len() as i64 == limit {
-        events.last().map(|e| e.id)
-    } else {
-        None
-    };
-    Ok(Json(AuditPage {
-        events: events.into_iter().map(Into::into).collect(),
-        next_cursor,
-    }))
+    let next_cursor = if events.len() as i64 == limit { events.last().map(|e| e.id) } else { None };
+    Ok(Json(AuditPage { events: events.into_iter().map(Into::into).collect(), next_cursor }))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -189,12 +182,7 @@ pub async fn create_export(
         &serde_json::to_value(&filter).map_err(anyhow::Error::from)?,
     )
     .await?;
-    state
-        .mq
-        .publish(Job::AuditExport {
-            export_id: export.id,
-        })
-        .await?;
+    state.mq.publish(Job::AuditExport { export_id: export.id }).await?;
     audit::record(
         &state.db,
         &p,
@@ -213,11 +201,7 @@ pub async fn get_export(
     Path((org, export)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<ExportDto>> {
     rbac::require(&state, &p, &org_target(org), P::AuditRead).await?;
-    Ok(Json(
-        tessery_db::audit::get_export(&state.db, org, export)
-            .await?
-            .into(),
-    ))
+    Ok(Json(tessery_db::audit::get_export(&state.db, org, export).await?.into()))
 }
 
 #[utoipa::path(get, path = "/api/orgs/{org}/audit/exports/{export}/download", tag = "audit", params(("org" = Uuid, Path), ("export" = Uuid, Path)), responses((status = 200, description = "The export file")))]
@@ -231,18 +215,11 @@ pub async fn download_export(
     let content = tessery_db::audit::export_content(&state.db, org, export)
         .await?
         .ok_or_else(|| ApiError::Conflict("the export is not ready yet".into()))?;
-    let (mime, ext) = if e.format == "csv" {
-        ("text/csv; charset=utf-8", "csv")
-    } else {
-        ("application/json", "json")
-    };
+    let (mime, ext) = if e.format == "csv" { ("text/csv; charset=utf-8", "csv") } else { ("application/json", "json") };
     Ok((
         [
             (header::CONTENT_TYPE, mime.to_owned()),
-            (
-                header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"audit-{export}.{ext}\""),
-            ),
+            (header::CONTENT_DISPOSITION, format!("attachment; filename=\"audit-{export}.{ext}\"")),
         ],
         content,
     ))

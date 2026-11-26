@@ -4,7 +4,13 @@ use common::{TestApp, add_member, doc};
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 
-async fn bearer(app: &TestApp, token: &str, method: reqwest::Method, path: &str, body: Option<Value>) -> reqwest::Response {
+async fn bearer(
+    app: &TestApp,
+    token: &str,
+    method: reqwest::Method,
+    path: &str,
+    body: Option<Value>,
+) -> reqwest::Response {
     let mut req = Client::new().request(method, format!("{}{path}", app.base)).bearer_auth(token);
     if let Some(b) = body {
         req = req.json(&b);
@@ -13,7 +19,14 @@ async fn bearer(app: &TestApp, token: &str, method: reqwest::Method, path: &str,
 }
 
 async fn mcp(app: &TestApp, token: &str, method: &str, params: Value) -> Value {
-    let r = bearer(app, token, reqwest::Method::POST, "/api/mcp", Some(json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params }))).await;
+    let r = bearer(
+        app,
+        token,
+        reqwest::Method::POST,
+        "/api/mcp",
+        Some(json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params })),
+    )
+    .await;
     assert_eq!(r.status(), StatusCode::OK);
     r.json::<Value>().await.unwrap()["result"].clone()
 }
@@ -28,32 +41,76 @@ async fn tool(app: &TestApp, token: &str, name: &str, args: Value) -> (bool, Val
 async fn tokens_act_as_their_owner_within_their_scope() {
     let app = common::spawn().await;
     let (admin, org) = app.setup().await;
-    let a: Value = admin.post(&format!("/api/orgs/{org}/projects"), json!({ "doc": doc("Alpha") })).await.json().await.unwrap();
-    let b: Value = admin.post(&format!("/api/orgs/{org}/projects"), json!({ "doc": doc("Beta") })).await.json().await.unwrap();
+    let a: Value =
+        admin.post(&format!("/api/orgs/{org}/projects"), json!({ "doc": doc("Alpha") })).await.json().await.unwrap();
+    let b: Value =
+        admin.post(&format!("/api/orgs/{org}/projects"), json!({ "doc": doc("Beta") })).await.json().await.unwrap();
     let (a_id, b_id) = (a["id"].as_str().unwrap(), b["id"].as_str().unwrap());
 
-    let created: Value = admin.post("/api/auth/tokens", json!({ "name": "ci", "projectId": a_id, "permissions": ["project:read"] })).await.json().await.unwrap();
+    let created: Value = admin
+        .post("/api/auth/tokens", json!({ "name": "ci", "projectId": a_id, "permissions": ["project:read"] }))
+        .await
+        .json()
+        .await
+        .unwrap();
     let token = created["secret"].as_str().unwrap();
     assert!(token.starts_with("tessery_"));
     let listed: Value = admin.json("/api/auth/tokens").await;
     assert!(!listed.to_string().contains(token), "the secret is only shown once");
 
-    assert_eq!(bearer(&app, token, reqwest::Method::GET, &format!("/api/projects/{a_id}"), None).await.status(), StatusCode::OK);
-    assert_eq!(bearer(&app, token, reqwest::Method::GET, &format!("/api/projects/{b_id}"), None).await.status(), StatusCode::NOT_FOUND, "other projects are invisible");
-    let save = bearer(&app, token, reqwest::Method::PUT, &format!("/api/projects/{a_id}"), Some(json!({ "version": a["version"], "doc": doc("Alpha 2") }))).await;
-    assert_eq!(save.status(), StatusCode::FORBIDDEN, "project:read does not allow editing, even for an instance admin's token");
-    assert_eq!(bearer(&app, token, reqwest::Method::POST, "/api/auth/tokens", Some(json!({ "name": "escalate" }))).await.status(), StatusCode::FORBIDDEN, "tokens cannot mint tokens");
+    assert_eq!(
+        bearer(&app, token, reqwest::Method::GET, &format!("/api/projects/{a_id}"), None).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        bearer(&app, token, reqwest::Method::GET, &format!("/api/projects/{b_id}"), None).await.status(),
+        StatusCode::NOT_FOUND,
+        "other projects are invisible"
+    );
+    let save = bearer(
+        &app,
+        token,
+        reqwest::Method::PUT,
+        &format!("/api/projects/{a_id}"),
+        Some(json!({ "version": a["version"], "doc": doc("Alpha 2") })),
+    )
+    .await;
+    assert_eq!(
+        save.status(),
+        StatusCode::FORBIDDEN,
+        "project:read does not allow editing, even for an instance admin's token"
+    );
+    assert_eq!(
+        bearer(&app, token, reqwest::Method::POST, "/api/auth/tokens", Some(json!({ "name": "escalate" })))
+            .await
+            .status(),
+        StatusCode::FORBIDDEN,
+        "tokens cannot mint tokens"
+    );
 
     let viewer = add_member(&app, &admin, org, "viewer@example.com", "viewer").await.0;
     let vt: Value = viewer.post("/api/auth/tokens", json!({ "name": "mine" })).await.json().await.unwrap();
     let vt = vt["secret"].as_str().unwrap();
-    let r = bearer(&app, vt, reqwest::Method::PUT, &format!("/api/projects/{a_id}"), Some(json!({ "version": a["version"], "doc": doc("Alpha 3") }))).await;
+    let r = bearer(
+        &app,
+        vt,
+        reqwest::Method::PUT,
+        &format!("/api/projects/{a_id}"),
+        Some(json!({ "version": a["version"], "doc": doc("Alpha 3") })),
+    )
+    .await;
     assert_eq!(r.status(), StatusCode::FORBIDDEN, "a full token is still limited to what its owner may do");
 
     let id = created["token"]["id"].as_str().unwrap();
     assert_eq!(admin.delete(&format!("/api/auth/tokens/{id}")).await.status(), StatusCode::OK);
-    assert_eq!(bearer(&app, token, reqwest::Method::GET, &format!("/api/projects/{a_id}"), None).await.status(), StatusCode::UNAUTHORIZED);
-    assert_eq!(bearer(&app, "tessery_not-a-token", reqwest::Method::GET, "/api/auth/me", None).await.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        bearer(&app, token, reqwest::Method::GET, &format!("/api/projects/{a_id}"), None).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        bearer(&app, "tessery_not-a-token", reqwest::Method::GET, "/api/auth/me", None).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
 }
 
 #[tokio::test]
@@ -63,7 +120,12 @@ async fn agents_design_and_checkpoint_over_mcp() {
     let created: Value = admin.post("/api/auth/tokens", json!({ "name": "agent" })).await.json().await.unwrap();
     let token = created["secret"].as_str().unwrap();
 
-    let unauth = Client::new().post(format!("{}/api/mcp", app.base)).json(&json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" })).send().await.unwrap();
+    let unauth = Client::new()
+        .post(format!("{}/api/mcp", app.base))
+        .json(&json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(unauth.status(), StatusCode::UNAUTHORIZED);
     assert!(unauth.headers().contains_key("www-authenticate"));
 
@@ -97,14 +159,18 @@ async fn agents_design_and_checkpoint_over_mcp() {
     assert_eq!(cp["seq"], 1);
 
     let (err, msg) = tool(&app, token, "edit_design", json!({ "project": pid, "operations": [{ "op": "connect", "args": { "source": "orders", "target": "nowhere" } }] })).await;
-    assert!(err && msg.as_str().unwrap().contains("connect"), "a failed connect is an error, not a silent no-op: {msg}");
+    assert!(
+        err && msg.as_str().unwrap().contains("connect"),
+        "a failed connect is an error, not a silent no-op: {msg}"
+    );
 }
 
 #[tokio::test]
 async fn git_over_http_needs_a_token_and_protects_tessery_refs() {
     let app = common::spawn().await;
     let (admin, org) = app.setup().await;
-    let p: Value = admin.post(&format!("/api/orgs/{org}/projects"), json!({ "doc": doc("Repo") })).await.json().await.unwrap();
+    let p: Value =
+        admin.post(&format!("/api/orgs/{org}/projects"), json!({ "doc": doc("Repo") })).await.json().await.unwrap();
     let pid = p["id"].as_str().unwrap();
     admin.post(&format!("/api/projects/{pid}/checkpoints"), json!({ "name": "first", "version": p["version"] })).await;
     let created: Value = admin.post("/api/auth/tokens", json!({ "name": "git" })).await.json().await.unwrap();

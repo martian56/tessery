@@ -8,7 +8,9 @@ fn parse(v: &str) -> Option<([u64; 3], Option<&str>)> {
     };
     let mut parts = core.split('.').map(|p| p.parse::<u64>().ok());
     let n = [parts.next()??, parts.next()??, parts.next()??];
-    if parts.next().is_some() || pre.is_some_and(|p| p.is_empty() || !p.chars().all(|c| c.is_ascii_alphanumeric() || c == '.')) {
+    if parts.next().is_some()
+        || pre.is_some_and(|p| p.is_empty() || !p.chars().all(|c| c.is_ascii_alphanumeric() || c == '.'))
+    {
         return None;
     }
     Some((n, pre))

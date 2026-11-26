@@ -26,16 +26,20 @@ pub async fn reencrypt(db: &PgPool, key: &SecretKey) -> Result<Vec<Count>> {
     let mut tx = db.begin().await?;
     let mut report = Vec::new();
     for (table, column, what) in ENCRYPTED {
-        let rows = sqlx::query(AssertSqlSafe(format!("SELECT ctid::text AS id, {column} AS value FROM {table} WHERE {column} IS NOT NULL FOR UPDATE")))
-            .fetch_all(&mut *tx)
-            .await
-            .with_context(|| format!("reading {what}"))?;
+        let rows = sqlx::query(AssertSqlSafe(format!(
+            "SELECT ctid::text AS id, {column} AS value FROM {table} WHERE {column} IS NOT NULL FOR UPDATE"
+        )))
+        .fetch_all(&mut *tx)
+        .await
+        .with_context(|| format!("reading {what}"))?;
         let mut count = Count { what, ..Default::default() };
         for row in rows {
             let id: String = row.get("id");
             let value: Vec<u8> = row.get("value");
             let Ok((plain, previous)) = key.decrypt_tracked(&value) else {
-                bail!("a value in {what} ({table}.{column}) cannot be read with the current or the previous key; nothing was changed");
+                bail!(
+                    "a value in {what} ({table}.{column}) cannot be read with the current or the previous key; nothing was changed"
+                );
             };
             sqlx::query(AssertSqlSafe(format!("UPDATE {table} SET {column} = $1 WHERE ctid = $2::tid")))
                 .bind(key.encrypt(&plain))
@@ -66,7 +70,9 @@ pub async fn run_command() -> Result<()> {
     }
     println!("Done. {changed} values moved to the new key.");
     if key.has_previous() {
-        println!("Redeploy environments that send telemetry so they get new tokens, then remove TESSERY_SECRET_KEY_PREVIOUS and restart the server and worker.");
+        println!(
+            "Redeploy environments that send telemetry so they get new tokens, then remove TESSERY_SECRET_KEY_PREVIOUS and restart the server and worker."
+        );
     }
     Ok(())
 }

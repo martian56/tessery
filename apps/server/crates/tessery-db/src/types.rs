@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema)]
 #[sqlx(type_name = "subject_kind", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum SubjectKind {
@@ -10,9 +8,7 @@ pub enum SubjectKind {
     Team,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema)]
 #[sqlx(type_name = "scope_kind", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum ScopeKind {
@@ -22,9 +18,7 @@ pub enum ScopeKind {
     Environment,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema)]
 #[sqlx(type_name = "audit_result", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum AuditResult {
@@ -43,9 +37,7 @@ impl From<tessery_core::Decision> for AuditResult {
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema)]
 #[sqlx(type_name = "export_status", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum ExportStatus {
@@ -55,9 +47,7 @@ pub enum ExportStatus {
     Failed,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema)]
 #[sqlx(type_name = "release_status", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum ReleaseStatus {

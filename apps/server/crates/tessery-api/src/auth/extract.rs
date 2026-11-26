@@ -1,11 +1,11 @@
 use crate::auth::session;
 use crate::error::ApiError;
 use crate::state::AppState;
-use tessery_db::users::User;
 use axum::extract::{ConnectInfo, FromRequestParts};
 use axum::http::request::Parts;
 use axum_extra::extract::CookieJar;
 use std::net::SocketAddr;
+use tessery_db::users::User;
 
 #[derive(Debug, Clone, Default)]
 pub struct RequestMeta {
@@ -16,10 +16,7 @@ pub struct RequestMeta {
 impl FromRequestParts<AppState> for RequestMeta {
     type Rejection = std::convert::Infallible;
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        state: &AppState,
-    ) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
         let forwarded = state
             .config
             .trust_proxy
@@ -32,17 +29,9 @@ impl FromRequestParts<AppState> for RequestMeta {
                     .map(|v| v.trim().to_owned())
             })
             .flatten();
-        let ip = forwarded.or_else(|| {
-            parts
-                .extensions
-                .get::<ConnectInfo<SocketAddr>>()
-                .map(|c| c.0.ip().to_string())
-        });
-        let user_agent = parts
-            .headers
-            .get("user-agent")
-            .and_then(|v| v.to_str().ok())
-            .map(|v| v.chars().take(300).collect());
+        let ip = forwarded.or_else(|| parts.extensions.get::<ConnectInfo<SocketAddr>>().map(|c| c.0.ip().to_string()));
+        let user_agent =
+            parts.headers.get("user-agent").and_then(|v| v.to_str().ok()).map(|v| v.chars().take(300).collect());
         Ok(Self { ip, user_agent })
     }
 }
@@ -83,7 +72,8 @@ fn bearer(parts: &Parts) -> Option<String> {
 
 impl Principal {
     pub fn is_instance_admin(&self) -> bool {
-        self.user.is_instance_admin && self.scope.as_ref().is_none_or(|s| s.permissions.is_none() && s.project.is_none())
+        self.user.is_instance_admin
+            && self.scope.as_ref().is_none_or(|s| s.permissions.is_none() && s.project.is_none())
     }
 
     pub fn require_instance_admin(&self) -> Result<(), ApiError> {
@@ -98,22 +88,15 @@ impl Principal {
 impl FromRequestParts<AppState> for Principal {
     type Rejection = ApiError;
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        state: &AppState,
-    ) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
         if let Some(raw) = bearer(parts) {
             return from_api_token(parts, state, &raw).await;
         }
         let jar = CookieJar::from_headers(&parts.headers);
-        let token = jar
-            .get(session::COOKIE)
-            .map(|c| c.value().to_owned())
-            .ok_or(ApiError::Unauthenticated)?;
+        let token = jar.get(session::COOKIE).map(|c| c.value().to_owned()).ok_or(ApiError::Unauthenticated)?;
         let mut redis = state.redis.clone();
-        let user_id = session::resolve(&mut redis, &token, state.config.session_ttl)
-            .await?
-            .ok_or(ApiError::Unauthenticated)?;
+        let user_id =
+            session::resolve(&mut redis, &token, state.config.session_ttl).await?.ok_or(ApiError::Unauthenticated)?;
         let user = match tessery_db::users::get(&state.db, user_id).await {
             Ok(u) => u,
             Err(tessery_db::DbError::NotFound) => return Err(ApiError::Unauthenticated),
@@ -123,9 +106,7 @@ impl FromRequestParts<AppState> for Principal {
             session::destroy(&mut redis, &token).await?;
             return Err(ApiError::Unauthenticated);
         }
-        let meta = RequestMeta::from_request_parts(parts, state)
-            .await
-            .unwrap_or_default();
+        let meta = RequestMeta::from_request_parts(parts, state).await.unwrap_or_default();
         Ok(Self { user, token, meta, scope: None })
     }
 }
@@ -146,5 +127,10 @@ async fn from_api_token(parts: &mut Parts, state: &AppState, raw: &str) -> Resul
     };
     let permissions = token.permissions.map(|ps| ps.iter().filter_map(|p| p.parse().ok()).collect());
     let meta = RequestMeta::from_request_parts(parts, state).await.unwrap_or_default();
-    Ok(Principal { user, token: String::new(), meta, scope: Some(TokenScope { id: token.id, permissions, project: token.project_id }) })
+    Ok(Principal {
+        user,
+        token: String::new(),
+        meta,
+        scope: Some(TokenScope { id: token.id, permissions, project: token.project_id }),
+    })
 }

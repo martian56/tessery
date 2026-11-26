@@ -1,7 +1,7 @@
 use futures_util::StreamExt;
 use lapin::options::{
-    BasicAckOptions, BasicConsumeOptions, BasicNackOptions, BasicPublishOptions, BasicQosOptions,
-    ConfirmSelectOptions, QueueDeclareOptions,
+    BasicAckOptions, BasicConsumeOptions, BasicNackOptions, BasicPublishOptions, BasicQosOptions, ConfirmSelectOptions,
+    QueueDeclareOptions,
 };
 use lapin::types::{AMQPValue, FieldTable, ShortString};
 use lapin::{BasicProperties, Channel, Connection, ConnectionProperties};
@@ -22,13 +22,25 @@ pub struct ServerConnection {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Job {
-    AuditExport { export_id: Uuid },
+    AuditExport {
+        export_id: Uuid,
+    },
     SweepExpiredGrants,
-    PushRemote { project_id: Uuid },
-    Deploy { release_id: Uuid },
-    ProvisionServer { server_id: Uuid },
-    Backup { backup_id: Uuid },
-    RestoreBackup { backup_id: Uuid },
+    PushRemote {
+        project_id: Uuid,
+    },
+    Deploy {
+        release_id: Uuid,
+    },
+    ProvisionServer {
+        server_id: Uuid,
+    },
+    Backup {
+        backup_id: Uuid,
+    },
+    RestoreBackup {
+        backup_id: Uuid,
+    },
     Notify {
         project_id: Uuid,
         env: String,
@@ -64,7 +76,9 @@ impl Job {
             Job::Backup { backup_id } => format!("backup {backup_id}"),
             Job::Notify { project_id, event, .. } => format!("notify {event} for {project_id}"),
             Job::RestoreBackup { backup_id } => format!("restore backup {backup_id}"),
-            Job::Teardown { project_id, env, destroy, .. } => format!("{} {env} of {project_id}", if *destroy { "destroy" } else { "stop" }),
+            Job::Teardown { project_id, env, destroy, .. } => {
+                format!("{} {env} of {project_id}", if *destroy { "destroy" } else { "stop" })
+            }
         }
     }
 }
@@ -114,10 +128,7 @@ impl Mq {
     }
 
     pub async fn publish(&self, job: Job) -> Result<Uuid, MqError> {
-        let env = Envelope {
-            id: Uuid::now_v7(),
-            job,
-        };
+        let env = Envelope { id: Uuid::now_v7(), job };
         let body = serde_json::to_vec(&env)?;
         let props = BasicProperties::default()
             .with_delivery_mode(2)
@@ -126,7 +137,13 @@ impl Mq {
         let mut attempt = 0;
         let confirm = loop {
             let channel = self.channel().await?;
-            let sent = async { channel.basic_publish("".into(), JOBS_QUEUE.into(), BasicPublishOptions::default(), &body, props.clone()).await?.await }.await;
+            let sent = async {
+                channel
+                    .basic_publish("".into(), JOBS_QUEUE.into(), BasicPublishOptions::default(), &body, props.clone())
+                    .await?
+                    .await
+            }
+            .await;
             match sent {
                 Ok(c) => break c,
                 Err(e) if attempt == 0 => {
@@ -169,22 +186,21 @@ impl Mq {
         }
     }
 
-    async fn consume_on<F, Fut, E>(&self, channel: &Channel, tag: &str, prefetch: u16, handler: &F) -> Result<(), MqError>
+    async fn consume_on<F, Fut, E>(
+        &self,
+        channel: &Channel,
+        tag: &str,
+        prefetch: u16,
+        handler: &F,
+    ) -> Result<(), MqError>
     where
         F: Fn(Envelope) -> Fut,
         Fut: Future<Output = Result<(), E>> + Send + 'static,
         E: std::fmt::Display,
     {
-        channel
-            .basic_qos(prefetch, BasicQosOptions::default())
-            .await?;
+        channel.basic_qos(prefetch, BasicQosOptions::default()).await?;
         let mut consumer = channel
-            .basic_consume(
-                JOBS_QUEUE.into(),
-                tag.into(),
-                BasicConsumeOptions::default(),
-                FieldTable::default(),
-            )
+            .basic_consume(JOBS_QUEUE.into(), tag.into(), BasicConsumeOptions::default(), FieldTable::default())
             .await?;
         let slots = std::sync::Arc::new(tokio::sync::Semaphore::new(prefetch.max(1) as usize));
         while let Some(delivery) = consumer.next().await {
@@ -193,12 +209,7 @@ impl Mq {
                 Ok(env) => env,
                 Err(e) => {
                     tracing::error!(error = %e, "dropping undecodable message to dead-letter queue");
-                    delivery
-                        .nack(BasicNackOptions {
-                            requeue: false,
-                            ..Default::default()
-                        })
-                        .await?;
+                    delivery.nack(BasicNackOptions { requeue: false, ..Default::default() }).await?;
                     continue;
                 }
             };
@@ -212,12 +223,7 @@ impl Mq {
                     Ok(()) => delivery.ack(BasicAckOptions::default()).await,
                     Err(e) => {
                         tracing::error!(job_id = %id, error = %e, "job failed");
-                        delivery
-                            .nack(BasicNackOptions {
-                                requeue: false,
-                                ..Default::default()
-                            })
-                            .await
+                        delivery.nack(BasicNackOptions { requeue: false, ..Default::default() }).await
                     }
                 };
                 if let Err(e) = outcome {
@@ -242,29 +248,12 @@ async fn open(url: &str, name: &str) -> Result<Link, MqError> {
 }
 
 async fn declare_topology(channel: &Channel) -> Result<(), MqError> {
-    channel
-        .queue_declare(
-            DEAD_LETTER_QUEUE.into(),
-            QueueDeclareOptions::durable(),
-            FieldTable::default(),
-        )
-        .await?;
+    channel.queue_declare(DEAD_LETTER_QUEUE.into(), QueueDeclareOptions::durable(), FieldTable::default()).await?;
     let mut args = FieldTable::default();
-    args.insert(
-        "x-dead-letter-exchange".into(),
-        AMQPValue::LongString("".into()),
-    );
-    args.insert(
-        "x-dead-letter-routing-key".into(),
-        AMQPValue::LongString(DEAD_LETTER_QUEUE.into()),
-    );
-    args.insert(
-        "x-queue-type".into(),
-        AMQPValue::LongString("quorum".into()),
-    );
-    channel
-        .queue_declare(JOBS_QUEUE.into(), QueueDeclareOptions::durable(), args)
-        .await?;
+    args.insert("x-dead-letter-exchange".into(), AMQPValue::LongString("".into()));
+    args.insert("x-dead-letter-routing-key".into(), AMQPValue::LongString(DEAD_LETTER_QUEUE.into()));
+    args.insert("x-queue-type".into(), AMQPValue::LongString("quorum".into()));
+    channel.queue_declare(JOBS_QUEUE.into(), QueueDeclareOptions::durable(), args).await?;
     Ok(())
 }
 
@@ -275,15 +264,8 @@ mod tests {
     #[test]
     fn job_wire_format_is_stable() {
         let id = Uuid::nil();
-        let json = serde_json::to_value(Envelope {
-            id,
-            job: Job::AuditExport { export_id: id },
-        })
-        .unwrap();
+        let json = serde_json::to_value(Envelope { id, job: Job::AuditExport { export_id: id } }).unwrap();
         assert_eq!(json["job"]["type"], "audit_export");
-        assert_eq!(
-            serde_json::to_value(Job::SweepExpiredGrants).unwrap()["type"],
-            "sweep_expired_grants"
-        );
+        assert_eq!(serde_json::to_value(Job::SweepExpiredGrants).unwrap()["type"], "sweep_expired_grants");
     }
 }

@@ -3,14 +3,14 @@ use crate::auth::{self, Principal, RequestMeta, password, session};
 use crate::error::{ApiError, ApiResult};
 use crate::routes::dto::{UserDto, clean_name, normalize_email, slug_or_from};
 use crate::state::AppState;
-use tessery_db::bindings::NewBinding;
-use tessery_db::types::{ScopeKind, SubjectKind};
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum_extra::extract::CookieJar;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tessery_db::bindings::NewBinding;
+use tessery_db::types::{ScopeKind, SubjectKind};
 use utoipa::ToSchema;
 
 #[derive(Serialize, ToSchema)]
@@ -27,15 +27,9 @@ pub struct Health {
 
 #[utoipa::path(get, path = "/api/health", tag = "system", responses((status = 200, body = Health), (status = 503, body = Health)))]
 pub async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
-    let database = sqlx::query_scalar::<_, i32>("SELECT 1")
-        .fetch_one(&state.db)
-        .await
-        .is_ok();
+    let database = sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(&state.db).await.is_ok();
     let mut r = state.redis.clone();
-    let redis = redis::cmd("PING")
-        .query_async::<String>(&mut r)
-        .await
-        .is_ok();
+    let redis = redis::cmd("PING").query_async::<String>(&mut r).await.is_ok();
     let queue = state.mq.healthy().await;
     let engine = state.engine.ping().await.is_ok();
     let worker = redis::cmd("EXISTS")
@@ -45,19 +39,8 @@ pub async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>)
         .unwrap_or(false);
     let ok = database && redis && queue && engine && worker;
     (
-        if ok {
-            StatusCode::OK
-        } else {
-            StatusCode::SERVICE_UNAVAILABLE
-        },
-        Json(Health {
-            status: if ok { "ok" } else { "degraded" },
-            database,
-            redis,
-            queue,
-            engine,
-            worker,
-        }),
+        if ok { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE },
+        Json(Health { status: if ok { "ok" } else { "degraded" }, database, redis, queue, engine, worker }),
     )
 }
 
@@ -70,9 +53,7 @@ pub struct SetupStatus {
 #[utoipa::path(get, path = "/api/setup", tag = "system", responses((status = 200, body = SetupStatus)))]
 pub async fn setup_status(State(state): State<AppState>) -> ApiResult<Json<SetupStatus>> {
     let s = tessery_db::settings::get(&state.db).await?;
-    Ok(Json(SetupStatus {
-        required: s.setup_completed_at.is_none(),
-    }))
+    Ok(Json(SetupStatus { required: s.setup_completed_at.is_none() }))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -108,9 +89,7 @@ pub async fn setup(
 
     let mut tx = state.db.begin().await.map_err(tessery_db::DbError::from)?;
     if !tessery_db::settings::complete_setup(&mut *tx).await? {
-        return Err(ApiError::Conflict(
-            "setup has already been completed".into(),
-        ));
+        return Err(ApiError::Conflict("setup has already been completed".into()));
     }
     let user = tessery_db::users::create(&mut *tx, &email, &name, Some(&hash), true).await?;
     let org = tessery_db::orgs::create(&mut *tx, &slug, &org_name, user.id).await?;
@@ -131,17 +110,11 @@ pub async fn setup(
         },
     )
     .await?;
-    let actor = Principal {
-        user: user.clone(),
-        token: String::new(),
-        meta,
-        scope: None,
-    };
+    let actor = Principal { user: user.clone(), token: String::new(), meta, scope: None };
     audit::record(
         &mut *tx,
         &actor,
-        Entry::new(Some(org.id), "instance.setup", "instance", "instance")
-            .details(json!({ "org": org.slug })),
+        Entry::new(Some(org.id), "instance.setup", "instance", "instance").details(json!({ "org": org.slug })),
     )
     .await?;
     tx.commit().await.map_err(tessery_db::DbError::from)?;
@@ -150,18 +123,11 @@ pub async fn setup(
     let token = session::create(&mut redis, user.id, state.config.session_ttl).await?;
     tessery_db::users::touch_login(&state.db, user.id).await?;
     let jar = jar.add(auth::session_cookie(&state, token));
-    Ok((
-        StatusCode::CREATED,
-        jar,
-        Json(SetupResponse {
-            user: user.into(),
-            org_id: org.id,
-        }),
-    ))
+    Ok((StatusCode::CREATED, jar, Json(SetupResponse { user: user.into(), org_id: org.id })))
 }
 
-pub use tessery_update::{RELEASES_URL, is_newer};
 use tessery_update::Release;
+pub use tessery_update::{RELEASES_URL, is_newer};
 
 const RELEASE_CACHE_SECS: u64 = 600;
 /// How long a failed or empty lookup is remembered before GitHub is asked again.
@@ -189,7 +155,11 @@ pub async fn version(State(state): State<AppState>, _p: Principal) -> Json<Versi
 }
 
 /// Reads through a Redis cache so instances stay well under GitHub's rate limit; misses are kept for less time.
-async fn cached<T: Serialize + serde::de::DeserializeOwned>(state: &AppState, key: &str, fetch: impl std::future::Future<Output = Option<T>>) -> Option<T> {
+async fn cached<T: Serialize + serde::de::DeserializeOwned>(
+    state: &AppState,
+    key: &str,
+    fetch: impl std::future::Future<Output = Option<T>>,
+) -> Option<T> {
     let key = format!("tessery:{key}:{}", state.config.releases_url);
     let mut r = state.redis.clone();
     if let Ok(Some(hit)) = redis::cmd("GET").arg(&key).query_async::<Option<String>>(&mut r).await
@@ -238,7 +208,14 @@ pub async fn releases(State(state): State<AppState>, p: Principal) -> ApiResult<
     Ok(Json(SystemReleaseList {
         releases: list.map(|l| {
             l.into_iter()
-                .map(|r| SystemRelease { version: r.version, name: r.name, notes: r.notes, url: r.url, published_at: r.published_at, prerelease: r.prerelease })
+                .map(|r| SystemRelease {
+                    version: r.version,
+                    name: r.name,
+                    notes: r.notes,
+                    url: r.url,
+                    published_at: r.published_at,
+                    prerelease: r.prerelease,
+                })
                 .collect()
         }),
     }))
@@ -305,7 +282,11 @@ pub struct StartUpdate {
 }
 
 #[utoipa::path(post, path = "/api/system/update", operation_id = "system_update", tag = "system", request_body = StartUpdate, responses((status = 202, body = crate::routes::dto::Ok), (status = 409, body = crate::error::ErrorBody)))]
-pub async fn start_update(State(state): State<AppState>, p: Principal, Json(req): Json<StartUpdate>) -> ApiResult<(StatusCode, Json<crate::routes::dto::Ok>)> {
+pub async fn start_update(
+    State(state): State<AppState>,
+    p: Principal,
+    Json(req): Json<StartUpdate>,
+) -> ApiResult<(StatusCode, Json<crate::routes::dto::Ok>)> {
     p.require_instance_admin()?;
     let target = req.version.trim().trim_start_matches('v').to_owned();
     let current = state.config.version.clone();
@@ -317,7 +298,9 @@ pub async fn start_update(State(state): State<AppState>, p: Principal, Json(req)
     }
     let kind = if is_newer(&target, &current) || !tessery_update::is_version(&current) { "update" } else { "rollback" };
     state.config.updater.start(&target).await.map_err(|e| match e {
-        tessery_update::UpdateError::Disabled | tessery_update::UpdateError::AlreadyRunning => ApiError::Conflict(e.to_string()),
+        tessery_update::UpdateError::Disabled | tessery_update::UpdateError::AlreadyRunning => {
+            ApiError::Conflict(e.to_string())
+        }
         tessery_update::UpdateError::BadVersion(_) => ApiError::invalid("version", e.to_string()),
         tessery_update::UpdateError::Failed(_) => ApiError::Internal(anyhow::anyhow!(e.to_string())),
     })?;

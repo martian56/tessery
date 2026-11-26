@@ -8,21 +8,14 @@ use uuid::Uuid;
 pub const COOKIE: &str = "tessery_session";
 
 fn key(token: &str) -> String {
-    format!(
-        "tessery:session:{}",
-        hex::encode(Sha256::digest(token.as_bytes()))
-    )
+    format!("tessery:session:{}", hex::encode(Sha256::digest(token.as_bytes())))
 }
 
 fn user_index(user_id: Uuid) -> String {
     format!("tessery:user-sessions:{user_id}")
 }
 
-pub async fn create(
-    redis: &mut ConnectionManager,
-    user_id: Uuid,
-    ttl: Duration,
-) -> redis::RedisResult<String> {
+pub async fn create(redis: &mut ConnectionManager, user_id: Uuid, ttl: Duration) -> redis::RedisResult<String> {
     let mut bytes = [0u8; 32];
     rand::rng().fill_bytes(&mut bytes);
     let token = hex::encode(bytes);
@@ -37,14 +30,8 @@ pub async fn create(
     Ok(token)
 }
 
-pub async fn resolve(
-    redis: &mut ConnectionManager,
-    token: &str,
-    ttl: Duration,
-) -> redis::RedisResult<Option<Uuid>> {
-    let value: Option<String> = redis
-        .get_ex(key(token), redis::Expiry::EX(ttl.as_secs()))
-        .await?;
+pub async fn resolve(redis: &mut ConnectionManager, token: &str, ttl: Duration) -> redis::RedisResult<Option<Uuid>> {
+    let value: Option<String> = redis.get_ex(key(token), redis::Expiry::EX(ttl.as_secs())).await?;
     Ok(value.and_then(|v| v.parse().ok()))
 }
 

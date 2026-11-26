@@ -20,14 +20,19 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 fn key(state: &AppState) -> ApiResult<&tessery_core::SecretKey> {
-    state.config.secret_key.as_ref().ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY to connect GitHub".into()))
+    state
+        .config
+        .secret_key
+        .as_ref()
+        .ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY to connect GitHub".into()))
 }
 
 pub async fn app(state: &AppState) -> ApiResult<Option<(gh::App, AppInfo)>> {
     let row = tessery_db::github::app(&state.db).await?;
     let (Some(info), Some(cipher)) = (row.app, row.key) else { return Ok(None) };
     let info: AppInfo = serde_json::from_value(info).map_err(|e| ApiError::Internal(e.into()))?;
-    let pem = String::from_utf8(key(state)?.decrypt(&cipher).map_err(|e| ApiError::Internal(e.into()))?).map_err(|e| ApiError::Internal(e.into()))?;
+    let pem = String::from_utf8(key(state)?.decrypt(&cipher).map_err(|e| ApiError::Internal(e.into()))?)
+        .map_err(|e| ApiError::Internal(e.into()))?;
     let app = gh::App::new(info.id, &pem).map_err(ApiError::Conflict)?;
     Ok(Some((app, info)))
 }
@@ -56,7 +61,12 @@ pub struct CreateQuery {
 }
 
 #[utoipa::path(get, path = "/api/admin/github", tag = "admin", params(CreateQuery), responses((status = 200, body = GithubSettings)))]
-pub async fn settings(State(state): State<AppState>, p: Principal, headers: HeaderMap, Query(q): Query<CreateQuery>) -> ApiResult<Json<GithubSettings>> {
+pub async fn settings(
+    State(state): State<AppState>,
+    p: Principal,
+    headers: HeaderMap,
+    Query(q): Query<CreateQuery>,
+) -> ApiResult<Json<GithubSettings>> {
     p.require_instance_admin()?;
     let url = public_url(&state, &headers);
     let host = url.split("://").nth(1).unwrap_or(&url).to_owned();
@@ -64,9 +74,14 @@ pub async fn settings(State(state): State<AppState>, p: Principal, headers: Head
     rand::rng().fill_bytes(&mut b);
     let nonce = hex::encode(b);
     let mut redis = state.redis.clone();
-    let _: () = redis.set_ex(format!("tessery:gh-manifest:{nonce}"), p.user.id.to_string(), 900).await.map_err(|e| ApiError::Internal(e.into()))?;
+    let _: () = redis
+        .set_ex(format!("tessery:gh-manifest:{nonce}"), p.user.id.to_string(), 900)
+        .await
+        .map_err(|e| ApiError::Internal(e.into()))?;
     let base = match q.org.as_deref().map(str::trim).filter(|o| !o.is_empty()) {
-        Some(org) if org.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') => format!("https://github.com/organizations/{org}/settings/apps/new"),
+        Some(org) if org.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') => {
+            format!("https://github.com/organizations/{org}/settings/apps/new")
+        }
         Some(_) => return Err(ApiError::invalid("org", "use the organization's login, for example acme")),
         None => "https://github.com/settings/apps/new".into(),
     };
@@ -74,7 +89,10 @@ pub async fn settings(State(state): State<AppState>, p: Principal, headers: Head
     Ok(Json(GithubSettings {
         app: row.app,
         create_url: format!("{base}?state={nonce}"),
-        manifest: gh::manifest(&format!("Tessery {}", host.split(':').next().unwrap_or(&host)).chars().take(34).collect::<String>(), &url),
+        manifest: gh::manifest(
+            &format!("Tessery {}", host.split(':').next().unwrap_or(&host)).chars().take(34).collect::<String>(),
+            &url,
+        ),
         webhook_url: format!("{url}/api/github/webhook"),
     }))
 }
@@ -88,18 +106,38 @@ pub struct ManifestReturn {
 
 /// GitHub sends the admin back here after creating the app; this stores its keys.
 #[utoipa::path(get, path = "/api/github/manifest", tag = "admin", params(ManifestReturn), responses((status = 303)))]
-pub async fn manifest_return(State(state): State<AppState>, p: Principal, Query(q): Query<ManifestReturn>) -> ApiResult<Response> {
+pub async fn manifest_return(
+    State(state): State<AppState>,
+    p: Principal,
+    Query(q): Query<ManifestReturn>,
+) -> ApiResult<Response> {
     p.require_instance_admin()?;
     let mut redis = state.redis.clone();
-    let owner: Option<String> = redis.get_del(format!("tessery:gh-manifest:{}", q.state)).await.map_err(|e| ApiError::Internal(e.into()))?;
+    let owner: Option<String> =
+        redis.get_del(format!("tessery:gh-manifest:{}", q.state)).await.map_err(|e| ApiError::Internal(e.into()))?;
     if owner.as_deref() != Some(p.user.id.to_string().as_str()) {
-        return Err(ApiError::ForbiddenMsg("this GitHub App link expired or was started by someone else; start again from Instance admin, GitHub".into()));
+        return Err(ApiError::ForbiddenMsg(
+            "this GitHub App link expired or was started by someone else; start again from Instance admin, GitHub"
+                .into(),
+        ));
     }
     let created = gh::convert_manifest(&q.code).await.map_err(ApiError::Conflict)?;
     let k = key(&state)?;
     let info = serde_json::to_value(&created.info).map_err(|e| ApiError::Internal(e.into()))?;
-    tessery_db::github::set_app(&state.db, Some(&info), Some(&k.encrypt(created.pem.as_bytes())), Some(&k.encrypt(created.webhook_secret.as_bytes()))).await?;
-    audit::record(&state.db, &p, Entry::new(None, "instance.github_app", "instance", p.user.id).details(json!({ "app": created.info.slug, "owner": created.info.owner }))).await?;
+    tessery_db::github::set_app(
+        &state.db,
+        Some(&info),
+        Some(&k.encrypt(created.pem.as_bytes())),
+        Some(&k.encrypt(created.webhook_secret.as_bytes())),
+    )
+    .await?;
+    audit::record(
+        &state.db,
+        &p,
+        Entry::new(None, "instance.github_app", "instance", p.user.id)
+            .details(json!({ "app": created.info.slug, "owner": created.info.owner })),
+    )
+    .await?;
     Ok(Redirect::to("/admin/github?created=1").into_response())
 }
 
@@ -122,13 +160,24 @@ pub struct GithubRepoDto {
 /// Repositories the app is installed on, to pick one for a project. The app and its installations belong to the
 /// instance and can reach repositories of every organization on it, so only instance administrators may list them.
 #[utoipa::path(get, path = "/api/projects/{project}/github/repos", tag = "delivery", params(("project" = Uuid, Path)), responses((status = 200, body = [GithubRepoDto]), (status = 403), (status = 409)))]
-pub async fn repos(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>) -> ApiResult<Json<Vec<GithubRepoDto>>> {
+pub async fn repos(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+) -> ApiResult<Json<Vec<GithubRepoDto>>> {
     let target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &target, P::ProjectEdit).await?;
     p.require_instance_admin()?;
-    let (app, _) = app(&state).await?.ok_or_else(|| ApiError::Conflict("an instance admin has to create the GitHub App first, under Instance admin, GitHub".into()))?;
+    let (app, _) = app(&state).await?.ok_or_else(|| {
+        ApiError::Conflict("an instance admin has to create the GitHub App first, under Instance admin, GitHub".into())
+    })?;
     let repos = app.repos().await.map_err(ApiError::Conflict)?;
-    Ok(Json(repos.into_iter().map(|r| GithubRepoDto { full_name: r.full_name, private: r.private, installation: r.installation }).collect()))
+    Ok(Json(
+        repos
+            .into_iter()
+            .map(|r| GithubRepoDto { full_name: r.full_name, private: r.private, installation: r.installation })
+            .collect(),
+    ))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -139,15 +188,49 @@ pub struct LinkInput {
 
 /// Links the project to a GitHub repository and starts the first sync.
 #[utoipa::path(put, path = "/api/projects/{project}/github", tag = "delivery", request_body = LinkInput, params(("project" = Uuid, Path)), responses((status = 200, body = Ok), (status = 409)))]
-pub async fn link(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>, Json(req): Json<LinkInput>) -> ApiResult<Json<Ok>> {
+pub async fn link(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+    Json(req): Json<LinkInput>,
+) -> ApiResult<Json<Ok>> {
     let target = rbac::project_target(&state, project).await?;
     let d = rbac::require(&state, &p, &target, P::ProjectEdit).await?;
     p.require_instance_admin()?;
-    let (app, _) = app(&state).await?.ok_or_else(|| ApiError::Conflict("an instance admin has to create the GitHub App first".into()))?;
-    let repo = app.repos().await.map_err(ApiError::Conflict)?.into_iter().find(|r| r.full_name.eq_ignore_ascii_case(req.repo.trim())).ok_or_else(|| ApiError::invalid("repo", "the GitHub App is not installed on that repository"))?;
-    tessery_db::github::link(&state.db, tessery_db::github::Link { project_id: project, repo: &repo.full_name, installation: repo.installation, linked_by: p.user.id, auto_push: true }).await?;
-    audit::record(&state.db, &p, Entry::new(Some(target.org().0), "project.github_link", "project", project).decision(d).details(json!({ "repo": repo.full_name }))).await?;
-    state.mq.publish(Job::PushRemote { project_id: project }).await.map_err(|e| ApiError::Internal(anyhow::anyhow!(e)))?;
+    let (app, _) = app(&state)
+        .await?
+        .ok_or_else(|| ApiError::Conflict("an instance admin has to create the GitHub App first".into()))?;
+    let repo = app
+        .repos()
+        .await
+        .map_err(ApiError::Conflict)?
+        .into_iter()
+        .find(|r| r.full_name.eq_ignore_ascii_case(req.repo.trim()))
+        .ok_or_else(|| ApiError::invalid("repo", "the GitHub App is not installed on that repository"))?;
+    tessery_db::github::link(
+        &state.db,
+        tessery_db::github::Link {
+            project_id: project,
+            repo: &repo.full_name,
+            installation: repo.installation,
+            linked_by: p.user.id,
+            auto_push: true,
+        },
+    )
+    .await?;
+    audit::record(
+        &state.db,
+        &p,
+        Entry::new(Some(target.org().0), "project.github_link", "project", project)
+            .decision(d)
+            .details(json!({ "repo": repo.full_name })),
+    )
+    .await?;
+    state
+        .mq
+        .publish(Job::PushRemote { project_id: project })
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!(e)))?;
     Ok(Json(OK))
 }
 

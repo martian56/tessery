@@ -1,19 +1,16 @@
-use tessery_core::Permission;
-use tessery_db::DbError;
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
+use tessery_core::Permission;
+use tessery_db::DbError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
     #[error("{0}")]
     BadRequest(String),
     #[error("{field}: {message}")]
-    Invalid {
-        field: &'static str,
-        message: String,
-    },
+    Invalid { field: &'static str, message: String },
     #[error("authentication required")]
     Unauthenticated,
     #[error("invalid email or password")]
@@ -54,10 +51,7 @@ pub struct ErrorDetail {
 
 impl ApiError {
     pub fn invalid(field: &'static str, message: impl Into<String>) -> Self {
-        Self::Invalid {
-            field,
-            message: message.into(),
-        }
+        Self::Invalid { field, message: message.into() }
     }
 
     fn status_and_code(&self) -> (StatusCode, &'static str) {
@@ -66,9 +60,7 @@ impl ApiError {
             ApiError::Invalid { .. } => (StatusCode::UNPROCESSABLE_ENTITY, "invalid"),
             ApiError::Unauthenticated => (StatusCode::UNAUTHORIZED, "unauthenticated"),
             ApiError::InvalidCredentials => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
-            ApiError::Forbidden(_) | ApiError::ForbiddenMsg(_) => {
-                (StatusCode::FORBIDDEN, "forbidden")
-            }
+            ApiError::Forbidden(_) | ApiError::ForbiddenMsg(_) => (StatusCode::FORBIDDEN, "forbidden"),
             ApiError::NotFound => (StatusCode::NOT_FOUND, "not_found"),
             ApiError::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
             ApiError::StaleVersion => (StatusCode::CONFLICT, "stale_version"),
@@ -92,16 +84,8 @@ impl IntoResponse for ApiError {
             error: ErrorDetail {
                 code,
                 message,
-                field: if let ApiError::Invalid { field, .. } = &self {
-                    Some(field)
-                } else {
-                    None
-                },
-                permission: if let ApiError::Forbidden(p) = &self {
-                    Some(p.as_str().to_owned())
-                } else {
-                    None
-                },
+                field: if let ApiError::Invalid { field, .. } = &self { Some(field) } else { None },
+                permission: if let ApiError::Forbidden(p) = &self { Some(p.as_str().to_owned()) } else { None },
             },
         };
         (status, Json(body)).into_response()
@@ -139,9 +123,7 @@ fn conflict_message(constraint: &str) -> String {
         "roles_org_key" => "a role with this key already exists".into(),
         "projects_org_id_slug_key" => "a project with this slug already exists".into(),
         "role_bindings_unique" => "this access grant already exists".into(),
-        "team_members_org_id_user_id_fkey" => {
-            "the user is not a member of this organization".into()
-        }
+        "team_members_org_id_user_id_fkey" => "the user is not a member of this organization".into(),
         other => format!("conflicts with existing data ({other})"),
     }
 }

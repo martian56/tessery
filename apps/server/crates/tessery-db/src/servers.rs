@@ -62,10 +62,15 @@ pub async fn get(ex: impl PgExecutor<'_>, org: Uuid, id: Uuid) -> DbResult<Serve
 }
 
 pub async fn credentials(ex: impl PgExecutor<'_>, org: Uuid, id: Uuid) -> DbResult<Credentials> {
-    sqlx::query_as!(Credentials, "SELECT address, private_key, known_hosts FROM servers WHERE org_id = $1 AND id = $2", org, id)
-        .fetch_optional(ex)
-        .await?
-        .or_not_found()
+    sqlx::query_as!(
+        Credentials,
+        "SELECT address, private_key, known_hosts FROM servers WHERE org_id = $1 AND id = $2",
+        org,
+        id
+    )
+    .fetch_optional(ex)
+    .await?
+    .or_not_found()
 }
 
 pub async fn create(ex: impl PgExecutor<'_>, s: NewServer<'_>) -> DbResult<Server> {
@@ -120,7 +125,13 @@ pub async fn update(ex: impl PgExecutor<'_>, org: Uuid, id: Uuid, u: ServerUpdat
     .or_not_found()
 }
 
-pub async fn record_check(ex: impl PgExecutor<'_>, id: Uuid, used: &Credentials, check: &serde_json::Value, pin: Option<&str>) -> DbResult<bool> {
+pub async fn record_check(
+    ex: impl PgExecutor<'_>,
+    id: Uuid,
+    used: &Credentials,
+    check: &serde_json::Value,
+    pin: Option<&str>,
+) -> DbResult<bool> {
     let r = sqlx::query!(
         r#"UPDATE servers SET last_check = $5, checked_at = now(),
              known_hosts = CASE WHEN known_hosts = '' AND $6::text IS NOT NULL THEN $6 ELSE known_hosts END
@@ -194,7 +205,9 @@ pub async fn create_machine(ex: impl PgExecutor<'_>, s: NewMachineServer<'_>) ->
 }
 
 pub async fn set_status(ex: impl PgExecutor<'_>, id: Uuid, status: &str, detail: &str) -> DbResult<()> {
-    sqlx::query!("UPDATE servers SET status = $2, status_detail = $3 WHERE id = $1", id, status, detail).execute(ex).await?;
+    sqlx::query!("UPDATE servers SET status = $2, status_detail = $3 WHERE id = $1", id, status, detail)
+        .execute(ex)
+        .await?;
     Ok(())
 }
 
@@ -212,7 +225,8 @@ pub async fn by_id(ex: impl PgExecutor<'_>, id: Uuid) -> DbResult<(Server, Crede
     .fetch_optional(ex)
     .await?
     .or_not_found()?;
-    let creds = Credentials { address: r.address.clone(), private_key: r.private_key, known_hosts: r.known_hosts.clone() };
+    let creds =
+        Credentials { address: r.address.clone(), private_key: r.private_key, known_hosts: r.known_hosts.clone() };
     let server = Server {
         id: r.id,
         org_id: r.org_id,

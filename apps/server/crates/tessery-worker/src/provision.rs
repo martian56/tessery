@@ -27,10 +27,15 @@ pub async fn provision(ctx: &Ctx, server_id: Uuid) -> Result<()> {
 async fn run(ctx: &Ctx, server_id: Uuid) -> Result<()> {
     let key = ctx.secret_key.as_ref().ok_or_else(|| anyhow!("TESSERY_SECRET_KEY is not set on the worker"))?;
     let (server, creds) = servers::by_id(&ctx.db, server_id).await?;
-    let integration = server.integration_id.ok_or_else(|| anyhow!("the cloud account used to create this server was disconnected"))?;
+    let integration = server
+        .integration_id
+        .ok_or_else(|| anyhow!("the cloud account used to create this server was disconnected"))?;
     let resource = server.resource_id.clone().ok_or_else(|| anyhow!("the server has no machine at the provider"))?;
-    let (provider, cipher) = tessery_db::integrations::secret(&ctx.db, server.org_id, integration).await.context("reading the cloud account")?;
-    let fields: Map<String, Value> = serde_json::from_slice(&key.decrypt(&cipher)?).context("reading the cloud account")?;
+    let (provider, cipher) = tessery_db::integrations::secret(&ctx.db, server.org_id, integration)
+        .await
+        .context("reading the cloud account")?;
+    let fields: Map<String, Value> =
+        serde_json::from_slice(&key.decrypt(&cipher)?).context("reading the cloud account")?;
     let apis = tessery_cloud::endpoints_from_env();
 
     let started = Instant::now();
@@ -48,7 +53,13 @@ async fn run(ctx: &Ctx, server_id: Uuid) -> Result<()> {
 
     let address = format!("ssh://deploy@{ip}");
     servers::set_address(&ctx.db, server_id, &address).await?;
-    servers::set_status(&ctx.db, server_id, "configuring", &format!("Running at {ip}. Installing Docker, which takes a few minutes")).await?;
+    servers::set_status(
+        &ctx.db,
+        server_id,
+        "configuring",
+        &format!("Running at {ip}. Installing Docker, which takes a few minutes"),
+    )
+    .await?;
 
     let pem = String::from_utf8(key.decrypt(&creds.private_key)?).context("the server key is not UTF-8")?;
     ensure_runner_image(&ctx.runner, &Log::start(ctx.db.clone(), None)).await?;
@@ -58,8 +69,16 @@ async fn run(ctx: &Ctx, server_id: Uuid) -> Result<()> {
         match remote_check(&ctx.runner, &address, &pem).await? {
             Ok(stdout) => {
                 let mut check = tessery_core::runner::parse_check(&stdout);
-                let pin = check.as_object_mut().and_then(|o| o.remove("knownHosts")).and_then(|k| k.as_str().map(str::to_owned)).filter(|k| !k.is_empty());
-                let used = servers::Credentials { address: address.clone(), private_key: creds.private_key.clone(), known_hosts: String::new() };
+                let pin = check
+                    .as_object_mut()
+                    .and_then(|o| o.remove("knownHosts"))
+                    .and_then(|k| k.as_str().map(str::to_owned))
+                    .filter(|k| !k.is_empty());
+                let used = servers::Credentials {
+                    address: address.clone(),
+                    private_key: creds.private_key.clone(),
+                    known_hosts: String::new(),
+                };
                 servers::record_check(&ctx.db, server_id, &used, &check, pin.as_deref()).await?;
                 servers::set_status(&ctx.db, server_id, "ready", "").await?;
                 tracing::info!(%server_id, %address, "server is ready");
@@ -79,7 +98,20 @@ async fn remote_check(cfg: &RunnerConfig, address: &str, pem: &str) -> Result<st
     let key = base64::engine::general_purpose::STANDARD.encode(pem.replace("\r\n", "\n").trim_end().to_owned() + "\n");
     let script = format!("{}{}", tessery_core::runner::SSH_SETUP, tessery_core::runner::SERVER_CHECK);
     let out = Command::new(&cfg.docker)
-        .args(["run", "--rm", "-e", "SSH_KEY_B64", "-e", "KNOWN_B64", "-e", "REMOTE_DOCKER_HOST", &tessery_core::runner::image(), "sh", "-c", &script])
+        .args([
+            "run",
+            "--rm",
+            "-e",
+            "SSH_KEY_B64",
+            "-e",
+            "KNOWN_B64",
+            "-e",
+            "REMOTE_DOCKER_HOST",
+            &tessery_core::runner::image(),
+            "sh",
+            "-c",
+            &script,
+        ])
         .env("SSH_KEY_B64", key)
         .env("KNOWN_B64", "")
         .env("REMOTE_DOCKER_HOST", address)
@@ -87,5 +119,9 @@ async fn remote_check(cfg: &RunnerConfig, address: &str, pem: &str) -> Result<st
         .output()
         .await
         .context("running docker; is Docker installed and running?")?;
-    Ok(if out.status.success() { Ok(String::from_utf8_lossy(&out.stdout).into_owned()) } else { Err(String::from_utf8_lossy(&out.stderr).into_owned()) })
+    Ok(if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).into_owned())
+    })
 }

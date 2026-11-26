@@ -1,6 +1,6 @@
-use tessery_db::telemetry::Span;
 use prost::Message;
 use serde_json::{Map, Value};
+use tessery_db::telemetry::Span;
 use time::OffsetDateTime;
 
 #[derive(Clone, PartialEq, Message)]
@@ -122,17 +122,25 @@ pub fn decode(body: &[u8]) -> Result<Vec<Span>, prost::DecodeError> {
             }
             let status = span.status.unwrap_or_default();
             if !status.message.is_empty() {
-                attributes.insert("status.message".into(), Value::String(status.message.chars().take(MAX_VALUE).collect()));
+                attributes
+                    .insert("status.message".into(), Value::String(status.message.chars().take(MAX_VALUE).collect()));
             }
-            let start = OffsetDateTime::from_unix_timestamp_nanos(i128::from(span.start_time_unix_nano)).unwrap_or(OffsetDateTime::UNIX_EPOCH);
+            let start = OffsetDateTime::from_unix_timestamp_nanos(i128::from(span.start_time_unix_nano))
+                .unwrap_or(OffsetDateTime::UNIX_EPOCH);
             let mut name: String = span.name.chars().take(200).collect();
             if ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].contains(&name.as_str()) {
-                let path = ["http.route", "url.path", "http.target"].iter().find_map(|k| attributes.get(*k).and_then(Value::as_str));
+                let path = ["http.route", "url.path", "http.target"]
+                    .iter()
+                    .find_map(|k| attributes.get(*k).and_then(Value::as_str));
                 if let Some(p) = path {
                     name = format!("{name} {}", p.split('?').next().unwrap_or(p));
                 }
             }
-            let http_error =attributes.get("http.response.status_code").or_else(|| attributes.get("http.status_code")).and_then(Value::as_i64).is_some_and(|c| c >= 500);
+            let http_error = attributes
+                .get("http.response.status_code")
+                .or_else(|| attributes.get("http.status_code"))
+                .and_then(Value::as_i64)
+                .is_some_and(|c| c >= 500);
             out.push(Span {
                 trace_id: hex::encode(&span.trace_id),
                 span_id: hex::encode(&span.span_id),
@@ -159,11 +167,33 @@ mod tests {
         let kv = |k: &str, v: any_value::Value| KeyValue { key: k.into(), value: Some(AnyValue { value: Some(v) }) };
         let req = ExportTraceServiceRequest {
             resource_spans: vec![ResourceSpans {
-                resource: Some(Resource { attributes: vec![kv("service.name", any_value::Value::String("orders".into()))] }),
+                resource: Some(Resource {
+                    attributes: vec![kv("service.name", any_value::Value::String("orders".into()))],
+                }),
                 scope_spans: vec![ScopeSpans {
                     spans: vec![
-                        OtlpSpan { trace_id: vec![1; 16], span_id: vec![2; 8], name: "GET".into(), kind: 2, start_time_unix_nano: 1_700_000_000_000_000_000, end_time_unix_nano: 1_700_000_000_012_000_000, attributes: vec![kv("http.response.status_code", any_value::Value::Int(503)), kv("url.path", any_value::Value::String("/orders?page=2".into()))], ..Default::default() },
-                        OtlpSpan { trace_id: vec![1; 16], span_id: vec![3; 8], parent_span_id: vec![2; 8], name: "SELECT".into(), start_time_unix_nano: 1, end_time_unix_nano: 2, ..Default::default() },
+                        OtlpSpan {
+                            trace_id: vec![1; 16],
+                            span_id: vec![2; 8],
+                            name: "GET".into(),
+                            kind: 2,
+                            start_time_unix_nano: 1_700_000_000_000_000_000,
+                            end_time_unix_nano: 1_700_000_000_012_000_000,
+                            attributes: vec![
+                                kv("http.response.status_code", any_value::Value::Int(503)),
+                                kv("url.path", any_value::Value::String("/orders?page=2".into())),
+                            ],
+                            ..Default::default()
+                        },
+                        OtlpSpan {
+                            trace_id: vec![1; 16],
+                            span_id: vec![3; 8],
+                            parent_span_id: vec![2; 8],
+                            name: "SELECT".into(),
+                            start_time_unix_nano: 1,
+                            end_time_unix_nano: 2,
+                            ..Default::default()
+                        },
                         OtlpSpan { trace_id: vec![1; 3], span_id: vec![4; 8], ..Default::default() },
                     ],
                 }],

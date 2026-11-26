@@ -53,11 +53,7 @@ pub async fn list(ex: impl PgExecutor<'_>, org_id: Uuid) -> DbResult<Vec<Binding
     .await?)
 }
 
-pub async fn for_user(
-    ex: impl PgExecutor<'_>,
-    org_id: Uuid,
-    user_id: Uuid,
-) -> DbResult<Vec<Binding>> {
+pub async fn for_user(ex: impl PgExecutor<'_>, org_id: Uuid, user_id: Uuid) -> DbResult<Vec<Binding>> {
     Ok(sqlx::query_as!(
         Binding,
         r#"SELECT b.id, b.org_id, b.role_id, r.key AS role_key, r.name AS role_name, (r.org_id IS NULL) AS "role_is_builtin!",
@@ -94,18 +90,8 @@ pub async fn create(ex: impl PgExecutor<'_>, b: NewBinding<'_>) -> DbResult<Uuid
 }
 
 pub async fn delete(ex: impl PgExecutor<'_>, org_id: Uuid, id: Uuid) -> DbResult<()> {
-    let r = sqlx::query!(
-        "DELETE FROM role_bindings WHERE org_id = $1 AND id = $2",
-        org_id,
-        id
-    )
-    .execute(ex)
-    .await?;
-    if r.rows_affected() == 0 {
-        Err(DbError::NotFound)
-    } else {
-        Ok(())
-    }
+    let r = sqlx::query!("DELETE FROM role_bindings WHERE org_id = $1 AND id = $2", org_id, id).execute(ex).await?;
+    if r.rows_affected() == 0 { Err(DbError::NotFound) } else { Ok(()) }
 }
 
 pub async fn delete_for_subject(

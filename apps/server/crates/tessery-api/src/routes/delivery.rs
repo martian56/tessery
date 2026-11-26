@@ -4,11 +4,6 @@ use crate::error::{ApiError, ApiResult};
 use crate::rbac;
 use crate::routes::dto::{OK, Ok};
 use crate::state::AppState;
-use tessery_core::{Decision, Permission as P, Target};
-use tessery_db::DbError;
-use tessery_db::delivery::{self as db, NewCheckpoint, NewRelease, RemoteUpdate};
-use tessery_db::types::ReleaseStatus;
-use tessery_mq::Job;
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
@@ -16,6 +11,11 @@ use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap};
+use tessery_core::{Decision, Permission as P, Target};
+use tessery_db::DbError;
+use tessery_db::delivery::{self as db, NewCheckpoint, NewRelease, RemoteUpdate};
+use tessery_db::types::ReleaseStatus;
+use tessery_mq::Job;
 use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
@@ -164,7 +164,9 @@ fn stages(doc: &Value) -> Vec<Stage> {
 
 pub(crate) fn env_target(project_target: &Target, env: &str) -> Target {
     match project_target {
-        Target::Project { org, team, project } => Target::Environment { org: *org, team: *team, project: *project, env: env.to_owned() },
+        Target::Project { org, team, project } => {
+            Target::Environment { org: *org, team: *team, project: *project, env: env.to_owned() }
+        }
         t => t.clone(),
     }
 }
@@ -214,23 +216,34 @@ async fn open_repo(state: &AppState, project: Uuid) -> ApiResult<Option<tessery_
 async fn read_json(state: &AppState, project: Uuid, commit: &str, path: &str) -> ApiResult<Option<Value>> {
     let Some(repo) = open_repo(state, project).await? else { return Ok(None) };
     let Some(raw) = repo.read_file_if_exists(commit, path).await.map_err(git_err)? else { return Ok(None) };
-    serde_json::from_slice(&raw).map(Some).map_err(|e| ApiError::Internal(anyhow::anyhow!("{path} in {commit} is not valid JSON: {e}")))
+    serde_json::from_slice(&raw)
+        .map(Some)
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("{path} in {commit} is not valid JSON: {e}")))
 }
 
 pub async fn previous_migrations(state: &AppState, project: Uuid) -> ApiResult<Option<Value>> {
     let Some(repo) = open_repo(state, project).await? else { return Ok(None) };
-    let Some(commit) = repo.resolve(&format!("refs/heads/{}", tessery_git::GENERATED)).await.map_err(git_err)? else { return Ok(None) };
+    let Some(commit) = repo.resolve(&format!("refs/heads/{}", tessery_git::GENERATED)).await.map_err(git_err)? else {
+        return Ok(None);
+    };
     read_json(state, project, &commit, tessery_core::migrations::MIGRATIONS_FILE).await
 }
 
-async fn release_migrations(state: &AppState, project: Uuid, env: &str, commit: &str) -> ApiResult<Vec<tessery_core::migrations::PendingMigration>> {
+async fn release_migrations(
+    state: &AppState,
+    project: Uuid,
+    env: &str,
+    commit: &str,
+) -> ApiResult<Vec<tessery_core::migrations::PendingMigration>> {
     let released = db::list_releases(&state.db, project, 500)
         .await?
         .into_iter()
         .filter(|r| r.env_key == env && r.status == ReleaseStatus::Released)
         .max_by_key(|r| r.requested_at);
     let Some(last) = released else { return Ok(Vec::new()) };
-    let Some(next) = read_json(state, project, commit, tessery_core::migrations::MIGRATIONS_FILE).await? else { return Ok(Vec::new()) };
+    let Some(next) = read_json(state, project, commit, tessery_core::migrations::MIGRATIONS_FILE).await? else {
+        return Ok(Vec::new());
+    };
     let running = db::get_checkpoint(&state.db, project, last.checkpoint_id).await?.commit_sha;
     let current = read_json(state, project, &running, tessery_core::migrations::MIGRATIONS_FILE).await?;
     Ok(tessery_core::migrations::pending_migrations(current.as_ref(), &next))
@@ -246,52 +259,103 @@ async fn needs_runner(state: &AppState, project: Uuid, commit: &str, env: &str) 
 }
 
 async fn notify(state: &AppState, project: Uuid, env: &str, release: Uuid, event: &str, title: String, detail: String) {
-    let job = Job::Notify { project_id: project, env: env.to_owned(), event: event.to_owned(), title, detail, release_id: Some(release) };
+    let job = Job::Notify {
+        project_id: project,
+        env: env.to_owned(),
+        event: event.to_owned(),
+        title,
+        detail,
+        release_id: Some(release),
+    };
     if let Err(e) = state.mq.publish(job).await {
         tracing::warn!(error = %e, event, "could not queue a notification");
     }
 }
 
 async fn enqueue_deploy(state: &AppState, release: Uuid) -> ApiResult<()> {
-    state.mq.publish(Job::Deploy { release_id: release }).await.map(drop).map_err(|e| ApiError::Internal(anyhow::anyhow!(e)))
+    state
+        .mq
+        .publish(Job::Deploy { release_id: release })
+        .await
+        .map(drop)
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!(e)))
 }
 
 pub(crate) async fn teardown_job(state: &AppState, project: Uuid, env: &str, destroy: bool) -> ApiResult<Option<Job>> {
-    let Some(head) = db::heads(&state.db, project).await?.into_iter().find(|h| h.env_key == env) else { return Ok(None) };
+    let Some(head) = db::heads(&state.db, project).await?.into_iter().find(|h| h.env_key == env) else {
+        return Ok(None);
+    };
     let checkpoint = db::get_checkpoint(&state.db, project, head.checkpoint_id).await?;
     let Ok(repo) = state.repos.open(project).await else { return Ok(None) };
-    let Ok(raw) = repo.read_file(&checkpoint.commit_sha, &format!("deploy/{env}/plan.json")).await else { return Ok(None) };
+    let Ok(raw) = repo.read_file(&checkpoint.commit_sha, &format!("deploy/{env}/plan.json")).await else {
+        return Ok(None);
+    };
     let plan: Value = serde_json::from_slice(&raw).map_err(|e| ApiError::Internal(e.into()))?;
     if plan.pointer("/target/kind").and_then(Value::as_str).unwrap_or("git") == "git" {
         return Ok(None);
     }
-    let connection = db::secrets(&state.db, project, env).await?.into_iter().filter(|s| tessery_core::runner::is_connection_secret(&s.name)).map(|s| (s.name, s.cipher)).collect();
+    let connection = db::secrets(&state.db, project, env)
+        .await?
+        .into_iter()
+        .filter(|s| tessery_core::runner::is_connection_secret(&s.name))
+        .map(|s| (s.name, s.cipher))
+        .collect();
     let server = match plan.pointer("/target/server").and_then(Value::as_str).and_then(|s| s.parse::<Uuid>().ok()) {
         Some(id) => Some(crate::routes::servers::connection_for(state, project, id).await?),
         None => None,
     };
     let org_id = tessery_db::projects::locate(&state.db, project).await.ok().map(|(org, _)| org);
-    Ok(Some(Job::Teardown { project_id: project, env: env.to_owned(), plan, kubeconfig: None, connection, server, org_id, destroy }))
+    Ok(Some(Job::Teardown {
+        project_id: project,
+        env: env.to_owned(),
+        plan,
+        kubeconfig: None,
+        connection,
+        server,
+        org_id,
+        destroy,
+    }))
 }
 
 /// Stops everything an environment runs. Data volumes are kept; the next release starts it again.
 #[utoipa::path(post, path = "/api/projects/{project}/environments/{env}/stop", tag = "delivery", params(("project" = Uuid, Path), ("env" = String, Path)), responses((status = 202, body = Ok)))]
-pub async fn stop_env(State(state): State<AppState>, p: Principal, Path((project, env)): Path<(Uuid, String)>) -> ApiResult<(StatusCode, Json<Ok>)> {
+pub async fn stop_env(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((project, env)): Path<(Uuid, String)>,
+) -> ApiResult<(StatusCode, Json<Ok>)> {
     let project_target = rbac::project_target(&state, project).await?;
     let d = rbac::require(&state, &p, &env_target(&project_target, &env), P::DeploymentRun).await?;
-    let job = teardown_job(&state, project, &env, false).await?.ok_or_else(|| ApiError::Conflict(format!("nothing that Tessery deployed is running in {env}")))?;
+    let job = teardown_job(&state, project, &env, false)
+        .await?
+        .ok_or_else(|| ApiError::Conflict(format!("nothing that Tessery deployed is running in {env}")))?;
     state.mq.publish(job).await.map_err(|e| ApiError::Internal(anyhow::anyhow!(e)))?;
     db::clear_head(&state.db, project, &env).await?;
-    audit::record(&state.db, &p, Entry::new(Some(project_target.org().0), "env.stop", "project", project).decision(d).details(json!({ "env": env }))).await?;
+    audit::record(
+        &state.db,
+        &p,
+        Entry::new(Some(project_target.org().0), "env.stop", "project", project)
+            .decision(d)
+            .details(json!({ "env": env })),
+    )
+    .await?;
     Ok((StatusCode::ACCEPTED, Json(OK)))
 }
 
 fn valid_env_key(key: &str) -> bool {
-    !key.is_empty() && key.len() <= 60 && !key.starts_with('.') && key.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')) && !key.contains("..")
+    !key.is_empty()
+        && key.len() <= 60
+        && !key.starts_with('.')
+        && key.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        && !key.contains("..")
 }
 
 #[utoipa::path(get, path = "/api/projects/{project}/checkpoints", tag = "delivery", params(("project" = Uuid, Path)), responses((status = 200, body = [CheckpointDto])))]
-pub async fn list_checkpoints(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>) -> ApiResult<Json<Vec<CheckpointDto>>> {
+pub async fn list_checkpoints(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+) -> ApiResult<Json<Vec<CheckpointDto>>> {
     let target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &target, P::ProjectRead).await?;
     let rows = db::list_checkpoints(&state.db, project).await?;
@@ -334,7 +398,8 @@ pub async fn create_checkpoint(
     if generated.len() > MAX_FILES || generated.values().map(String::len).sum::<usize>() > MAX_TOTAL_BYTES {
         return Err(ApiError::Conflict("the generated project is too large to checkpoint".into()));
     }
-    let mut files: BTreeMap<String, Vec<u8>> = generated.into_iter().map(|(path, content)| (path, content.into_bytes())).collect();
+    let mut files: BTreeMap<String, Vec<u8>> =
+        generated.into_iter().map(|(path, content)| (path, content.into_bytes())).collect();
     let mut design = serde_json::to_vec_pretty(&doc).map_err(|e| ApiError::Internal(e.into()))?;
     design.push(b'\n');
     files.insert(DESIGN_FILE.to_owned(), design);
@@ -342,7 +407,8 @@ pub async fn create_checkpoint(
 
     let repo = state.repos.ensure(project).await.map_err(git_err)?;
     let author = tessery_git::Author { name: p.user.name.clone(), email: p.user.email.clone() };
-    let subject = if req.message.trim().is_empty() { name.to_owned() } else { format!("{name}\n\n{}", req.message.trim()) };
+    let subject =
+        if req.message.trim().is_empty() { name.to_owned() } else { format!("{name}\n\n{}", req.message.trim()) };
     let commit = repo.checkpoint(&files, &subject, &author).await.map_err(git_err)?;
 
     let id = db::insert_checkpoint(
@@ -380,7 +446,11 @@ pub struct CheckpointDoc {
 
 /// The design stored in the checkpoint, for restoring it in the editor.
 #[utoipa::path(get, path = "/api/projects/{project}/checkpoints/{checkpoint}/doc", tag = "delivery", params(("project" = Uuid, Path), ("checkpoint" = Uuid, Path)), responses((status = 200, body = CheckpointDoc)))]
-pub async fn checkpoint_doc(State(state): State<AppState>, p: Principal, Path((project, checkpoint)): Path<(Uuid, Uuid)>) -> ApiResult<Json<CheckpointDoc>> {
+pub async fn checkpoint_doc(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((project, checkpoint)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<CheckpointDoc>> {
     let target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &target, P::ProjectRead).await?;
     let c = db::get_checkpoint(&state.db, project, checkpoint).await?;
@@ -463,13 +533,19 @@ pub struct PipelineDto {
 }
 
 #[utoipa::path(get, path = "/api/projects/{project}/pipeline", tag = "delivery", params(("project" = Uuid, Path)), responses((status = 200, body = PipelineDto)))]
-pub async fn pipeline(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>) -> ApiResult<Json<PipelineDto>> {
+pub async fn pipeline(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+) -> ApiResult<Json<PipelineDto>> {
     let target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &target, P::ProjectRead).await?;
     let saved = tessery_db::projects::get(&state.db, project).await?;
-    let checkpoints: HashMap<Uuid, db::Checkpoint> = db::list_checkpoints(&state.db, project).await?.into_iter().map(|c| (c.id, c)).collect();
+    let checkpoints: HashMap<Uuid, db::Checkpoint> =
+        db::list_checkpoints(&state.db, project).await?.into_iter().map(|c| (c.id, c)).collect();
     let latest = checkpoints.values().max_by_key(|c| c.seq).map(|c| c.id);
-    let heads: HashMap<String, db::Head> = db::heads(&state.db, project).await?.into_iter().map(|h| (h.env_key.clone(), h)).collect();
+    let heads: HashMap<String, db::Head> =
+        db::heads(&state.db, project).await?.into_iter().map(|h| (h.env_key.clone(), h)).collect();
     let mut pending: HashMap<String, db::Release> = HashMap::new();
     let mut active: HashMap<String, db::Release> = HashMap::new();
     for r in db::list_releases(&state.db, project, 200).await? {
@@ -509,7 +585,11 @@ pub async fn pipeline(State(state): State<AppState>, p: Principal, Path(project)
 }
 
 #[utoipa::path(get, path = "/api/projects/{project}/releases", tag = "delivery", params(("project" = Uuid, Path)), responses((status = 200, body = [ReleaseDto])))]
-pub async fn list_releases(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>) -> ApiResult<Json<Vec<ReleaseDto>>> {
+pub async fn list_releases(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+) -> ApiResult<Json<Vec<ReleaseDto>>> {
     let target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &target, P::DeploymentRead).await?;
     let rows = db::list_releases(&state.db, project, 100).await?;
@@ -582,7 +662,14 @@ pub async fn release_preview(
 /// Where an environment runs, its domains, scale and secrets are settings, not code, so a release applies the ones the
 /// environment has now. When they differ from the checkpoint's copy, the release deploys a commit on top of the
 /// checkpoint whose deploy/<env> files and design are regenerated with the current settings; otherwise None.
-async fn with_current_settings(state: &AppState, p: &Principal, project: Uuid, current: &Value, env: &str, checkpoint: &db::Checkpoint) -> ApiResult<Option<String>> {
+async fn with_current_settings(
+    state: &AppState,
+    p: &Principal,
+    project: Uuid,
+    current: &Value,
+    env: &str,
+    checkpoint: &db::Checkpoint,
+) -> ApiResult<Option<String>> {
     let repo = state.repos.open(project).await.map_err(git_err)?;
     let Ok(raw) = repo.read_file(&checkpoint.commit_sha, DESIGN_FILE).await else { return Ok(None) };
     let mut doc: Value = serde_json::from_slice(&raw).map_err(|e| ApiError::Internal(e.into()))?;
@@ -597,7 +684,11 @@ async fn with_current_settings(state: &AppState, p: &Principal, project: Uuid, c
     let previous = previous_migrations(state, project).await?;
     let generated = state.engine.generate(&doc, previous.as_ref()).await.map_err(engine_err)?;
     let prefix = format!("deploy/{env}/");
-    let mut files: BTreeMap<String, Vec<u8>> = generated.into_iter().filter(|(path, _)| path.starts_with(&prefix)).map(|(path, content)| (path, content.into_bytes())).collect();
+    let mut files: BTreeMap<String, Vec<u8>> = generated
+        .into_iter()
+        .filter(|(path, _)| path.starts_with(&prefix))
+        .map(|(path, content)| (path, content.into_bytes()))
+        .collect();
     let mut design = serde_json::to_vec_pretty(&doc).map_err(|e| ApiError::Internal(e.into()))?;
     design.push(b'\n');
     files.insert(DESIGN_FILE.to_owned(), design);
@@ -623,7 +714,10 @@ pub async fn create_release(
     db::lock_project(&mut tx, project).await?;
     let saved = tessery_db::projects::get(&mut *tx, project).await?;
     let all = stages(&saved.doc);
-    let idx = all.iter().position(|s| s.key == req.env).ok_or_else(|| ApiError::invalid("env", "no such environment in the design"))?;
+    let idx = all
+        .iter()
+        .position(|s| s.key == req.env)
+        .ok_or_else(|| ApiError::invalid("env", "no such environment in the design"))?;
     let stage = &all[idx];
     if !valid_env_key(&stage.key) {
         return Err(ApiError::invalid("env", "environment ids may only use letters, digits, `-`, `_` and `.`"));
@@ -635,7 +729,11 @@ pub async fn create_release(
     if let Some(prev) = from_env
         && !db::was_released(&mut *tx, project, prev, checkpoint.id).await?
     {
-        return Err(ApiError::Conflict(format!("checkpoint {} has not been released to {} yet", checkpoint.seq, all[idx - 1].name)));
+        return Err(ApiError::Conflict(format!(
+            "checkpoint {} has not been released to {} yet",
+            checkpoint.seq,
+            all[idx - 1].name
+        )));
     }
     let settings = with_current_settings(&state, &p, project, &saved.doc, &stage.key, &checkpoint).await?;
     let commit = settings.as_deref().unwrap_or(&checkpoint.commit_sha);
@@ -651,7 +749,10 @@ pub async fn create_release(
             .flat_map(|m| m.destructive.into_iter().map(move |d| format!("{} {}: {d}", m.database, m.file)))
             .collect();
         if !risky.is_empty() {
-            return Err(ApiError::Conflict(format!("this release runs migrations that can lose data; confirm them first: {}", risky.join("; "))));
+            return Err(ApiError::Conflict(format!(
+                "this release runs migrations that can lose data; confirm them first: {}",
+                risky.join("; ")
+            )));
         }
     }
 
@@ -659,7 +760,11 @@ pub async fn create_release(
     if runner {
         let missing = missing_secrets(&state, project, commit, &stage.key).await?;
         if !missing.is_empty() {
-            return Err(ApiError::Conflict(format!("set these secrets for {} first: {}", stage.name, missing.join(", "))));
+            return Err(ApiError::Conflict(format!(
+                "set these secrets for {} first: {}",
+                stage.name,
+                missing.join(", ")
+            )));
         }
     }
     let status = match (stage.approval, runner) {
@@ -669,11 +774,22 @@ pub async fn create_release(
     };
     let id = db::insert_release(
         &mut tx,
-        NewRelease { project_id: project, env_key: &stage.key, checkpoint_id: checkpoint.id, from_env, status, note: req.note.trim(), requested_by: p.user.id, commit_sha: settings.as_deref() },
+        NewRelease {
+            project_id: project,
+            env_key: &stage.key,
+            checkpoint_id: checkpoint.id,
+            from_env,
+            status,
+            note: req.note.trim(),
+            requested_by: p.user.id,
+            commit_sha: settings.as_deref(),
+        },
     )
     .await
     .map_err(|e| match e {
-        DbError::Conflict(_) => ApiError::Conflict(format!("{} already has a release waiting for approval or being deployed", stage.name)),
+        DbError::Conflict(_) => {
+            ApiError::Conflict(format!("{} already has a release waiting for approval or being deployed", stage.name))
+        }
         e => e.into(),
     })?;
     if status == ReleaseStatus::Released {
@@ -682,9 +798,14 @@ pub async fn create_release(
     audit::record(
         &mut *tx,
         &p,
-        Entry::new(Some(project_target.org().0), if stage.approval { "release.request" } else { "release.apply" }, "project", project)
-            .decision(d)
-            .details(json!({ "env": stage.key, "checkpoint": checkpoint.seq, "commit": commit, "release": id })),
+        Entry::new(
+            Some(project_target.org().0),
+            if stage.approval { "release.request" } else { "release.apply" },
+            "project",
+            project,
+        )
+        .decision(d)
+        .details(json!({ "env": stage.key, "checkpoint": checkpoint.seq, "commit": commit, "release": id })),
     )
     .await?;
     let row = db::get_release(&mut *tx, id).await?;
@@ -692,12 +813,34 @@ pub async fn create_release(
     match status {
         ReleaseStatus::Released => {
             after_change(&state, project).await;
-            notify(&state, project, &stage.key, id, "release.succeeded", format!("Checkpoint {} is live on {}", checkpoint.seq, stage.name), String::new()).await;
+            notify(
+                &state,
+                project,
+                &stage.key,
+                id,
+                "release.succeeded",
+                format!("Checkpoint {} is live on {}", checkpoint.seq, stage.name),
+                String::new(),
+            )
+            .await;
         }
         ReleaseStatus::Queued => enqueue_deploy(&state, id).await?,
         ReleaseStatus::Pending => {
-            let detail = format!("{} asked{}", p.user.name, if req.note.trim().is_empty() { ".".to_owned() } else { format!(": {}", req.note.trim()) });
-            notify(&state, project, &stage.key, id, "approval.requested", format!("Checkpoint {} waits for approval to go to {}", checkpoint.seq, stage.name), detail).await;
+            let detail = format!(
+                "{} asked{}",
+                p.user.name,
+                if req.note.trim().is_empty() { ".".to_owned() } else { format!(": {}", req.note.trim()) }
+            );
+            notify(
+                &state,
+                project,
+                &stage.key,
+                id,
+                "approval.requested",
+                format!("Checkpoint {} waits for approval to go to {}", checkpoint.seq, stage.name),
+                detail,
+            )
+            .await;
         }
         _ => {}
     }
@@ -717,7 +860,13 @@ enum Verdict {
     Cancel,
 }
 
-async fn decide(state: AppState, p: Principal, release: Uuid, verdict: Verdict, note: String) -> ApiResult<Json<ReleaseDto>> {
+async fn decide(
+    state: AppState,
+    p: Principal,
+    release: Uuid,
+    verdict: Verdict,
+    note: String,
+) -> ApiResult<Json<ReleaseDto>> {
     let r = db::get_release(&state.db, release).await?;
     let project_target = rbac::project_target(&state, r.project_id).await?;
     let target = env_target(&project_target, &r.env_key);
@@ -728,7 +877,9 @@ async fn decide(state: AppState, p: Principal, release: Uuid, verdict: Verdict, 
         Verdict::Approve | Verdict::Reject => {
             let d = rbac::require(&state, &p, &target, P::DeploymentApprove).await?;
             if mine && matches!(verdict, Verdict::Approve) && !p.is_instance_admin() {
-                return Err(ApiError::ForbiddenMsg("you cannot approve your own release; ask someone else with deployment:approve".into()));
+                return Err(ApiError::ForbiddenMsg(
+                    "you cannot approve your own release; ask someone else with deployment:approve".into(),
+                ));
             }
             if mine && matches!(verdict, Verdict::Approve) { Decision::Bypassed } else { d }
         }
@@ -740,7 +891,8 @@ async fn decide(state: AppState, p: Principal, release: Uuid, verdict: Verdict, 
     if current.status != ReleaseStatus::Pending {
         return Err(ApiError::Conflict("this release was already decided".into()));
     }
-    let runner = matches!(verdict, Verdict::Approve) && needs_runner(&state, r.project_id, &r.commit_sha, &r.env_key).await;
+    let runner =
+        matches!(verdict, Verdict::Approve) && needs_runner(&state, r.project_id, &r.commit_sha, &r.env_key).await;
     let (status, action) = match verdict {
         Verdict::Approve if runner => (ReleaseStatus::Queued, "release.approve"),
         Verdict::Approve => (ReleaseStatus::Released, "release.approve"),
@@ -754,9 +906,9 @@ async fn decide(state: AppState, p: Principal, release: Uuid, verdict: Verdict, 
     audit::record(
         &mut *tx,
         &p,
-        Entry::new(Some(project_target.org().0), action, "project", r.project_id)
-            .decision(d)
-            .details(json!({ "env": r.env_key, "checkpoint": r.checkpoint_seq, "release": release, "note": note.trim() })),
+        Entry::new(Some(project_target.org().0), action, "project", r.project_id).decision(d).details(
+            json!({ "env": r.env_key, "checkpoint": r.checkpoint_seq, "release": release, "note": note.trim() }),
+        ),
     )
     .await?;
     let row = db::get_release(&mut *tx, release).await?;
@@ -764,8 +916,21 @@ async fn decide(state: AppState, p: Principal, release: Uuid, verdict: Verdict, 
     match status {
         ReleaseStatus::Released => {
             after_change(&state, r.project_id).await;
-            let env_name = tessery_db::projects::get(&state.db, r.project_id).await.ok().and_then(|p| stages(&p.doc).into_iter().find(|s| s.key == r.env_key).map(|s| s.name)).unwrap_or_else(|| r.env_key.clone());
-            notify(&state, r.project_id, &r.env_key, release, "release.succeeded", format!("Checkpoint {} is live on {env_name}", r.checkpoint_seq), String::new()).await;
+            let env_name = tessery_db::projects::get(&state.db, r.project_id)
+                .await
+                .ok()
+                .and_then(|p| stages(&p.doc).into_iter().find(|s| s.key == r.env_key).map(|s| s.name))
+                .unwrap_or_else(|| r.env_key.clone());
+            notify(
+                &state,
+                r.project_id,
+                &r.env_key,
+                release,
+                "release.succeeded",
+                format!("Checkpoint {} is live on {env_name}", r.checkpoint_seq),
+                String::new(),
+            )
+            .await;
         }
         ReleaseStatus::Queued => enqueue_deploy(&state, release).await?,
         _ => {}
@@ -774,17 +939,31 @@ async fn decide(state: AppState, p: Principal, release: Uuid, verdict: Verdict, 
 }
 
 #[utoipa::path(post, path = "/api/releases/{release}/approve", tag = "delivery", params(("release" = Uuid, Path)), request_body = DecisionBody, responses((status = 200, body = ReleaseDto)))]
-pub async fn approve(State(state): State<AppState>, p: Principal, Path(release): Path<Uuid>, body: Option<Json<DecisionBody>>) -> ApiResult<Json<ReleaseDto>> {
+pub async fn approve(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(release): Path<Uuid>,
+    body: Option<Json<DecisionBody>>,
+) -> ApiResult<Json<ReleaseDto>> {
     decide(state, p, release, Verdict::Approve, body.map(|b| b.0.note).unwrap_or_default()).await
 }
 
 #[utoipa::path(post, path = "/api/releases/{release}/reject", tag = "delivery", params(("release" = Uuid, Path)), request_body = DecisionBody, responses((status = 200, body = ReleaseDto)))]
-pub async fn reject(State(state): State<AppState>, p: Principal, Path(release): Path<Uuid>, body: Option<Json<DecisionBody>>) -> ApiResult<Json<ReleaseDto>> {
+pub async fn reject(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(release): Path<Uuid>,
+    body: Option<Json<DecisionBody>>,
+) -> ApiResult<Json<ReleaseDto>> {
     decide(state, p, release, Verdict::Reject, body.map(|b| b.0.note).unwrap_or_default()).await
 }
 
 #[utoipa::path(post, path = "/api/releases/{release}/cancel", tag = "delivery", params(("release" = Uuid, Path)), responses((status = 200, body = ReleaseDto)))]
-pub async fn cancel(State(state): State<AppState>, p: Principal, Path(release): Path<Uuid>) -> ApiResult<Json<ReleaseDto>> {
+pub async fn cancel(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(release): Path<Uuid>,
+) -> ApiResult<Json<ReleaseDto>> {
     decide(state, p, release, Verdict::Cancel, String::new()).await
 }
 
@@ -824,7 +1003,11 @@ impl From<db::Remote> for RemoteDto {
 }
 
 #[utoipa::path(get, path = "/api/projects/{project}/remote", tag = "delivery", params(("project" = Uuid, Path)), responses((status = 200, body = Option<RemoteDto>)))]
-pub async fn get_remote(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>) -> ApiResult<Json<Option<RemoteDto>>> {
+pub async fn get_remote(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+) -> ApiResult<Json<Option<RemoteDto>>> {
     let target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &target, P::ProjectRead).await?;
     Ok(Json(db::get_remote(&state.db, project).await?.map(Into::into)))
@@ -862,7 +1045,12 @@ fn validate_remote_url(url: &str) -> ApiResult<()> {
 }
 
 #[utoipa::path(put, path = "/api/projects/{project}/remote", tag = "delivery", params(("project" = Uuid, Path)), request_body = PutRemote, responses((status = 200, body = RemoteDto)))]
-pub async fn put_remote(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>, Json(req): Json<PutRemote>) -> ApiResult<Json<RemoteDto>> {
+pub async fn put_remote(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+    Json(req): Json<PutRemote>,
+) -> ApiResult<Json<RemoteDto>> {
     let target = rbac::project_target(&state, project).await?;
     let d = rbac::require(&state, &p, &target, P::SecretWrite).await?;
     let url = req.url.trim();
@@ -871,16 +1059,25 @@ pub async fn put_remote(State(state): State<AppState>, p: Principal, Path(projec
         None => None,
         Some("") => Some(None),
         Some(token) => {
-            let key = state
-                .config
-                .secret_key
-                .as_ref()
-                .ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY on the server before saving tokens".into()))?;
+            let key = state.config.secret_key.as_ref().ok_or_else(|| {
+                ApiError::Conflict("set TESSERY_SECRET_KEY on the server before saving tokens".into())
+            })?;
             Some(Some(key.encrypt(token.as_bytes())))
         }
     };
     let mut tx = state.db.begin().await.map_err(tx_err)?;
-    db::upsert_remote(&mut *tx, RemoteUpdate { project_id: project, url, username: req.username.trim(), token_cipher, auto_push: req.auto_push, updated_by: p.user.id }).await?;
+    db::upsert_remote(
+        &mut *tx,
+        RemoteUpdate {
+            project_id: project,
+            url,
+            username: req.username.trim(),
+            token_cipher,
+            auto_push: req.auto_push,
+            updated_by: p.user.id,
+        },
+    )
+    .await?;
     audit::record(
         &mut *tx,
         &p,
@@ -895,42 +1092,63 @@ pub async fn put_remote(State(state): State<AppState>, p: Principal, Path(projec
 }
 
 #[utoipa::path(delete, path = "/api/projects/{project}/remote", tag = "delivery", params(("project" = Uuid, Path)), responses((status = 200, body = Ok)))]
-pub async fn delete_remote(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>) -> ApiResult<Json<Ok>> {
+pub async fn delete_remote(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+) -> ApiResult<Json<Ok>> {
     let target = rbac::project_target(&state, project).await?;
     let d = rbac::require(&state, &p, &target, P::SecretWrite).await?;
     let mut tx = state.db.begin().await.map_err(tx_err)?;
     if !db::delete_remote(&mut *tx, project).await? {
         return Err(ApiError::NotFound);
     }
-    audit::record(&mut *tx, &p, Entry::new(Some(target.org().0), "remote.delete", "project", project).decision(d)).await?;
+    audit::record(&mut *tx, &p, Entry::new(Some(target.org().0), "remote.delete", "project", project).decision(d))
+        .await?;
     tx.commit().await.map_err(tx_err)?;
     Ok(Json(OK))
 }
 
 /// Queues a push of every branch and tag to the remote. The result shows up on the remote's status.
 #[utoipa::path(post, path = "/api/projects/{project}/remote/push", tag = "delivery", params(("project" = Uuid, Path)), responses((status = 202, body = Ok)))]
-pub async fn push_remote(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>) -> ApiResult<(StatusCode, Json<Ok>)> {
+pub async fn push_remote(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+) -> ApiResult<(StatusCode, Json<Ok>)> {
     let target = rbac::project_target(&state, project).await?;
     let d = rbac::require(&state, &p, &target, P::ProjectEdit).await?;
     if db::get_remote(&state.db, project).await?.is_none() {
         return Err(ApiError::Conflict("connect a remote first".into()));
     }
-    state.repos.open(project).await.map_err(|_| ApiError::Conflict("create a checkpoint first; the repository is empty".into()))?;
+    state
+        .repos
+        .open(project)
+        .await
+        .map_err(|_| ApiError::Conflict("create a checkpoint first; the repository is empty".into()))?;
     state.mq.publish(Job::PushRemote { project_id: project }).await.map_err(|e| ApiError::Internal(e.into()))?;
-    audit::record(&state.db, &p, Entry::new(Some(target.org().0), "remote.push", "project", project).decision(d)).await?;
+    audit::record(&state.db, &p, Entry::new(Some(target.org().0), "remote.push", "project", project).decision(d))
+        .await?;
     Ok((StatusCode::ACCEPTED, Json(OK)))
 }
 
 /// Every branch and tag as a git bundle: `git clone <project>.bundle` gives a normal repository.
 #[utoipa::path(get, path = "/api/projects/{project}/repository.bundle", tag = "delivery", params(("project" = Uuid, Path)), responses((status = 200, content_type = "application/octet-stream")))]
-pub async fn bundle(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>) -> ApiResult<impl IntoResponse> {
+pub async fn bundle(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+) -> ApiResult<impl IntoResponse> {
     let target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &target, P::ProjectRead).await?;
     let saved = tessery_db::projects::get(&state.db, project).await?;
     let repo = state.repos.open(project).await.map_err(git_err)?;
     let bytes = repo.bundle().await.map_err(git_err)?;
     let disposition = format!("attachment; filename=\"{}.bundle\"", saved.slug);
-    Ok(([(header::CONTENT_TYPE, "application/octet-stream".to_owned()), (header::CONTENT_DISPOSITION, disposition)], bytes))
+    Ok((
+        [(header::CONTENT_TYPE, "application/octet-stream".to_owned()), (header::CONTENT_DISPOSITION, disposition)],
+        bytes,
+    ))
 }
 
 #[derive(Deserialize, IntoParams)]
@@ -958,7 +1176,12 @@ pub struct ReleaseLogDto {
 
 /// Deploy output, oldest first. Poll with `after` set to the last `seq` you have.
 #[utoipa::path(get, path = "/api/releases/{release}/logs", tag = "delivery", params(("release" = Uuid, Path), LogQuery), responses((status = 200, body = ReleaseLogDto)))]
-pub async fn release_logs(State(state): State<AppState>, p: Principal, Path(release): Path<Uuid>, Query(q): Query<LogQuery>) -> ApiResult<Json<ReleaseLogDto>> {
+pub async fn release_logs(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(release): Path<Uuid>,
+    Query(q): Query<LogQuery>,
+) -> ApiResult<Json<ReleaseLogDto>> {
     let r = db::get_release(&state.db, release).await?;
     let project_target = rbac::project_target(&state, r.project_id).await?;
     rbac::require(&state, &p, &env_target(&project_target, &r.env_key), P::DeploymentRead).await?;
@@ -988,11 +1211,24 @@ fn valid_secret_name(name: &str) -> bool {
 
 /// Names of the secrets stored for an environment. Values are never returned.
 #[utoipa::path(get, path = "/api/projects/{project}/environments/{env}/secrets", tag = "delivery", params(("project" = Uuid, Path), ("env" = String, Path)), responses((status = 200, body = [SecretDto])))]
-pub async fn list_secrets(State(state): State<AppState>, p: Principal, Path((project, env)): Path<(Uuid, String)>) -> ApiResult<Json<Vec<SecretDto>>> {
+pub async fn list_secrets(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((project, env)): Path<(Uuid, String)>,
+) -> ApiResult<Json<Vec<SecretDto>>> {
     let project_target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &env_target(&project_target, &env), P::DeploymentRead).await?;
     let rows = db::secrets(&state.db, project, &env).await?;
-    Ok(Json(rows.into_iter().map(|s| SecretDto { name: s.name, generated: s.generated, updated_at: s.updated_at, updated_by: s.updated_by_name }).collect()))
+    Ok(Json(
+        rows.into_iter()
+            .map(|s| SecretDto {
+                name: s.name,
+                generated: s.generated,
+                updated_at: s.updated_at,
+                updated_by: s.updated_by_name,
+            })
+            .collect(),
+    ))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -1001,7 +1237,12 @@ pub struct PutSecret {
 }
 
 #[utoipa::path(put, path = "/api/projects/{project}/environments/{env}/secrets/{name}", tag = "delivery", params(("project" = Uuid, Path), ("env" = String, Path), ("name" = String, Path)), request_body = PutSecret, responses((status = 200, body = Ok)))]
-pub async fn put_secret(State(state): State<AppState>, p: Principal, Path((project, env, name)): Path<(Uuid, String, String)>, Json(req): Json<PutSecret>) -> ApiResult<Json<Ok>> {
+pub async fn put_secret(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((project, env, name)): Path<(Uuid, String, String)>,
+    Json(req): Json<PutSecret>,
+) -> ApiResult<Json<Ok>> {
     let project_target = rbac::project_target(&state, project).await?;
     let d = rbac::require(&state, &p, &env_target(&project_target, &env), P::SecretWrite).await?;
     if !valid_secret_name(&name) {
@@ -1014,23 +1255,48 @@ pub async fn put_secret(State(state): State<AppState>, p: Principal, Path((proje
         return Err(ApiError::invalid("value", "at most 64 KiB"));
     }
     if req.value.contains('\n') && !tessery_core::runner::is_connection_secret(&name) {
-        return Err(ApiError::invalid("value", "only KUBECONFIG, SSH_PRIVATE_KEY and SSH_KNOWN_HOSTS may span several lines"));
+        return Err(ApiError::invalid(
+            "value",
+            "only KUBECONFIG, SSH_PRIVATE_KEY and SSH_KNOWN_HOSTS may span several lines",
+        ));
     }
-    let key = state.config.secret_key.as_ref().ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY on the server before saving secrets".into()))?;
+    let key = state
+        .config
+        .secret_key
+        .as_ref()
+        .ok_or_else(|| ApiError::Conflict("set TESSERY_SECRET_KEY on the server before saving secrets".into()))?;
     let cipher = key.encrypt(req.value.as_bytes());
     db::put_secret(&state.db, project, &env, &name, &cipher, false, Some(p.user.id)).await?;
-    audit::record(&state.db, &p, Entry::new(Some(project_target.org().0), "secret.write", "project", project).decision(d).details(json!({ "env": env, "name": name }))).await?;
+    audit::record(
+        &state.db,
+        &p,
+        Entry::new(Some(project_target.org().0), "secret.write", "project", project)
+            .decision(d)
+            .details(json!({ "env": env, "name": name })),
+    )
+    .await?;
     Ok(Json(OK))
 }
 
 #[utoipa::path(delete, path = "/api/projects/{project}/environments/{env}/secrets/{name}", tag = "delivery", params(("project" = Uuid, Path), ("env" = String, Path), ("name" = String, Path)), responses((status = 200, body = Ok)))]
-pub async fn delete_secret(State(state): State<AppState>, p: Principal, Path((project, env, name)): Path<(Uuid, String, String)>) -> ApiResult<Json<Ok>> {
+pub async fn delete_secret(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((project, env, name)): Path<(Uuid, String, String)>,
+) -> ApiResult<Json<Ok>> {
     let project_target = rbac::project_target(&state, project).await?;
     let d = rbac::require(&state, &p, &env_target(&project_target, &env), P::SecretWrite).await?;
     if !db::delete_secret(&state.db, project, &env, &name).await? {
         return Err(ApiError::NotFound);
     }
-    audit::record(&state.db, &p, Entry::new(Some(project_target.org().0), "secret.delete", "project", project).decision(d).details(json!({ "env": env, "name": name }))).await?;
+    audit::record(
+        &state.db,
+        &p,
+        Entry::new(Some(project_target.org().0), "secret.delete", "project", project)
+            .decision(d)
+            .details(json!({ "env": env, "name": name })),
+    )
+    .await?;
     Ok(Json(OK))
 }
 
@@ -1073,7 +1339,12 @@ fn kubectl_error(stderr: &str) -> String {
 }
 
 #[utoipa::path(post, path = "/api/projects/{project}/environments/{env}/kubernetes/check", tag = "delivery", params(("project" = Uuid, Path), ("env" = String, Path)), request_body = KubernetesCheckRequest, responses((status = 200, body = KubernetesCheck)))]
-pub async fn check_kubernetes(State(state): State<AppState>, p: Principal, Path((project, env)): Path<(Uuid, String)>, Json(req): Json<KubernetesCheckRequest>) -> ApiResult<Json<KubernetesCheck>> {
+pub async fn check_kubernetes(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((project, env)): Path<(Uuid, String)>,
+    Json(req): Json<KubernetesCheckRequest>,
+) -> ApiResult<Json<KubernetesCheck>> {
     let project_target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &env_target(&project_target, &env), P::DeploymentRun).await?;
     if !valid_env_key(&env) {
@@ -1087,12 +1358,22 @@ pub async fn check_kubernetes(State(state): State<AppState>, p: Principal, Path(
         .await?
         .ok_or_else(|| ApiError::Conflict(format!("{env} has no KUBECONFIG secret; add it under Secrets first")))?;
     crate::runtime::ensure_runner().await?;
-    let mut out = KubernetesCheck { ok: false, server_version: None, namespace: namespace.clone(), namespace_exists: None, can_deploy: None, can_create_namespace: None, problem: None };
+    let mut out = KubernetesCheck {
+        ok: false,
+        server_version: None,
+        namespace: namespace.clone(),
+        namespace_exists: None,
+        can_deploy: None,
+        can_create_namespace: None,
+        problem: None,
+    };
     let args = |a: &[&str]| a.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
 
-    let version = crate::runtime::kubectl(&kubeconfig, &args(&["version", "-o", "json", "--request-timeout=15s"]), None).await?;
+    let version =
+        crate::runtime::kubectl(&kubeconfig, &args(&["version", "-o", "json", "--request-timeout=15s"]), None).await?;
     let parsed: Option<Value> = serde_json::from_str(&version.stdout).ok();
-    out.server_version = parsed.as_ref().and_then(|v| v.pointer("/serverVersion/gitVersion")).and_then(Value::as_str).map(str::to_owned);
+    out.server_version =
+        parsed.as_ref().and_then(|v| v.pointer("/serverVersion/gitVersion")).and_then(Value::as_str).map(str::to_owned);
     if out.server_version.is_none() {
         out.problem = Some(format!("The cluster didn't answer: {}", kubectl_error(&version.stderr)));
         return Ok(Json(out));
@@ -1100,7 +1381,10 @@ pub async fn check_kubernetes(State(state): State<AppState>, p: Principal, Path(
 
     let get_ns = args(&["get", "namespace", &namespace, "-o", "name", "--request-timeout=15s"]);
     let can_deploy = args(&["auth", "can-i", "create", "deployments.apps", "-n", &namespace, "--request-timeout=15s"]);
-    let (exists, deploy) = tokio::join!(crate::runtime::kubectl(&kubeconfig, &get_ns, None), crate::runtime::kubectl(&kubeconfig, &can_deploy, None));
+    let (exists, deploy) = tokio::join!(
+        crate::runtime::kubectl(&kubeconfig, &get_ns, None),
+        crate::runtime::kubectl(&kubeconfig, &can_deploy, None)
+    );
     let (exists, deploy) = (exists?, deploy?);
     if exists.ok {
         out.namespace_exists = Some(true);
@@ -1120,14 +1404,23 @@ pub async fn check_kubernetes(State(state): State<AppState>, p: Principal, Path(
         }
     };
     if out.namespace_exists == Some(false) {
-        let create = crate::runtime::kubectl(&kubeconfig, &args(&["auth", "can-i", "create", "namespaces", "--request-timeout=15s"]), None).await?;
+        let create = crate::runtime::kubectl(
+            &kubeconfig,
+            &args(&["auth", "can-i", "create", "namespaces", "--request-timeout=15s"]),
+            None,
+        )
+        .await?;
         out.can_create_namespace = Some(create.stdout.trim() == "yes");
     }
 
     out.problem = if out.can_deploy == Some(false) {
-        Some(format!("This kubeconfig may not create deployments in {namespace}. Grant its user or service account a role there, such as edit."))
+        Some(format!(
+            "This kubeconfig may not create deployments in {namespace}. Grant its user or service account a role there, such as edit."
+        ))
     } else if out.namespace_exists == Some(false) && out.can_create_namespace == Some(false) {
-        Some(format!("Namespace {namespace} doesn't exist and this kubeconfig may not create it. Create it, or grant permission to create namespaces."))
+        Some(format!(
+            "Namespace {namespace} doesn't exist and this kubeconfig may not create it. Create it, or grant permission to create namespaces."
+        ))
     } else {
         None
     };
@@ -1142,14 +1435,23 @@ mod kubernetes_check_tests {
     #[test]
     fn namespaces_are_dns_labels() {
         assert!(valid_namespace("shop-prod") && valid_namespace("a1"));
-        assert!(!valid_namespace("") && !valid_namespace("-x") && !valid_namespace("x-") && !valid_namespace("Shop") && !valid_namespace("a b"));
+        assert!(
+            !valid_namespace("")
+                && !valid_namespace("-x")
+                && !valid_namespace("x-")
+                && !valid_namespace("Shop")
+                && !valid_namespace("a b")
+        );
         assert!(!valid_namespace("--all-namespaces"), "can't be read as a kubectl flag");
         assert!(!valid_namespace(&"a".repeat(64)));
     }
 
     #[test]
     fn errors_read_as_one_line() {
-        assert_eq!(kubectl_error("error: You must be logged in to the server (Unauthorized)\nmore"), "You must be logged in to the server (Unauthorized)");
+        assert_eq!(
+            kubectl_error("error: You must be logged in to the server (Unauthorized)\nmore"),
+            "You must be logged in to the server (Unauthorized)"
+        );
         assert_eq!(kubectl_error("\n"), "kubectl failed without saying why");
     }
 }

@@ -74,27 +74,56 @@ async fn call(state: &AppState, p: &Principal, name: &str, args: &Value) -> Resu
         "create_project" => {
             let org = match args.get("org").and_then(Value::as_str) {
                 Some(o) => Uuid::parse_str(o).map_err(|_| ApiError::BadRequest("`org` must be an id".into()))?,
-                None => orgs::list(st(), p.clone()).await?.0.into_iter().find(|o| o.member).map(|o| o.org.id).ok_or_else(|| ApiError::BadRequest("you belong to no organization".into()))?,
+                None => orgs::list(st(), p.clone())
+                    .await?
+                    .0
+                    .into_iter()
+                    .find(|o| o.member)
+                    .map(|o| o.org.id)
+                    .ok_or_else(|| ApiError::BadRequest("you belong to no organization".into()))?,
             };
             let template = args.get("template").and_then(Value::as_str).unwrap_or("blank");
-            let doc = state.engine.template(template, Some(arg_str(args, "name")?)).await.map_err(delivery::engine_err)?;
-            let created = projects::create(st(), p.clone(), Path(org), Json(projects::CreateProject { slug: None, team_id: None, doc })).await?.1.0;
+            let doc =
+                state.engine.template(template, Some(arg_str(args, "name")?)).await.map_err(delivery::engine_err)?;
+            let created = projects::create(
+                st(),
+                p.clone(),
+                Path(org),
+                Json(projects::CreateProject { slug: None, team_id: None, doc }),
+            )
+            .await?
+            .1
+            .0;
             Ok(json!({ "id": created.id, "version": created.version, "slug": created.slug }))
         }
         "get_project" => Ok(to_json(projects::get(st(), p.clone(), Path(arg_id(args, "project")?)).await?.0)),
         "edit_design" => {
             let project = arg_id(args, "project")?;
-            let ops = args.get("operations").and_then(Value::as_array).ok_or_else(|| ApiError::BadRequest("`operations` must be a list".into()))?;
+            let ops = args
+                .get("operations")
+                .and_then(Value::as_array)
+                .ok_or_else(|| ApiError::BadRequest("`operations` must be a list".into()))?;
             let current = projects::get(st(), p.clone(), Path(project)).await?.0;
             let applied = state.engine.apply(&current.doc, ops).await.map_err(delivery::engine_err)?;
             let message = args.get("message").and_then(Value::as_str).unwrap_or("edited by an agent").to_owned();
-            let saved = projects::save(st(), p.clone(), Path(project), Json(projects::SaveProject { version: current.version, doc: applied.doc, message })).await?.0;
+            let saved = projects::save(
+                st(),
+                p.clone(),
+                Path(project),
+                Json(projects::SaveProject { version: current.version, doc: applied.doc, message }),
+            )
+            .await?
+            .0;
             let problems = state.engine.validate(&saved.doc, None).await.map_err(delivery::engine_err)?;
             Ok(json!({ "version": saved.version, "results": applied.results, "problems": problems["problems"] }))
         }
         "validate_design" => {
             let current = projects::get(st(), p.clone(), Path(arg_id(args, "project")?)).await?.0;
-            state.engine.validate(&current.doc, args.get("env").and_then(Value::as_str)).await.map_err(delivery::engine_err)
+            state
+                .engine
+                .validate(&current.doc, args.get("env").and_then(Value::as_str))
+                .await
+                .map_err(delivery::engine_err)
         }
         "list_files" | "read_file" => {
             let files = projects::generated(st(), p.clone(), Path(arg_id(args, "project")?)).await?.0.files;
@@ -103,12 +132,19 @@ async fn call(state: &AppState, p: &Principal, name: &str, args: &Value) -> Resu
                 return Ok(json!(files.keys().filter(|k| k.starts_with(prefix)).collect::<Vec<_>>()));
             }
             let path = arg_str(args, "path")?;
-            files.get(path).map(|c| json!(c)).ok_or_else(|| ApiError::BadRequest(format!("{path} is not generated; use list_files")))
+            files
+                .get(path)
+                .map(|c| json!(c))
+                .ok_or_else(|| ApiError::BadRequest(format!("{path} is not generated; use list_files")))
         }
         "create_checkpoint" => {
             let project = arg_id(args, "project")?;
             let current = projects::get(st(), p.clone(), Path(project)).await?.0;
-            let req = delivery::CreateCheckpoint { name: arg_str(args, "name")?.to_owned(), message: args.get("message").and_then(Value::as_str).unwrap_or("").to_owned(), version: current.version };
+            let req = delivery::CreateCheckpoint {
+                name: arg_str(args, "name")?.to_owned(),
+                message: args.get("message").and_then(Value::as_str).unwrap_or("").to_owned(),
+                version: current.version,
+            };
             Ok(to_json(delivery::create_checkpoint(st(), p.clone(), Path(project), Json(req)).await?.1.0))
         }
         "get_pipeline" => Ok(to_json(delivery::pipeline(st(), p.clone(), Path(arg_id(args, "project")?)).await?.0)),
@@ -116,31 +152,70 @@ async fn call(state: &AppState, p: &Principal, name: &str, args: &Value) -> Resu
             let project = arg_id(args, "project")?;
             let env = arg_str(args, "env")?.to_owned();
             let checkpoint_id = match args.get("checkpoint").and_then(Value::as_i64) {
-                Some(seq) => delivery::list_checkpoints(st(), p.clone(), Path(project)).await?.0.into_iter().find(|c| i64::from(c.seq) == seq).map(|c| c.id).ok_or_else(|| ApiError::BadRequest(format!("no checkpoint {seq}")))?,
+                Some(seq) => delivery::list_checkpoints(st(), p.clone(), Path(project))
+                    .await?
+                    .0
+                    .into_iter()
+                    .find(|c| i64::from(c.seq) == seq)
+                    .map(|c| c.id)
+                    .ok_or_else(|| ApiError::BadRequest(format!("no checkpoint {seq}")))?,
                 None => {
                     let pipe = delivery::pipeline(st(), p.clone(), Path(project)).await?.0;
-                    let stage = pipe.stages.iter().find(|s| s.key == env).ok_or_else(|| ApiError::BadRequest(format!("no environment `{env}`")))?;
-                    stage.candidate.as_ref().map(|c| c.id).ok_or_else(|| ApiError::Conflict(format!("nothing new to release to {env}; it already runs what the pipeline offers")))?
+                    let stage = pipe
+                        .stages
+                        .iter()
+                        .find(|s| s.key == env)
+                        .ok_or_else(|| ApiError::BadRequest(format!("no environment `{env}`")))?;
+                    stage.candidate.as_ref().map(|c| c.id).ok_or_else(|| {
+                        ApiError::Conflict(format!(
+                            "nothing new to release to {env}; it already runs what the pipeline offers"
+                        ))
+                    })?
                 }
             };
-            let req = delivery::CreateRelease { env, checkpoint_id, note: args.get("note").and_then(Value::as_str).unwrap_or("").to_owned(), redeploy: false, confirm_destructive: args.get("confirmDestructive").and_then(Value::as_bool).unwrap_or(false) };
+            let req = delivery::CreateRelease {
+                env,
+                checkpoint_id,
+                note: args.get("note").and_then(Value::as_str).unwrap_or("").to_owned(),
+                redeploy: false,
+                confirm_destructive: args.get("confirmDestructive").and_then(Value::as_bool).unwrap_or(false),
+            };
             Ok(to_json(delivery::create_release(st(), p.clone(), Path(project), Json(req)).await?.1.0))
         }
         "deploy_status" => {
             let release = arg_id(args, "release")?;
-            let log = delivery::release_logs(st(), p.clone(), Path(release), Query(delivery::LogQuery { after: 0 })).await?.0;
+            let log =
+                delivery::release_logs(st(), p.clone(), Path(release), Query(delivery::LogQuery { after: 0 })).await?.0;
             let keep = args.get("lines").and_then(Value::as_u64).unwrap_or(60).clamp(1, 500) as usize;
             let lines: Vec<&str> = log.lines.iter().map(|l| l.line.as_str()).collect();
             let tail = &lines[lines.len().saturating_sub(keep)..];
-            Ok(json!({ "status": log.release.status, "error": log.release.error, "endpoints": log.release.endpoints, "log": tail }))
+            Ok(
+                json!({ "status": log.release.status, "error": log.release.error, "endpoints": log.release.endpoints, "log": tail }),
+            )
         }
         "approve_release" => {
             let note = args.get("note").and_then(Value::as_str).unwrap_or("").to_owned();
-            Ok(to_json(delivery::approve(st(), p.clone(), Path(arg_id(args, "release")?), Some(Json(delivery::DecisionBody { note }))).await?.0))
+            Ok(to_json(
+                delivery::approve(
+                    st(),
+                    p.clone(),
+                    Path(arg_id(args, "release")?),
+                    Some(Json(delivery::DecisionBody { note })),
+                )
+                .await?
+                .0,
+            ))
         }
         "set_secret" => {
-            let path = Path((arg_id(args, "project")?, arg_str(args, "env")?.to_owned(), arg_str(args, "name")?.to_owned()));
-            let _ = delivery::put_secret(st(), p.clone(), path, Json(delivery::PutSecret { value: arg_str(args, "value")?.to_owned() })).await?;
+            let path =
+                Path((arg_id(args, "project")?, arg_str(args, "env")?.to_owned(), arg_str(args, "name")?.to_owned()));
+            let _ = delivery::put_secret(
+                st(),
+                p.clone(),
+                path,
+                Json(delivery::PutSecret { value: arg_str(args, "value")?.to_owned() }),
+            )
+            .await?;
             Ok(json!({ "ok": true }))
         }
         other => Err(ApiError::BadRequest(format!("unknown tool `{other}`"))),
@@ -163,12 +238,15 @@ async fn handle(state: &AppState, p: &Principal, msg: &Value) -> Option<Value> {
         "initialize" => {
             let asked = params.get("protocolVersion").and_then(Value::as_str).unwrap_or(VERSIONS[0]);
             let version = VERSIONS.iter().find(|v| **v == asked).copied().unwrap_or(VERSIONS[0]);
-            reply(&id, json!({
-                "protocolVersion": version,
-                "capabilities": { "tools": { "listChanged": false } },
-                "serverInfo": { "name": "tessery", "version": env!("CARGO_PKG_VERSION") },
-                "instructions": "Tessery designs, generates and deploys software systems. Call design_reference first, then create_project or list_projects, edit_design to build the system, create_checkpoint, and deploy to each environment in order. deploy_status shows progress and public URLs.",
-            }))
+            reply(
+                &id,
+                json!({
+                    "protocolVersion": version,
+                    "capabilities": { "tools": { "listChanged": false } },
+                    "serverInfo": { "name": "tessery", "version": env!("CARGO_PKG_VERSION") },
+                    "instructions": "Tessery designs, generates and deploys software systems. Call design_reference first, then create_project or list_projects, edit_design to build the system, create_checkpoint, and deploy to each environment in order. deploy_status shows progress and public URLs.",
+                }),
+            )
         }
         "ping" => reply(&id, json!({})),
         "tools/list" => reply(&id, json!({ "tools": tools() })),
@@ -176,7 +254,10 @@ async fn handle(state: &AppState, p: &Principal, msg: &Value) -> Option<Value> {
             let name = params.get("name").and_then(Value::as_str).unwrap_or("");
             let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
             match call(state, p, name, &args).await {
-                Ok(v) => reply(&id, json!({ "content": [{ "type": "text", "text": serde_json::to_string_pretty(&v).unwrap_or_default() }], "isError": false })),
+                Ok(v) => reply(
+                    &id,
+                    json!({ "content": [{ "type": "text", "text": serde_json::to_string_pretty(&v).unwrap_or_default() }], "isError": false }),
+                ),
                 Err(e) => {
                     if let ApiError::Internal(err) = &e {
                         tracing::error!(error = %err, tool = name, "MCP tool failed");
@@ -189,9 +270,17 @@ async fn handle(state: &AppState, p: &Principal, msg: &Value) -> Option<Value> {
     })
 }
 
-pub async fn post(State(state): State<AppState>, principal: Result<Principal, ApiError>, Json(body): Json<Value>) -> Response {
+pub async fn post(
+    State(state): State<AppState>,
+    principal: Result<Principal, ApiError>,
+    Json(body): Json<Value>,
+) -> Response {
     let Some(p) = principal.ok().filter(|p| p.scope.is_some()) else {
-        let mut r = (StatusCode::UNAUTHORIZED, Json(json!({ "error": "Send an Tessery API token: Authorization: Bearer tessery_..." }))).into_response();
+        let mut r = (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "Send an Tessery API token: Authorization: Bearer tessery_..." })),
+        )
+            .into_response();
         r.headers_mut().insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer realm=\"Tessery\""));
         return r;
     };
@@ -210,7 +299,11 @@ pub async fn post(State(state): State<AppState>, principal: Result<Principal, Ap
     if replies.is_empty() {
         return StatusCode::ACCEPTED.into_response();
     }
-    if body.is_array() { Json(Value::Array(replies)).into_response() } else { Json(replies.into_iter().next().unwrap_or(Value::Null)).into_response() }
+    if body.is_array() {
+        Json(Value::Array(replies)).into_response()
+    } else {
+        Json(replies.into_iter().next().unwrap_or(Value::Null)).into_response()
+    }
 }
 
 pub async fn get() -> Response {

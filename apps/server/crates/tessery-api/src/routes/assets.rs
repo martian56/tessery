@@ -23,7 +23,11 @@ pub const MAX_BYTES: usize = 25 * 1024 * 1024;
 const MAX_IMAGE_BYTES: usize = 10 * 1024 * 1024;
 
 fn store(state: &AppState) -> ApiResult<&ObjectStore> {
-    state.config.object_store.as_ref().ok_or_else(|| ApiError::Conflict("object storage is not set up; set TESSERY_S3_ENDPOINT".into()))
+    state
+        .config
+        .object_store
+        .as_ref()
+        .ok_or_else(|| ApiError::Conflict("object storage is not set up; set TESSERY_S3_ENDPOINT".into()))
 }
 
 /// The type of an upload, read from its first bytes rather than trusted from the browser.
@@ -48,7 +52,9 @@ pub fn sniff(bytes: &[u8]) -> Option<&'static str> {
         Some("font/woff")
     } else {
         let text = String::from_utf8_lossy(head).trim_start_matches('\u{feff}').trim_start().to_ascii_lowercase();
-        ((text.starts_with("<svg") || text.starts_with("<?xml")) && String::from_utf8_lossy(bytes).to_ascii_lowercase().contains("<svg")).then_some("image/svg+xml")
+        ((text.starts_with("<svg") || text.starts_with("<?xml"))
+            && String::from_utf8_lossy(bytes).to_ascii_lowercase().contains("<svg"))
+        .then_some("image/svg+xml")
     }
 }
 
@@ -94,7 +100,15 @@ pub fn dimensions(bytes: &[u8], kind: &str) -> Option<(u32, u32)> {
 }
 
 fn clean_name(name: &str, kind: &str) -> String {
-    let stem: String = name.rsplit(['/', '\\']).next().unwrap_or_default().chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' { c.to_ascii_lowercase() } else { '-' }).collect();
+    let stem: String =
+        name.rsplit(['/', '\\'])
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' { c.to_ascii_lowercase() } else { '-' }
+            })
+            .collect();
     let stem = stem.trim_matches(['-', '.']).to_owned();
     let ext = match kind {
         "image/png" => "png",
@@ -131,7 +145,17 @@ pub struct AssetDto {
 
 impl From<db::Asset> for AssetDto {
     fn from(a: db::Asset) -> Self {
-        Self { reference: format!("asset:{}/{}", a.id, a.name), url: format!("/api/assets/{}/{}", a.id, a.name), id: a.id, name: a.name, content_type: a.content_type, size_bytes: a.size_bytes, width: a.width, height: a.height, created_at: a.created_at }
+        Self {
+            reference: format!("asset:{}/{}", a.id, a.name),
+            url: format!("/api/assets/{}/{}", a.id, a.name),
+            id: a.id,
+            name: a.name,
+            content_type: a.content_type,
+            size_bytes: a.size_bytes,
+            width: a.width,
+            height: a.height,
+            created_at: a.created_at,
+        }
     }
 }
 
@@ -144,16 +168,28 @@ pub struct UploadQuery {
 
 /// Uploads an image, video or font. Send the file as the raw request body.
 #[utoipa::path(post, path = "/api/projects/{project}/assets/upload", tag = "assets", params(("project" = Uuid, Path), UploadQuery), request_body(content = Vec<u8>, content_type = "application/octet-stream"), responses((status = 201, body = AssetDto), (status = 413), (status = 415)))]
-pub async fn upload(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>, Query(q): Query<UploadQuery>, body: Bytes) -> ApiResult<Response> {
+pub async fn upload(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+    Query(q): Query<UploadQuery>,
+    body: Bytes,
+) -> ApiResult<Response> {
     let target = rbac::project_target(&state, project).await?;
     let d = rbac::require(&state, &p, &target, P::ProjectEdit).await?;
     let store = store(&state)?;
-    let kind = sniff(&body).ok_or_else(|| ApiError::invalid("file", "upload a PNG, JPEG, GIF, WebP, AVIF or SVG image, an MP4 video, or a WOFF or WOFF2 font"))?;
+    let kind = sniff(&body).ok_or_else(|| {
+        ApiError::invalid(
+            "file",
+            "upload a PNG, JPEG, GIF, WebP, AVIF or SVG image, an MP4 video, or a WOFF or WOFF2 font",
+        )
+    })?;
     let limit = if kind.starts_with("image/") { MAX_IMAGE_BYTES } else { MAX_BYTES };
     if body.is_empty() || body.len() > limit {
         return Ok((StatusCode::PAYLOAD_TOO_LARGE, Json(json!({ "error": "too_large", "message": format!("the file must be under {} MB", limit / 1024 / 1024) }))).into_response());
     }
-    let (width, height) = dimensions(&body, kind).map(|(w, h)| (Some(w as i32), Some(h as i32))).unwrap_or((None, None));
+    let (width, height) =
+        dimensions(&body, kind).map(|(w, h)| (Some(w as i32), Some(h as i32))).unwrap_or((None, None));
     let id = Uuid::now_v7();
     let name = clean_name(&q.name, kind);
     let key = format!("projects/{project}/assets/{id}");
@@ -161,15 +197,36 @@ pub async fn upload(State(state): State<AppState>, p: Principal, Path(project): 
     store.s3.put(&store.bucket, &key, &body).await.map_err(ApiError::Conflict)?;
     let asset = db::insert(
         &state.db,
-        db::NewAsset { id, project_id: project, name: &name, content_type: kind, size_bytes: body.len() as i64, sha256: &Sha256::digest(&body), width, height, created_by: p.user.id },
+        db::NewAsset {
+            id,
+            project_id: project,
+            name: &name,
+            content_type: kind,
+            size_bytes: body.len() as i64,
+            sha256: &Sha256::digest(&body),
+            width,
+            height,
+            created_by: p.user.id,
+        },
     )
     .await?;
-    audit::record(&state.db, &p, Entry::new(Some(target.org().0), "asset.upload", "project", project).decision(d).details(json!({ "asset": id, "name": name, "type": kind, "bytes": body.len() }))).await?;
+    audit::record(
+        &state.db,
+        &p,
+        Entry::new(Some(target.org().0), "asset.upload", "project", project)
+            .decision(d)
+            .details(json!({ "asset": id, "name": name, "type": kind, "bytes": body.len() })),
+    )
+    .await?;
     Ok((StatusCode::CREATED, Json(AssetDto::from(asset))).into_response())
 }
 
 #[utoipa::path(get, path = "/api/projects/{project}/assets", tag = "assets", params(("project" = Uuid, Path)), responses((status = 200, body = [AssetDto])))]
-pub async fn list(State(state): State<AppState>, p: Principal, Path(project): Path<Uuid>) -> ApiResult<Json<Vec<AssetDto>>> {
+pub async fn list(
+    State(state): State<AppState>,
+    p: Principal,
+    Path(project): Path<Uuid>,
+) -> ApiResult<Json<Vec<AssetDto>>> {
     let target = rbac::project_target(&state, project).await?;
     rbac::require(&state, &p, &target, P::ProjectRead).await?;
     Ok(Json(db::list(&state.db, project).await?.into_iter().map(Into::into).collect()))
@@ -177,7 +234,12 @@ pub async fn list(State(state): State<AppState>, p: Principal, Path(project): Pa
 
 /// Serves an asset to the editor. Generated apps ship their own copies, so deployed sites never call this.
 #[utoipa::path(get, path = "/api/assets/{asset}/{name}", tag = "assets", params(("asset" = Uuid, Path), ("name" = String, Path)), responses((status = 200), (status = 404)))]
-pub async fn serve(State(state): State<AppState>, p: Principal, Path((id, _name)): Path<(Uuid, String)>, headers: HeaderMap) -> ApiResult<Response> {
+pub async fn serve(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((id, _name)): Path<(Uuid, String)>,
+    headers: HeaderMap,
+) -> ApiResult<Response> {
     let asset = db::get(&state.db, id).await?;
     let target = rbac::project_target(&state, asset.project_id).await?;
     rbac::require(&state, &p, &target, P::ProjectRead).await?;
@@ -189,16 +251,26 @@ pub async fn serve(State(state): State<AppState>, p: Principal, Path((id, _name)
     let bytes = store.s3.get(&store.bucket, &asset.object_key()).await.map_err(ApiError::Conflict)?;
     let mut res = bytes.into_response();
     let h = res.headers_mut();
-    h.insert(header::CONTENT_TYPE, HeaderValue::from_str(&asset.content_type).unwrap_or(HeaderValue::from_static("application/octet-stream")));
+    h.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(&asset.content_type).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+    );
     h.insert(header::CACHE_CONTROL, HeaderValue::from_static("private, max-age=31536000, immutable"));
     h.insert(header::ETAG, HeaderValue::from_str(&etag).unwrap_or(HeaderValue::from_static("\"\"")));
     h.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
-    h.insert(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static("default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox"));
+    h.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox"),
+    );
     Ok(res)
 }
 
 #[utoipa::path(delete, path = "/api/projects/{project}/assets/{asset}", tag = "assets", params(("project" = Uuid, Path), ("asset" = Uuid, Path)), responses((status = 200, body = Ok)))]
-pub async fn delete(State(state): State<AppState>, p: Principal, Path((project, id)): Path<(Uuid, Uuid)>) -> ApiResult<Json<Ok>> {
+pub async fn delete(
+    State(state): State<AppState>,
+    p: Principal,
+    Path((project, id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<Ok>> {
     let target = rbac::project_target(&state, project).await?;
     let d = rbac::require(&state, &p, &target, P::ProjectEdit).await?;
     let asset = db::delete(&state.db, project, id).await?;
@@ -207,24 +279,47 @@ pub async fn delete(State(state): State<AppState>, p: Principal, Path((project, 
     {
         tracing::warn!(error = %e, asset = %id, "the asset row was deleted but its bytes could not be");
     }
-    audit::record(&state.db, &p, Entry::new(Some(target.org().0), "asset.delete", "project", project).decision(d).details(json!({ "asset": id, "name": asset.name }))).await?;
+    audit::record(
+        &state.db,
+        &p,
+        Entry::new(Some(target.org().0), "asset.delete", "project", project)
+            .decision(d)
+            .details(json!({ "asset": id, "name": asset.name })),
+    )
+    .await?;
     Ok(Json(OK))
 }
 
 /// Asset references (`asset:<id>/<name>`) used anywhere in a value, such as a page tree.
 pub fn references(value: &serde_json::Value) -> Vec<Uuid> {
     let text = value.to_string();
-    let mut out: Vec<Uuid> = text.match_indices("asset:").filter_map(|(i, _)| text.get(i + 6..i + 42)).filter_map(|s| Uuid::parse_str(s).ok()).collect();
+    let mut out: Vec<Uuid> = text
+        .match_indices("asset:")
+        .filter_map(|(i, _)| text.get(i + 6..i + 42))
+        .filter_map(|s| Uuid::parse_str(s).ok())
+        .collect();
     out.sort();
     out.dedup();
     out
 }
 
 /// Copies every asset the design uses into each web app's public folder, so the deployed site serves it itself.
-pub async fn bundle(state: &AppState, project: Uuid, doc: &serde_json::Value, files: &mut std::collections::BTreeMap<String, Vec<u8>>) -> ApiResult<()> {
-    let apps: Vec<(String, String)> = doc["nodes"].as_array().into_iter().flatten().filter(|n| n["techId"] == "web-app").filter_map(|n| Some((n["id"].as_str()?.to_owned(), n["name"].as_str()?.to_owned()))).collect();
+pub async fn bundle(
+    state: &AppState,
+    project: Uuid,
+    doc: &serde_json::Value,
+    files: &mut std::collections::BTreeMap<String, Vec<u8>>,
+) -> ApiResult<()> {
+    let apps: Vec<(String, String)> = doc["nodes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|n| n["techId"] == "web-app")
+        .filter_map(|n| Some((n["id"].as_str()?.to_owned(), n["name"].as_str()?.to_owned())))
+        .collect();
     for (app_id, app_name) in apps {
-        let pages: Vec<&serde_json::Value> = doc["pages"].as_array().into_iter().flatten().filter(|p| p["appNodeId"] == app_id.as_str()).collect();
+        let pages: Vec<&serde_json::Value> =
+            doc["pages"].as_array().into_iter().flatten().filter(|p| p["appNodeId"] == app_id.as_str()).collect();
         let mut used = references(&serde_json::Value::Array(pages.into_iter().cloned().collect()));
         used.extend(references(&doc["themes"][&app_id]));
         if used.is_empty() {
@@ -232,7 +327,11 @@ pub async fn bundle(state: &AppState, project: Uuid, doc: &serde_json::Value, fi
         }
         let store = store(state)?;
         for asset in db::many(&state.db, project, &used).await? {
-            let bytes = store.s3.get(&store.bucket, &asset.object_key()).await.map_err(|e| ApiError::Conflict(format!("could not read asset {}: {e}", asset.name)))?;
+            let bytes = store
+                .s3
+                .get(&store.bucket, &asset.object_key())
+                .await
+                .map_err(|e| ApiError::Conflict(format!("could not read asset {}: {e}", asset.name)))?;
             files.insert(format!("apps/{app_name}/public/assets/{}/{}", asset.id, asset.name), bytes);
         }
     }
@@ -245,7 +344,9 @@ mod tests {
 
     #[test]
     fn detects_types_from_content_not_names() {
-        let png = [b"\x89PNG\r\n\x1a\n".as_slice(), &[0, 0, 0, 13], b"IHDR", &640u32.to_be_bytes(), &480u32.to_be_bytes()].concat();
+        let png =
+            [b"\x89PNG\r\n\x1a\n".as_slice(), &[0, 0, 0, 13], b"IHDR", &640u32.to_be_bytes(), &480u32.to_be_bytes()]
+                .concat();
         assert_eq!(sniff(&png), Some("image/png"));
         assert_eq!(dimensions(&png, "image/png"), Some((640, 480)));
         let gif = [b"GIF89a".as_slice(), &[0x20, 0x03, 0x58, 0x02]].concat();
@@ -256,7 +357,9 @@ mod tests {
         assert_eq!(sniff(b"MZ\x90\x00"), None);
         assert_eq!(clean_name("../My Photo (1).JPEG", "image/jpeg"), "my-photo--1.jpg");
         assert_eq!(clean_name("evil.html", "image/png"), "evil.png", "the extension follows the detected type");
-        let ids = references(&json!({ "root": { "props": { "src": "asset:0193f3a4-0000-7000-8000-000000000001/hero.png" } } }));
+        let ids = references(
+            &json!({ "root": { "props": { "src": "asset:0193f3a4-0000-7000-8000-000000000001/hero.png" } } }),
+        );
         assert_eq!(ids.len(), 1);
     }
 }

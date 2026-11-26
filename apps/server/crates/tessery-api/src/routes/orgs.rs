@@ -4,14 +4,14 @@ use crate::error::{ApiError, ApiResult};
 use crate::rbac::{self, decision_details, org_target, role_permissions};
 use crate::routes::dto::{OK, Ok, OrgDto, clean_name, normalize_email, slug_or_from};
 use crate::state::AppState;
-use tessery_core::Permission as P;
-use tessery_db::bindings::NewBinding;
-use tessery_db::types::{ScopeKind, SubjectKind};
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tessery_core::Permission as P;
+use tessery_db::bindings::NewBinding;
+use tessery_db::types::{ScopeKind, SubjectKind};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -26,25 +26,11 @@ pub struct OrgListItem {
 
 /// Organizations the caller belongs to. Instance administrators see every organization.
 #[utoipa::path(get, path = "/api/orgs", tag = "orgs", responses((status = 200, body = [OrgListItem])))]
-pub async fn list(
-    State(state): State<AppState>,
-    p: Principal,
-) -> ApiResult<Json<Vec<OrgListItem>>> {
+pub async fn list(State(state): State<AppState>, p: Principal) -> ApiResult<Json<Vec<OrgListItem>>> {
     let mine = tessery_db::orgs::list_for_user(&state.db, p.user.id).await?;
     let ids: std::collections::HashSet<Uuid> = mine.iter().map(|o| o.id).collect();
-    let all = if p.is_instance_admin() {
-        tessery_db::orgs::list_all(&state.db).await?
-    } else {
-        mine
-    };
-    Ok(Json(
-        all.into_iter()
-            .map(|o| OrgListItem {
-                member: ids.contains(&o.id),
-                org: o.into(),
-            })
-            .collect(),
-    ))
+    let all = if p.is_instance_admin() { tessery_db::orgs::list_all(&state.db).await? } else { mine };
+    Ok(Json(all.into_iter().map(|o| OrgListItem { member: ids.contains(&o.id), org: o.into() }).collect()))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -61,9 +47,7 @@ pub async fn create(
 ) -> ApiResult<(StatusCode, Json<OrgDto>)> {
     let settings = tessery_db::settings::get(&state.db).await?;
     if !settings.allow_org_creation && !p.is_instance_admin() {
-        return Err(ApiError::ForbiddenMsg(
-            "only instance administrators can create organizations".into(),
-        ));
+        return Err(ApiError::ForbiddenMsg("only instance administrators can create organizations".into()));
     }
     let name = clean_name("name", &req.name, 120)?;
     let slug = slug_or_from("slug", req.slug.as_deref(), &name)?;
@@ -97,11 +81,7 @@ pub async fn create(
 }
 
 #[utoipa::path(get, path = "/api/orgs/{org}", tag = "orgs", params(("org" = Uuid, Path)), responses((status = 200, body = OrgDto)))]
-pub async fn get(
-    State(state): State<AppState>,
-    p: Principal,
-    Path(org): Path<Uuid>,
-) -> ApiResult<Json<OrgDto>> {
+pub async fn get(State(state): State<AppState>, p: Principal, Path(org): Path<Uuid>) -> ApiResult<Json<OrgDto>> {
     rbac::require(&state, &p, &org_target(org), P::OrgRead).await?;
     Ok(Json(tessery_db::orgs::get(&state.db, org).await?.into()))
 }
@@ -127,9 +107,7 @@ pub async fn update(
     audit::record(
         &mut *tx,
         &p,
-        Entry::new(Some(org), "org.update", "org", org)
-            .decision(d)
-            .details(json!({ "name": name, "slug": slug })),
+        Entry::new(Some(org), "org.update", "org", org).decision(d).details(json!({ "name": name, "slug": slug })),
     )
     .await?;
     tx.commit().await.map_err(tessery_db::DbError::from)?;
@@ -137,11 +115,7 @@ pub async fn update(
 }
 
 #[utoipa::path(delete, path = "/api/orgs/{org}", tag = "orgs", params(("org" = Uuid, Path)), responses((status = 200, body = Ok)))]
-pub async fn delete(
-    State(state): State<AppState>,
-    p: Principal,
-    Path(org): Path<Uuid>,
-) -> ApiResult<Json<Ok>> {
+pub async fn delete(State(state): State<AppState>, p: Principal, Path(org): Path<Uuid>) -> ApiResult<Json<Ok>> {
     let d = rbac::require(&state, &p, &org_target(org), P::OrgDelete).await?;
     let o = tessery_db::orgs::get(&state.db, org).await?;
     let mut tx = state.db.begin().await.map_err(tessery_db::DbError::from)?;
@@ -149,9 +123,7 @@ pub async fn delete(
     audit::record(
         &mut *tx,
         &p,
-        Entry::new(None, "org.delete", "org", org)
-            .decision(d)
-            .details(json!({ "slug": o.slug, "name": o.name })),
+        Entry::new(None, "org.delete", "org", org).decision(d).details(json!({ "slug": o.slug, "name": o.name })),
     )
     .await?;
     tx.commit().await.map_err(tessery_db::DbError::from)?;
@@ -231,13 +203,8 @@ pub async fn add_member(
     let role = tessery_db::roles::get_by_key(&state.db, org, req.role.as_deref().unwrap_or("viewer"))
         .await
         .map_err(|_| ApiError::invalid("role", "unknown role"))?;
-    rbac::ensure_can_grant(
-        &state,
-        &p,
-        &target,
-        &role_permissions(role.is_builtin(), &role.key, &role.permissions),
-    )
-    .await?;
+    rbac::ensure_can_grant(&state, &p, &target, &role_permissions(role.is_builtin(), &role.key, &role.permissions))
+        .await?;
 
     let existing = tessery_db::users::find_by_email(&state.db, &email).await?;
     let mut invite = false;
@@ -292,9 +259,7 @@ pub async fn add_member(
         &p,
         Entry::new(Some(org), "member.add", "user", user.id)
             .decision(d)
-            .details(
-                json!({ "email": user.email, "role": role.key, "newAccount": new_hash.is_some() }),
-            ),
+            .details(json!({ "email": user.email, "role": role.key, "newAccount": new_hash.is_some() })),
     )
     .await?;
     tx.commit().await.map_err(tessery_db::DbError::from)?;
@@ -327,16 +292,12 @@ pub async fn remove_member(
     tessery_db::bindings::delete_for_subject(&mut *tx, org, SubjectKind::User, user).await?;
     tessery_db::orgs::remove_member(&mut *tx, org, user).await?;
     if tessery_db::bindings::count_org_owners(&mut *tx, org).await? == 0 {
-        return Err(ApiError::Conflict(
-            "an organization must keep at least one owner".into(),
-        ));
+        return Err(ApiError::Conflict("an organization must keep at least one owner".into()));
     }
     audit::record(
         &mut *tx,
         &p,
-        Entry::new(Some(org), "member.remove", "user", user)
-            .decision(d)
-            .details(decision_details(d)),
+        Entry::new(Some(org), "member.remove", "user", user).decision(d).details(decision_details(d)),
     )
     .await?;
     tx.commit().await.map_err(tessery_db::DbError::from)?;

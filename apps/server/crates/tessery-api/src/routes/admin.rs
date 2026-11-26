@@ -13,13 +13,7 @@ use uuid::Uuid;
 #[utoipa::path(get, path = "/api/admin/users", tag = "admin", responses((status = 200, body = [UserDto])))]
 pub async fn users(State(state): State<AppState>, p: Principal) -> ApiResult<Json<Vec<UserDto>>> {
     p.require_instance_admin()?;
-    Ok(Json(
-        tessery_db::users::list_all(&state.db)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect(),
-    ))
+    Ok(Json(tessery_db::users::list_all(&state.db).await?.into_iter().map(Into::into).collect()))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -47,16 +41,12 @@ pub async fn update_user(
     }
     if let Some(v) = req.disabled {
         if v && user == p.user.id {
-            return Err(ApiError::Conflict(
-                "you cannot disable your own account".into(),
-            ));
+            return Err(ApiError::Conflict("you cannot disable your own account".into()));
         }
         tessery_db::users::set_disabled(&mut *tx, user, v).await?;
     }
     if removes_admin && tessery_db::users::count_instance_admins(&mut *tx).await? == 0 {
-        return Err(ApiError::Conflict(
-            "the instance must keep at least one active administrator".into(),
-        ));
+        return Err(ApiError::Conflict("the instance must keep at least one active administrator".into()));
     }
     audit::record(
         &mut *tx,
@@ -76,13 +66,7 @@ pub async fn update_user(
 #[utoipa::path(get, path = "/api/admin/orgs", tag = "admin", responses((status = 200, body = [OrgDto])))]
 pub async fn orgs(State(state): State<AppState>, p: Principal) -> ApiResult<Json<Vec<OrgDto>>> {
     p.require_instance_admin()?;
-    Ok(Json(
-        tessery_db::orgs::list_all(&state.db)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect(),
-    ))
+    Ok(Json(tessery_db::orgs::list_all(&state.db).await?.into_iter().map(Into::into).collect()))
 }
 
 #[derive(Serialize, Deserialize, ToSchema)]
@@ -111,10 +95,7 @@ pub struct SettingsUpdate {
 }
 
 #[utoipa::path(get, path = "/api/admin/settings", tag = "admin", responses((status = 200, body = Settings)))]
-pub async fn get_settings(
-    State(state): State<AppState>,
-    p: Principal,
-) -> ApiResult<Json<Settings>> {
+pub async fn get_settings(State(state): State<AppState>, p: Principal) -> ApiResult<Json<Settings>> {
     p.require_instance_admin()?;
     let s = tessery_db::settings::get(&state.db).await?;
     let auto = tessery_db::settings::auto_update(&state.db).await?;
@@ -153,7 +134,8 @@ pub async fn put_settings(
         tessery_db::metrics::set_retention_days(&mut *tx, days).await?;
     }
     if req.auto_update.is_some() || req.auto_update_from.is_some() || req.auto_update_to.is_some() {
-        tessery_db::settings::set_auto_update(&mut *tx, req.auto_update, req.auto_update_from, req.auto_update_to).await?;
+        tessery_db::settings::set_auto_update(&mut *tx, req.auto_update, req.auto_update_from, req.auto_update_to)
+            .await?;
     }
     audit::record(
         &mut *tx,
