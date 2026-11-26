@@ -11,6 +11,7 @@ import { PROVIDERS, PROVIDER_BY_ID } from '@tessery/core/catalog/providers'
 import { CATEGORY_META, TECH_BY_ID } from '@tessery/core/catalog/technologies'
 import { checkPlacement, effectivePlacement, placementOptions } from '@tessery/core/catalog/placement'
 import { plan, workloads } from '@tessery/core/codegen/deploy'
+import { replicaRange } from '@tessery/core/codegen/deploy/kubernetes'
 import { Badge, Button, Empty, Select, Spacer, Toolbar, Tooltip, toast, type Tone } from '@/ui'
 import { fmtUsd, timeAgo } from '@/lib/format'
 import { useDockerHostLabel } from './useDockerHostLabel'
@@ -71,11 +72,12 @@ export function DeployView() {
                 {containers.map((w) => {
                   const tech = TECH_BY_ID[w.node.techId]
                   const url = urls.get(w.name)
+                  const range = replicaRange(w, env)
                   return (
                     <tr key={w.name}>
                       <td><span className={s.sw} style={{ background: CATEGORY_META[tech.category].color }} /><button className={s.nodeLink} onClick={() => { dispatch(ui.setWorkspace('design')); dispatch(ui.select({ kind: 'nodes', ids: [w.node.id] })) }}>{w.name}</button>{w.schedule && <Badge>{w.schedule}</Badge>}</td>
                       <td className={s.mono}>{w.build ? `built from ${w.build}` : w.image}</td>
-                      <td className={clsx(s.num, s.mono)}>{w.role === 'app' ? Math.max(1, Math.round(w.node.replicas * env.scale)) : 1}</td>
+                      <td className={clsx(s.num, s.mono)}>{w.role !== 'app' ? 1 : kind === 'kubernetes' && range.max > range.min ? `${range.min}-${range.max}` : range.min}</td>
                       <td className={clsx(s.num, s.mono)}>{w.memory}</td>
                       <td className={s.mono}>{w.volume ? 'persistent volume' : '-'}</td>
                       <td className={s.mono}>{url ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : w.public ? 'set a domain' : 'internal'}</td>

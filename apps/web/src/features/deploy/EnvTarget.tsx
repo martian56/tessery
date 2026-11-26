@@ -28,6 +28,7 @@ export function TargetSection({ doc, env }: { doc: ProjectDoc; env: Environment 
     Object.keys(next).forEach((k) => { if (next[k] === '' || next[k] === undefined) delete next[k] })
     set(next as DeployTarget)
   }
+  const standardPort = target.kind === 'kubernetes' && target.certIssuer ? 443 : 80
   return (
     <Section title="Deploys to">
       <Segmented<Kind> value={target.kind} onChange={(k) => set(DEFAULTS[k])}
@@ -52,7 +53,8 @@ export function TargetSection({ doc, env }: { doc: ProjectDoc; env: Environment 
           <Field label="Registry" hint="Images are pushed here; the cluster must be able to pull from it."><Input mono value={target.registry ?? ''} placeholder="ghcr.io/acme" onCommit={(v) => patch({ registry: v.trim() })} /></Field>
           <Field label="Domain" hint="Public nodes get <node>.<project>-<env>.<domain>"><Input mono value={target.domain ?? ''} placeholder="apps.example.com" onCommit={(v) => patch({ domain: v.trim() })} /></Field>
           <Field label="Ingress class"><Input mono value={target.ingressClass ?? ''} placeholder="cluster default" onCommit={(v) => patch({ ingressClass: v.trim() })} /></Field>
-          <Field label="Public port" hint="Only when the ingress is not on port 80"><NumberInput value={target.publicPort ?? 80} min={1} max={65535} onCommit={(v) => patch({ publicPort: v === 80 ? undefined : v })} /></Field>
+          <Field label="Certificate issuer" hint="A cert-manager ClusterIssuer. Public nodes are served over HTTPS with its certificates."><Input mono value={target.certIssuer ?? ''} placeholder="none, HTTP only" onCommit={(v) => patch({ certIssuer: v.trim() })} /></Field>
+          <Field label="Public port" hint={`Only when the ingress is not on port ${standardPort}`}><NumberInput value={target.publicPort ?? standardPort} min={1} max={65535} onCommit={(v) => patch({ publicPort: v === standardPort ? undefined : v })} /></Field>
           <div className={s.hint}>Needs a KUBECONFIG secret below. Data stores run as StatefulSets with persistent volumes.</div>
           <ConnectionCheck key={`${env.id}:${namespaceOf(doc, env)}`} doc={doc} env={env} />
         </>
