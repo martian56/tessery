@@ -94,7 +94,7 @@ export function manifests(doc: ProjectDoc, env: Environment): string {
       })
       if (max > min) {
         docs.push({
-          apiVersion: 'autoscaling/v2', kind: 'HorizontalPodAutoscaler', metadata: { name: w.name, namespace: ns },
+          apiVersion: 'autoscaling/v2', kind: 'HorizontalPodAutoscaler', metadata: { name: w.name, namespace: ns, labels: labels(w) },
           spec: {
             scaleTargetRef: { apiVersion: 'apps/v1', kind: 'Deployment', name: w.name },
             minReplicas: min, maxReplicas: max,
@@ -104,7 +104,7 @@ export function manifests(doc: ProjectDoc, env: Environment): string {
       }
       if (max > 1) {
         docs.push({
-          apiVersion: 'policy/v1', kind: 'PodDisruptionBudget', metadata: { name: w.name, namespace: ns },
+          apiVersion: 'policy/v1', kind: 'PodDisruptionBudget', metadata: { name: w.name, namespace: ns, labels: labels(w) },
           spec: { maxUnavailable: 1, selector: { matchLabels: { app: w.name } } },
         })
       }

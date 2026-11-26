@@ -363,7 +363,22 @@ case "$kind" in
     step "Applying manifests to $ns"
     kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
     kubectl -n "$ns" create secret generic tessery-secrets --from-env-file="$secrets" --dry-run=client -o yaml | kubectl apply -f -
-    sed -e "s#__TESSERY_IMAGE_PREFIX__#$prefix#g" -e "s#__TESSERY_TAG__#$TESSERY_TAG#g" "deploy/$TESSERY_ENV/k8s.yaml" | kubectl apply -f -
+    manifest=/work/.tessery/k8s.yaml
+    sed -e "s#__TESSERY_IMAGE_PREFIX__#$prefix#g" -e "s#__TESSERY_TAG__#$TESSERY_TAG#g" "deploy/$TESSERY_ENV/k8s.yaml" > "$manifest"
+    # An autoscaled Deployment leaves out replicas. Dropping it from the last applied state first keeps
+    # kubectl apply from resetting the running Deployment to one replica.
+    kubectl apply --dry-run=client -f "$manifest" -o name | sed -n 's#^horizontalpodautoscaler.autoscaling/##p' | while read -r name; do
+      last=$(kubectl -n "$ns" get deployment "$name" -o jsonpath='{.metadata.annotations.kubectl\.kubernetes\.io/last-applied-configuration}' 2>/dev/null || true)
+      if [ -n "$last" ] && printf '%s' "$last" | jq -e '.spec.replicas != null' >/dev/null; then
+        kubectl -n "$ns" annotate deployment "$name" --overwrite "kubectl.kubernetes.io/last-applied-configuration=$(printf '%s' "$last" | jq -c 'del(.spec.replicas)')" >/dev/null
+      fi
+    done
+    applied=$(kubectl apply -f "$manifest" -o name)
+    printf '%s\n' "$applied"
+    kubectl -n "$ns" get hpa,pdb -l "app.kubernetes.io/part-of=$project,tessery.dev/environment=$TESSERY_ENV" -o name | { grep -vxF "$applied" || true; } | while read -r stale; do
+      echo "Removing $stale, the design no longer asks for it"
+      kubectl -n "$ns" delete "$stale"
+    done
     jq -r '.rollout[] | "\(.kind) \(.name)"' "$plan" | while read -r k name; do
       step "Waiting for $name"
       kubectl -n "$ns" rollout status "$k/$name" --timeout=300s

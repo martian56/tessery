@@ -12,12 +12,19 @@ import { CATEGORY_META, TECH_BY_ID } from '@tessery/core/catalog/technologies'
 import { checkPlacement, effectivePlacement, placementOptions } from '@tessery/core/catalog/placement'
 import { plan, workloads } from '@tessery/core/codegen/deploy'
 import { replicaRange } from '@tessery/core/codegen/deploy/kubernetes'
+import type { Workload } from '@tessery/core/codegen/deploy/runtime'
 import { Badge, Button, Empty, Select, Spacer, Toolbar, Tooltip, toast, type Tone } from '@/ui'
 import { fmtUsd, timeAgo } from '@/lib/format'
 import { useDockerHostLabel } from './useDockerHostLabel'
 import s from './Deploy.module.css'
 
 const STATUS_TONE: Record<ReleaseStatus, Tone> = { pending: 'warn', queued: 'info', deploying: 'info', released: 'ok', rejected: 'err', cancelled: 'neutral', failed: 'err' }
+
+function replicas(w: Workload, range: { min: number; max: number }, kubernetes: boolean): string | number {
+  if (w.role === 'data' || w.schedule) return 1
+  if (!kubernetes) return w.role === 'app' ? range.min : 1
+  return range.max > range.min ? `${range.min}-${range.max}` : range.min
+}
 
 export function DeployView() {
   const hostLabel = useDockerHostLabel()
@@ -77,7 +84,7 @@ export function DeployView() {
                     <tr key={w.name}>
                       <td><span className={s.sw} style={{ background: CATEGORY_META[tech.category].color }} /><button className={s.nodeLink} onClick={() => { dispatch(ui.setWorkspace('design')); dispatch(ui.select({ kind: 'nodes', ids: [w.node.id] })) }}>{w.name}</button>{w.schedule && <Badge>{w.schedule}</Badge>}</td>
                       <td className={s.mono}>{w.build ? `built from ${w.build}` : w.image}</td>
-                      <td className={clsx(s.num, s.mono)}>{w.role !== 'app' ? 1 : kind === 'kubernetes' && range.max > range.min ? `${range.min}-${range.max}` : range.min}</td>
+                      <td className={clsx(s.num, s.mono)}>{replicas(w, range, kind === 'kubernetes')}</td>
                       <td className={clsx(s.num, s.mono)}>{w.memory}</td>
                       <td className={s.mono}>{w.volume ? 'persistent volume' : '-'}</td>
                       <td className={s.mono}>{url ? <a href={url} target="_blank" rel="noreferrer">{url}</a> : w.public ? 'set a domain' : 'internal'}</td>
