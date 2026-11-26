@@ -1,7 +1,6 @@
 import { block, nested, raw, resource, type Body } from './hcl'
 import type { Generated, NodeCtx, TfProvider } from './types'
 
-/** App Platform names regions without the datacenter number: fra1 becomes fra. */
 const APP_REGION = 'replace(var.region, "/[0-9]+$/", "")'
 
 function appImage(c: NodeCtx): Body {

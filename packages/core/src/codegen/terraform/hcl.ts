@@ -1,8 +1,6 @@
-/** A Terraform expression written as is, like `var.region` or `aws_s3_bucket.assets.arn`. */
 export class Raw {
   constructor(readonly expr: string) {}
 }
-/** A nested block, like `vpc_config { ... }`, as opposed to a map argument. */
 export class Nested {
   constructor(readonly body: Body) {}
 }
@@ -55,7 +53,6 @@ function body(b: Body, ind: string): string {
   return aligned(attrs, ind) + (attrs.length && blocks.length ? '\n' : '') + blocks.join('\n')
 }
 
-/** One top-level block: `resource "aws_s3_bucket" "assets" { ... }`. */
 export function block(kind: string, labels: string[], b: Body): string {
   return `${kind}${labels.map((l) => ` ${quote(l)}`).join('')} {\n${body(b, '  ')}}\n`
 }

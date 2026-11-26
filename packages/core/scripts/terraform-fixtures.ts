@@ -1,5 +1,3 @@
-// Writes the Terraform of every template, plus a project with one node of every technology, placed on each provider
-// Tessery writes Terraform for. scripts/validate-terraform.sh then runs terraform validate on each of them.
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { TEMPLATES } from '../src/templates'

@@ -6,7 +6,6 @@ const FIRST_SUBNET = raw('[aws_subnet.this[0].id]')
 const SG = raw('[aws_security_group.this.id]')
 const ARCHIVE = { archive: { source: 'hashicorp/archive', version: '~> 2.7' } }
 
-/** Cuts a name to an AWS length limit without leaving a dash at the end. */
 const short = (s: string, n: number) => s.slice(0, n).replace(/-+$/, '')
 const isArm = (type: string) => /^[a-z]+\d+g[a-z]*\./.test(type)
 const inRegion = (c: NodeCtx, host: string) => `"${host.replace('{region}', `\${${c.region.expr}}`)}"`

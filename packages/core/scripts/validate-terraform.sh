@@ -1,6 +1,4 @@
 #!/bin/sh
-# Runs terraform validate on every directory scripts/terraform-fixtures.ts wrote, JOBS at a time, sharing the
-# providers through TF_PLUGIN_CACHE_DIR.
 set -eu
 export TF_PLUGIN_CACHE_DIR=${TF_PLUGIN_CACHE_DIR:-$HOME/.terraform.d/plugin-cache}
 
@@ -22,8 +20,6 @@ mkdir -p "$TF_PLUGIN_CACHE_DIR"
 dirs=$(find "$root" -name versions.tf -exec dirname {} \; | sort)
 [ -n "$dirs" ] || { echo "no Terraform under $root"; exit 1; }
 failed=0
-# Parallel inits that download into the shared cache corrupt it, so one directory per distinct set of providers
-# runs first, alone.
 seen=' '
 first=''
 rest=''

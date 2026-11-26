@@ -3,7 +3,6 @@ import type { NodeCtx, TfProvider } from './types'
 
 const NETWORK_ZONE = 'lookup({ fsn1 = "eu-central", nbg1 = "eu-central", hel1 = "eu-central", ash = "us-east", hil = "us-west", sin = "ap-southeast" }, var.region, "eu-central")'
 
-/** Object Storage runs in fsn1, nbg1 and hel1; other locations use Falkenstein. */
 const OBJECT_LOCATION = 'contains(["fsn1", "nbg1", "hel1"], var.region) ? var.region : "fsn1"'
 
 const server =(c: NodeCtx, serverType: string) => ({

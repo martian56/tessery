@@ -7,15 +7,12 @@ const SERVICES = [
 ] as const
 type Service = (typeof SERVICES)[number]
 
-/** Most Google Cloud names must start with a letter and stay under a length limit. */
 const gname = (s: string, max = 63) => (/^[a-z]/.test(s) ? s : `t-${s}`).slice(0, max).replace(/-+$/, '')
 
-/** The shared VPC, whose network waits for the Compute API. */
 const network = (c: NodeCtx) => (c.use('network'), apis(c, 'compute'))
 
 const zone = (c: NodeCtx) => raw(`"\${${c.region.expr}}-a"`)
 
-/** Turns on the APIs a resource needs and returns them for its depends_on. */
 function apis(c: NodeCtx, ...names: Service[]) {
   names.forEach((n) => c.use(`api_${n}`))
   return names.map((n) => raw(`google_project_service.${n}`))
@@ -151,7 +148,6 @@ function instance(c: NodeCtx, machineType: string, diskGb: number, extra: Body =
   }
 }
 
-/** The address, URL map, proxy and forwarding rule of a global external load balancer. */
 function frontend(c: NodeCtx, backend: string, scheme?: string): string {
   return [
     resource('google_compute_global_address', c.id, { name: gname(c.name), depends_on: apis(c, 'compute') }),

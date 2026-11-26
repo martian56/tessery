@@ -3,10 +3,8 @@ import type { Generated, NodeCtx, Output, TfProvider } from './types'
 
 const GROUP = raw('azurerm_resource_group.this.name')
 
-/** Short hash of the subscription, appended to names that must be unique across all of Azure. */
 const SUFFIX = 'substr(sha1(var.subscription_id), 0, 6)'
 
-/** Lowercase letters and digits only, capped at `max` characters including the suffix. */
 const compact = (c: NodeCtx, max: number) => raw(`"${c.name.replace(/-/g, '').slice(0, max - 6)}\${${SUFFIX}}"`)
 const capped = (c: NodeCtx, max: number) => c.name.slice(0, max).replace(/-+$/, '')
 
@@ -119,7 +117,6 @@ function insights(c: NodeCtx): Generated {
   }
 }
 
-/** A Front Door profile with one endpoint that forwards everything to the origin in var.<id>_origin. */
 function frontDoor(c: NodeCtx, sku: 'Standard' | 'Premium', extra: string[] = []): Generated {
   c.use('group')
   const profile = raw(`azurerm_cdn_frontdoor_profile.${c.id}.id`)
@@ -153,7 +150,6 @@ function frontDoor(c: NodeCtx, sku: 'Standard' | 'Premium', extra: string[] = []
   }
 }
 
-/** Flex Consumption runtime for the function's runtime setting, like node22 or python3.13. */
 function functionRuntime(runtime: string): [string, string] {
   const [, name = 'node', version = ''] = /^([a-z]+)([\d.]*)$/.exec(runtime) ?? []
   if (name === 'node') return ['node', version || '22']
@@ -168,7 +164,6 @@ const seconds = (s: string) => {
   return m ? Number(m[1]) * { s: 1, m: 60, h: 3600 }[(m[2] || 's') as 's' | 'm' | 'h'] : 900
 }
 
-/** Where Communication Services keeps its data, by region. */
 const DATA_LOCATION = '{ eastus = "United States", eastus2 = "United States", westus3 = "United States", centralus = "United States", westeurope = "Europe", northeurope = "Europe", germanywestcentral = "Germany", francecentral = "France", uksouth = "UK", southeastasia = "Asia Pacific", japaneast = "Japan", brazilsouth = "Brazil", uaenorth = "UAE", australiaeast = "Australia" }'
 
 export const azure: TfProvider = {

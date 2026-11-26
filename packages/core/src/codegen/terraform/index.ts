@@ -13,7 +13,6 @@ import { azure } from './azure'
 
 export const TF_PROVIDERS: Record<string, TfProvider> = { aws, gcp, azure, hetzner, digitalocean }
 
-/** Self-hosted nodes that run a container get a cloud-init file next to the Terraform. */
 export function hasCloudInit(n: SystemNode, env: Environment): boolean {
   const t = TECH_BY_ID[n.techId]
   return effectivePlacement(n, env).mode === 'self-hosted' && t.category !== 'client' && !t.saas && !!t.image
@@ -25,7 +24,6 @@ const tfName = (s: string) => {
 }
 const cloudName = (s: string) => s.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50).replace(/-+$/, '')
 
-/** Nodes an environment provisions with Terraform, grouped by provider. */
 function provisioned(doc: ProjectDoc, env: Environment): Map<string, SystemNode[]> {
   const by = new Map<string, SystemNode[]>()
   for (const n of doc.nodes) {
@@ -38,7 +36,6 @@ function provisioned(doc: ProjectDoc, env: Environment): Map<string, SystemNode[
   return by
 }
 
-/** Why a node can't be written as Terraform, or undefined when it can. */
 function gap(n: SystemNode, env: Environment): string | undefined {
   const pl = effectivePlacement(n, env)
   const p = TF_PROVIDERS[pl.providerId]
